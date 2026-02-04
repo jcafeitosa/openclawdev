@@ -187,3 +187,22 @@ export function cancelOAuthFlow(host: AuthHost): void {
   stopOAuthPolling();
   host.oauthFlow = null;
 }
+
+// --- Remove credentials ---
+
+export async function removeProviderCredential(host: AuthHost, provider: string): Promise<boolean> {
+  if (!host.client || !host.connected) {
+    return false;
+  }
+  try {
+    await host.client.request("auth.removeCredential", { provider });
+    host.showToast("success", `Credentials removed for ${provider}.`);
+
+    // Refresh providers health + auth list
+    await Promise.all([loadProvidersHealth(host), loadProvidersList(host)]);
+    return true;
+  } catch (err) {
+    host.showToast("error", `Failed to remove credentials: ${String(err)}`);
+    return false;
+  }
+}

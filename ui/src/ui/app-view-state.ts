@@ -182,6 +182,7 @@ export type AppViewState = {
   authConfigSaving: boolean;
   authProvidersList: AuthProviderEntry[] | null;
   oauthFlow: import("./controllers/auth.ts").OAuthFlowState | null;
+  removingProvider: string | null;
   clockDisplay: string;
   toasts: ToastEntry[];
   usageLoading: boolean;

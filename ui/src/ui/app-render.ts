@@ -11,6 +11,7 @@ import { loadAgents } from "./controllers/agents.ts";
 import {
   cancelOAuthFlow,
   loadProvidersList,
+  removeProviderCredential,
   setProviderCredential,
   startOAuthFlow,
   submitOAuthCode,
@@ -417,6 +418,7 @@ export function renderApp(state: AppViewState) {
                 authConfigSaving: state.authConfigSaving,
                 authProvidersList: state.authProvidersList,
                 oauthFlow: state.oauthFlow,
+                removingProvider: state.removingProvider,
                 onRefresh: () => {
                   void loadProvidersHealth(state);
                   void loadProvidersList(state as unknown as AuthHost);
@@ -465,6 +467,14 @@ export function renderApp(state: AppViewState) {
                 },
                 onSubmitOAuthCode: (code) => {
                   void submitOAuthCode(state as unknown as AuthHost, code);
+                },
+                onRemoveCredential: (provider) => {
+                  state.removingProvider = provider;
+                  void removeProviderCredential(state as unknown as AuthHost, provider).finally(
+                    () => {
+                      state.removingProvider = null;
+                    },
+                  );
                 },
               })
             : nothing

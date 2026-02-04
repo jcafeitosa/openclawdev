@@ -7,7 +7,10 @@ import type { ProviderAuthResult } from "../../plugins/types.js";
 import type { RuntimeEnv } from "../../runtime.js";
 import type { WizardPrompter } from "../../wizard/prompts.js";
 import type { GatewayRequestHandlers } from "./types.js";
-import { upsertAuthProfile } from "../../agents/auth-profiles/profiles.js";
+import {
+  removeAuthProfilesForProvider,
+  upsertAuthProfile,
+} from "../../agents/auth-profiles/profiles.js";
 import { ensureAuthProfileStore } from "../../agents/auth-profiles/store.js";
 import { normalizeProviderId } from "../../agents/model-selection.js";
 import { isRemoteEnvironment } from "../../commands/oauth-env.js";
@@ -427,6 +430,40 @@ export const authHandlers: GatewayRequestHandlers = {
     // Clean up completed flows
     if (flow.status === "success" || flow.status === "error") {
       pendingOAuthFlows.delete(flowId);
+    }
+  },
+
+  /**
+   * Remove all credentials for a provider.
+   */
+  "auth.removeCredential": async ({ params, respond, context }) => {
+    const provider = typeof params.provider === "string" ? params.provider.trim() : "";
+    if (!provider) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "missing provider"));
+      return;
+    }
+
+    try {
+      const removed = removeAuthProfilesForProvider({ provider });
+      if (removed === 0) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, `no credentials found for provider: ${provider}`),
+        );
+        return;
+      }
+
+      // Refresh model catalog
+      try {
+        await context.loadGatewayModelCatalog();
+      } catch {
+        // Non-fatal
+      }
+
+      respond(true, { ok: true, removed });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
 };

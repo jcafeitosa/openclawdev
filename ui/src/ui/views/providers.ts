@@ -27,6 +27,7 @@ export type ProvidersProps = {
   authConfigSaving: boolean;
   authProvidersList: AuthProviderEntry[] | null;
   oauthFlow: OAuthFlowState | null;
+  removingProvider: string | null;
   onRefresh: () => void;
   onToggleShowAll: () => void;
   onToggleExpand: (id: string) => void;
@@ -43,6 +44,7 @@ export type ProvidersProps = {
   onStartOAuth: (provider: string) => void;
   onCancelOAuth: () => void;
   onSubmitOAuthCode: (code: string) => void;
+  onRemoveCredential: (provider: string) => void;
 };
 
 export function renderProviders(props: ProvidersProps) {
@@ -419,6 +421,25 @@ function renderConfigureSection(
           }}
         >
           ${entry.detected ? "Reconfigure OAuth" : "Sign in with OAuth"}
+        </button>
+      `);
+    }
+
+    if (entry.detected) {
+      const isRemoving = props.removingProvider === entry.id;
+      buttons.push(html`
+        <button
+          class="btn btn-sm"
+          style="color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent);"
+          ?disabled=${isRemoving}
+          @click=${(e: Event) => {
+            e.stopPropagation();
+            if (confirm(`Remove credentials for ${entry.name}?`)) {
+              props.onRemoveCredential(entry.id);
+            }
+          }}
+        >
+          ${isRemoving ? "Removing..." : "Remove"}
         </button>
       `);
     }

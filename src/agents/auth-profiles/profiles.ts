@@ -61,6 +61,54 @@ export function listProfilesForProvider(store: AuthProfileStore, provider: strin
     .map(([id]) => id);
 }
 
+/**
+ * Remove all auth profiles for a given provider.
+ * Returns the number of profiles removed.
+ */
+export function removeAuthProfilesForProvider(params: {
+  provider: string;
+  agentDir?: string;
+}): number {
+  const store = ensureAuthProfileStore(params.agentDir);
+  const providerKey = normalizeProviderId(params.provider);
+  const toRemove = Object.entries(store.profiles)
+    .filter(([, cred]) => normalizeProviderId(cred.provider) === providerKey)
+    .map(([id]) => id);
+
+  if (toRemove.length === 0) {
+    return 0;
+  }
+
+  for (const id of toRemove) {
+    delete store.profiles[id];
+  }
+
+  // Clean up lastGood references
+  if (store.lastGood) {
+    for (const id of toRemove) {
+      for (const [key, val] of Object.entries(store.lastGood)) {
+        if (val === id) {
+          delete store.lastGood[key];
+        }
+      }
+    }
+    if (Object.keys(store.lastGood).length === 0) {
+      store.lastGood = undefined;
+    }
+  }
+
+  // Clean up order references
+  if (store.order?.[providerKey]) {
+    delete store.order[providerKey];
+    if (Object.keys(store.order).length === 0) {
+      store.order = undefined;
+    }
+  }
+
+  saveAuthProfileStore(store, params.agentDir);
+  return toRemove.length;
+}
+
 export async function markAuthProfileGood(params: {
   store: AuthProfileStore;
   provider: string;
