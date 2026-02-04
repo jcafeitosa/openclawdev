@@ -40,11 +40,19 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
+import { loadHealth, loadHealthChannels, type HealthState } from "./controllers/health.ts";
 import { loadLogs, LogsState } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
 import { loadProvidersHealth, saveModelSelection } from "./controllers/providers-health.ts";
-import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
+import {
+  compactSession,
+  deleteSession,
+  loadSessions,
+  patchSession,
+  previewSession,
+  resetSession,
+} from "./controllers/sessions.ts";
 import {
   installSkill,
   loadSkills,
@@ -52,6 +60,15 @@ import {
   updateSkillEdit,
   updateSkillEnabled,
 } from "./controllers/skills.ts";
+import { loadUsage, type UsageState } from "./controllers/usage.ts";
+import {
+  loadVoiceStatus,
+  toggleTts,
+  setTtsProvider,
+  setWakeWord,
+  toggleTalkMode,
+  type VoiceState,
+} from "./controllers/voice.ts";
 import { icons } from "./icons.ts";
 import { TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 import { ConfigUiHints } from "./types.ts";
@@ -59,10 +76,12 @@ import { renderAgents } from "./views/agents.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
 import { renderConfig } from "./views/config.ts";
+import { renderConfirmDialog } from "./views/confirm-dialog.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
+import { renderHealth } from "./views/health.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderNodes } from "./views/nodes.ts";
@@ -70,6 +89,9 @@ import { renderOverview } from "./views/overview.ts";
 import { renderProviders } from "./views/providers.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
+import { renderToastContainer } from "./views/toast.ts";
+import { renderUsage } from "./views/usage.ts";
+import { renderVoice } from "./views/voice.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -110,6 +132,7 @@ export function renderApp(state: AppViewState) {
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
+      <a class="skip-link" href="#main-content">Skip to content</a>
       <header class="topbar">
         <div class="topbar-left">
           <button
@@ -189,14 +212,14 @@ export function renderApp(state: AppViewState) {
           </div>
         </div>
       </aside>
-      <main class="content ${isChat ? "content--chat" : ""}">
+      <main id="main-content" class="content ${isChat ? "content--chat" : ""}">
         <section class="content-header">
           <div>
             <div class="page-title">${titleForTab(state.tab)}</div>
             <div class="page-sub">${subtitleForTab(state.tab)}</div>
           </div>
           <div class="page-meta">
-            ${state.lastError ? html`<div class="pill danger">${state.lastError}</div>` : nothing}
+            ${state.lastError ? html`<div class="callout danger" style="padding: 8px 14px;">${state.lastError}</div>` : nothing}
             ${isChat ? renderChatControls(state) : nothing}
           </div>
         </section>
@@ -305,6 +328,36 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => loadSessions(state),
                 onPatch: (key, patch) => patchSession(state, key, patch),
                 onDelete: (key) => deleteSession(state, key),
+                onPreview: (key) => {
+                  void (async () => {
+                    const preview = await previewSession(state, key);
+                    if (preview) {
+                      (state as unknown as OpenClawApp).handleOpenSidebar(preview);
+                    }
+                  })();
+                },
+                onReset: (key) => {
+                  (state as unknown as OpenClawApp).showConfirm({
+                    title: "Reset session",
+                    message: `Reset session "${key}"? This clears the session history.`,
+                    confirmLabel: "Reset",
+                    onConfirm: () => {
+                      (state as unknown as OpenClawApp).confirmDialog = null;
+                      void resetSession(state, key);
+                    },
+                  });
+                },
+                onCompact: (key) => {
+                  (state as unknown as OpenClawApp).showConfirm({
+                    title: "Compact session",
+                    message: `Compact session "${key}"? This compresses the session context.`,
+                    confirmLabel: "Compact",
+                    onConfirm: () => {
+                      (state as unknown as OpenClawApp).confirmDialog = null;
+                      void compactSession(state, key);
+                    },
+                  });
+                },
               })
             : nothing
         }
@@ -1047,9 +1100,64 @@ export function renderApp(state: AppViewState) {
               })
             : nothing
         }
+        ${
+          state.tab === "usage"
+            ? renderUsage({
+                loading: state.usageLoading,
+                error: state.usageError,
+                status: state.usageStatus,
+                cost: state.usageCost,
+                period: state.usagePeriod,
+                onPeriodChange: (period) => {
+                  state.usagePeriod = period;
+                  void loadUsage(state as unknown as UsageState);
+                },
+                onRefresh: () => void loadUsage(state as unknown as UsageState),
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "health"
+            ? renderHealth({
+                loading: state.healthLoading,
+                error: state.healthError,
+                data: state.healthData,
+                channels: state.healthChannels,
+                connected: state.connected,
+                debugHealth: state.debugHealth,
+                onRefresh: () => {
+                  void loadHealth(state as unknown as HealthState);
+                  void loadHealthChannels(state as unknown as HealthState);
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "voice"
+            ? renderVoice({
+                loading: state.voiceLoading,
+                error: state.voiceError,
+                ttsEnabled: state.voiceTtsEnabled,
+                ttsProvider: state.voiceTtsProvider,
+                ttsProviders: state.voiceTtsProviders,
+                wakeWord: state.voiceWakeWord,
+                talkMode: state.voiceTalkMode,
+                onRefresh: () => void loadVoiceStatus(state as unknown as VoiceState),
+                onTtsToggle: () => void toggleTts(state as unknown as VoiceState),
+                onTtsProviderChange: (provider) =>
+                  void setTtsProvider(state as unknown as VoiceState, provider),
+                onWakeWordChange: (word) => void setWakeWord(state as unknown as VoiceState, word),
+                onTalkModeToggle: () => void toggleTalkMode(state as unknown as VoiceState),
+              })
+            : nothing
+        }
       </main>
       ${renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}
+      ${renderConfirmDialog(state.confirmDialog)}
+      ${renderToastContainer(state.toasts, (id) => state.dismissToast(id))}
     </div>
   `;
 }

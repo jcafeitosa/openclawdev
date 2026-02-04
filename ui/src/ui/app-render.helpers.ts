@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import type { AppViewState } from "./app-view-state.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
@@ -17,6 +17,7 @@ export function renderTab(state: AppViewState, tab: Tab) {
     <a
       href=${href}
       class="nav-item ${state.tab === tab ? "active" : ""}"
+      aria-current=${state.tab === tab ? "page" : "false"}
       @click=${(event: MouseEvent) => {
         if (
           event.defaultPrevented ||
@@ -341,5 +342,42 @@ function renderMonitorIcon() {
       <line x1="8" x2="16" y1="21" y2="21"></line>
       <line x1="12" x2="12" y1="17" y2="21"></line>
     </svg>
+  `;
+}
+
+export function renderDismissibleError(error: string | null, onDismiss?: () => void) {
+  if (!error) {
+    return nothing;
+  }
+  return html`
+    <div class="callout danger" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+      <span>${error}</span>
+      ${onDismiss ? html`<button class="btn btn--sm" @click=${onDismiss} aria-label="Dismiss error">&times;</button>` : nothing}
+    </div>
+  `;
+}
+
+export function renderSpinner(label = "Loading...") {
+  return html`
+    <div class="spinner-container" role="status" aria-label=${label}>
+      <div class="spinner"></div>
+      <span class="muted">${label}</span>
+    </div>
+  `;
+}
+
+export function renderEmptyState(opts: {
+  icon?: unknown;
+  title: string;
+  subtitle?: string;
+  action?: unknown;
+}) {
+  return html`
+    <div class="empty-state" role="status">
+      ${opts.icon ? html`<div class="empty-state__icon" aria-hidden="true">${opts.icon}</div>` : nothing}
+      <div class="empty-state__title">${opts.title}</div>
+      ${opts.subtitle ? html`<div class="empty-state__subtitle">${opts.subtitle}</div>` : nothing}
+      ${opts.action ? html`<div class="empty-state__action">${opts.action}</div>` : nothing}
+    </div>
   `;
 }

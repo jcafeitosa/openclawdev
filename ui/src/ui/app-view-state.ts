@@ -29,6 +29,7 @@ import type {
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { ToastEntry, ToastType } from "./views/toast.ts";
 
 export type AppViewState = {
   settings: UiSettings;
@@ -176,6 +177,30 @@ export type AppViewState = {
   providersModelsSaving: boolean;
   providersModelsCostFilter: "all" | "high" | "medium" | "low";
   clockDisplay: string;
+  toasts: ToastEntry[];
+  usageLoading: boolean;
+  usageError: string | null;
+  usageStatus: unknown;
+  usageCost: unknown;
+  usagePeriod: "24h" | "7d" | "30d" | "all";
+  healthLoading: boolean;
+  healthError: string | null;
+  healthData: unknown;
+  healthChannels: Array<{ id: string; status: string }>;
+  voiceLoading: boolean;
+  voiceError: string | null;
+  voiceTtsEnabled: boolean;
+  voiceTtsProvider: string | null;
+  voiceTtsProviders: string[];
+  voiceWakeWord: string | null;
+  voiceTalkMode: string | null;
+  confirmDialog: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null;
   client: GatewayBrowserClient | null;
   connect: () => void;
   setTab: (tab: Tab) => void;
@@ -237,4 +262,12 @@ export type AppViewState = {
   handleLogsAutoFollowToggle: (next: boolean) => void;
   handleCallDebugMethod: (method: string, params: string) => Promise<void>;
   handleLoadProviders: () => Promise<void>;
+  showToast: (type: ToastType, message: string) => void;
+  dismissToast: (id: number) => void;
+  showConfirm: (opts: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  }) => void;
 };

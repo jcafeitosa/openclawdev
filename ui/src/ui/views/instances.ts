@@ -1,5 +1,7 @@
 import { html, nothing } from "lit";
 import type { PresenceEntry } from "../types.ts";
+import { renderEmptyState } from "../app-render.helpers.ts";
+import { icons } from "../icons.ts";
 import { formatPresenceAge, formatPresenceSummary } from "../presenter.ts";
 
 export type InstancesProps = {
@@ -39,9 +41,11 @@ export function renderInstances(props: InstancesProps) {
       <div class="list" style="margin-top: 16px;">
         ${
           props.entries.length === 0
-            ? html`
-                <div class="muted">No instances reported yet.</div>
-              `
+            ? renderEmptyState({
+                icon: icons.radio,
+                title: "No instances connected",
+                subtitle: "Start a client to see presence beacons.",
+              })
             : props.entries.map((entry) => renderEntry(entry))
         }
       </div>

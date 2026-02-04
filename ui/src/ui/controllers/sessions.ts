@@ -115,3 +115,48 @@ export async function deleteSession(state: SessionsState, key: string) {
     state.sessionsLoading = false;
   }
 }
+
+export async function previewSession(state: SessionsState, key: string): Promise<string | null> {
+  if (!state.client || !state.connected) {
+    return null;
+  }
+  try {
+    const res = await state.client.request<{ preview?: string }>("sessions.preview", { key });
+    return res?.preview ?? null;
+  } catch (err) {
+    state.sessionsError = String(err);
+    return null;
+  }
+}
+
+export async function resetSession(state: SessionsState, key: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  state.sessionsLoading = true;
+  state.sessionsError = null;
+  try {
+    await state.client.request("sessions.reset", { key });
+    await loadSessions(state);
+  } catch (err) {
+    state.sessionsError = String(err);
+  } finally {
+    state.sessionsLoading = false;
+  }
+}
+
+export async function compactSession(state: SessionsState, key: string) {
+  if (!state.client || !state.connected) {
+    return;
+  }
+  state.sessionsLoading = true;
+  state.sessionsError = null;
+  try {
+    await state.client.request("sessions.compact", { key });
+    await loadSessions(state);
+  } catch (err) {
+    state.sessionsError = String(err);
+  } finally {
+    state.sessionsLoading = false;
+  }
+}

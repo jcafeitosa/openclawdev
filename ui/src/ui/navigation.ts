@@ -4,7 +4,17 @@ export const TAB_GROUPS = [
   { label: "Chat", tabs: ["chat"] },
   {
     label: "Control",
-    tabs: ["overview", "channels", "instances", "sessions", "cron", "providers"],
+    tabs: [
+      "overview",
+      "channels",
+      "instances",
+      "sessions",
+      "cron",
+      "providers",
+      "usage",
+      "health",
+      "voice",
+    ],
   },
   { label: "Agent", tabs: ["agents", "skills", "nodes"] },
   { label: "Settings", tabs: ["config", "debug", "logs"] },
@@ -23,7 +33,10 @@ export type Tab =
   | "config"
   | "providers"
   | "debug"
-  | "logs";
+  | "logs"
+  | "usage"
+  | "health"
+  | "voice";
 
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
@@ -39,6 +52,9 @@ const TAB_PATHS: Record<Tab, string> = {
   config: "/config",
   debug: "/debug",
   logs: "/logs",
+  usage: "/usage",
+  health: "/health",
+  voice: "/voice",
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
@@ -150,6 +166,12 @@ export function iconForTab(tab: Tab): IconName {
       return "bug";
     case "logs":
       return "scrollText";
+    case "usage":
+      return "barChart";
+    case "health":
+      return "radio";
+    case "voice":
+      return "radio";
     default:
       return "folder";
   }
@@ -183,6 +205,12 @@ export function titleForTab(tab: Tab) {
       return "Debug";
     case "logs":
       return "Logs";
+    case "usage":
+      return "Usage";
+    case "health":
+      return "Health";
+    case "voice":
+      return "Voice";
     default:
       return "Control";
   }
@@ -216,6 +244,12 @@ export function subtitleForTab(tab: Tab) {
       return "Gateway snapshots, events, and manual RPC calls.";
     case "logs":
       return "Live tail of the gateway file logs.";
+    case "usage":
+      return "Token usage, cost estimates, and provider breakdown.";
+    case "health":
+      return "System uptime, error rates, and channel health matrix.";
+    case "voice":
+      return "TTS, voice wake, and talk mode configuration.";
     default:
       return "";
   }

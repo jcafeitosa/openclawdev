@@ -1,5 +1,7 @@
 import { html, nothing } from "lit";
 import type { LogEntry, LogLevel } from "../types.ts";
+import { renderEmptyState } from "../app-render.helpers.ts";
+import { icons } from "../icons.ts";
 
 const LEVELS: LogLevel[] = ["trace", "debug", "info", "warn", "error", "fatal"];
 
@@ -135,9 +137,11 @@ export function renderLogs(props: LogsProps) {
       <div class="log-stream" style="margin-top: 12px;" @scroll=${props.onScroll}>
         ${
           filtered.length === 0
-            ? html`
-                <div class="muted" style="padding: 12px">No log entries.</div>
-              `
+            ? renderEmptyState({
+                icon: icons.scrollText,
+                title: "No log entries",
+                subtitle: "Logs will appear as the gateway produces output.",
+              })
             : filtered.map(
                 (entry) => html`
                 <div class="log-row">

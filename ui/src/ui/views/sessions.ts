@@ -1,6 +1,8 @@
 import { html, nothing } from "lit";
 import type { GatewaySessionRow, SessionsListResult } from "../types.ts";
+import { renderEmptyState } from "../app-render.helpers.ts";
 import { formatAgo } from "../format.ts";
+import { icons } from "../icons.ts";
 import { pathForTab } from "../navigation.ts";
 import { formatSessionTokens } from "../presenter.ts";
 
@@ -30,6 +32,9 @@ export type SessionsProps = {
     },
   ) => void;
   onDelete: (key: string) => void;
+  onPreview?: (key: string) => void;
+  onReset?: (key: string) => void;
+  onCompact?: (key: string) => void;
 };
 
 const THINK_LEVELS = ["", "off", "minimal", "low", "medium", "high"] as const;
@@ -178,25 +183,20 @@ export function renderSessions(props: SessionsProps) {
         </div>
         ${
           rows.length === 0
-            ? html`
-                <div class="muted">No sessions found.</div>
-              `
-            : rows.map((row) =>
-                renderRow(row, props.basePath, props.onPatch, props.onDelete, props.loading),
-              )
+            ? renderEmptyState({
+                icon: icons.fileText,
+                title: "No sessions found",
+                subtitle: "Sessions appear when conversations start.",
+              })
+            : rows.map((row) => renderRow(row, props))
         }
       </div>
     </section>
   `;
 }
 
-function renderRow(
-  row: GatewaySessionRow,
-  basePath: string,
-  onPatch: SessionsProps["onPatch"],
-  onDelete: SessionsProps["onDelete"],
-  disabled: boolean,
-) {
+function renderRow(row: GatewaySessionRow, props: SessionsProps) {
+  const disabled = props.loading;
   const updated = row.updatedAt ? formatAgo(row.updatedAt) : "n/a";
   const rawThinking = row.thinkingLevel ?? "";
   const isBinaryThinking = isBinaryThinkingProvider(row.modelProvider);
@@ -207,7 +207,7 @@ function renderRow(
   const displayName = row.displayName ?? row.key;
   const canLink = row.kind !== "global";
   const chatUrl = canLink
-    ? `${pathForTab("chat", basePath)}?session=${encodeURIComponent(row.key)}`
+    ? `${pathForTab("chat", props.basePath)}?session=${encodeURIComponent(row.key)}`
     : null;
 
   return html`
@@ -222,7 +222,7 @@ function renderRow(
           placeholder="(optional)"
           @change=${(e: Event) => {
             const value = (e.target as HTMLInputElement).value.trim();
-            onPatch(row.key, { label: value || null });
+            props.onPatch(row.key, { label: value || null });
           }}
         />
       </div>
@@ -235,7 +235,7 @@ function renderRow(
           ?disabled=${disabled}
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
-            onPatch(row.key, {
+            props.onPatch(row.key, {
               thinkingLevel: resolveThinkLevelPatchValue(value, isBinaryThinking),
             });
           }}
@@ -249,7 +249,7 @@ function renderRow(
           ?disabled=${disabled}
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
-            onPatch(row.key, { verboseLevel: value || null });
+            props.onPatch(row.key, { verboseLevel: value || null });
           }}
         >
           ${VERBOSE_LEVELS.map(
@@ -263,7 +263,7 @@ function renderRow(
           ?disabled=${disabled}
           @change=${(e: Event) => {
             const value = (e.target as HTMLSelectElement).value;
-            onPatch(row.key, { reasoningLevel: value || null });
+            props.onPatch(row.key, { reasoningLevel: value || null });
           }}
         >
           ${REASONING_LEVELS.map(
@@ -271,8 +271,11 @@ function renderRow(
           )}
         </select>
       </div>
-      <div>
-        <button class="btn danger" ?disabled=${disabled} @click=${() => onDelete(row.key)}>
+      <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+        ${props.onPreview ? html`<button class="btn btn--sm" ?disabled=${disabled} @click=${() => props.onPreview?.(row.key)} title="Preview session">Preview</button>` : nothing}
+        ${props.onReset ? html`<button class="btn btn--sm" ?disabled=${disabled} @click=${() => props.onReset?.(row.key)} title="Reset session history">Reset</button>` : nothing}
+        ${props.onCompact ? html`<button class="btn btn--sm" ?disabled=${disabled} @click=${() => props.onCompact?.(row.key)} title="Compact session context">Compact</button>` : nothing}
+        <button class="btn btn--sm danger" ?disabled=${disabled} @click=${() => props.onDelete(row.key)}>
           Delete
         </button>
       </div>

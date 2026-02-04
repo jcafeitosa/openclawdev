@@ -1,7 +1,9 @@
 import { html, nothing } from "lit";
 import type { SkillMessageMap } from "../controllers/skills.ts";
 import type { SkillStatusEntry, SkillStatusReport } from "../types.ts";
+import { renderEmptyState } from "../app-render.helpers.ts";
 import { clampText } from "../format.ts";
+import { icons } from "../icons.ts";
 
 type SkillGroup = {
   id: string;
@@ -100,9 +102,11 @@ export function renderSkills(props: SkillsProps) {
 
       ${
         filtered.length === 0
-          ? html`
-              <div class="muted" style="margin-top: 16px">No skills found.</div>
-            `
+          ? html`<div style="margin-top: 16px">${renderEmptyState({
+              icon: icons.zap,
+              title: "No skills found",
+              subtitle: "Adjust your filter or install new skills.",
+            })}</div>`
           : html`
             <div class="agent-skills-groups" style="margin-top: 16px;">
               ${groups.map((group) => {
@@ -217,9 +221,7 @@ function renderSkill(skill: SkillStatusEntry, props: SkillsProps) {
             ? html`<div
               class="muted"
               style="margin-top: 8px; color: ${
-                message.kind === "error"
-                  ? "var(--danger-color, #d14343)"
-                  : "var(--success-color, #0a7f5a)"
+                message.kind === "error" ? "var(--danger)" : "var(--ok)"
               };"
             >
               ${message.message}

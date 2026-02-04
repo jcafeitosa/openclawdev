@@ -5,6 +5,8 @@ import type {
   ProviderModelEntry,
   UsageWindowEntry,
 } from "../controllers/providers-health.ts";
+import { renderEmptyState } from "../app-render.helpers.ts";
+import { icons } from "../icons.ts";
 
 export type ProvidersProps = {
   loading: boolean;
@@ -85,9 +87,11 @@ export function renderProviders(props: ProvidersProps) {
       <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
         ${
           props.entries.length === 0
-            ? html`
-                <div class="muted">No providers found.</div>
-              `
+            ? renderEmptyState({
+                icon: icons.plug,
+                title: "No providers detected",
+                subtitle: "Configure API keys to enable providers.",
+              })
             : props.entries.map((entry) =>
                 renderProviderCard(entry, props.expandedId === entry.id, props, () =>
                   props.onToggleExpand(entry.id),
@@ -187,7 +191,7 @@ function renderQuickStatus(entry: ProviderHealthEntry) {
     entry.tokenRemainingMs > 0
   ) {
     parts.push(
-      html`<span style="color: var(--warning); font-size: 12px;">
+      html`<span style="color: var(--warn); font-size: 12px;">
         Token expires: ${formatCountdown(entry.tokenRemainingMs)}
       </span>`,
     );
@@ -301,9 +305,15 @@ function matchesCostFilter(
   tier: ModelCostTier,
   filter: "all" | "high" | "medium" | "low",
 ): boolean {
-  if (filter === "all") return true;
-  if (filter === "high") return tier === "expensive";
-  if (filter === "medium") return tier === "moderate";
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "high") {
+    return tier === "expensive";
+  }
+  if (filter === "medium") {
+    return tier === "moderate";
+  }
   // low = cheap + free
   return tier === "cheap" || tier === "free";
 }
@@ -326,15 +336,15 @@ function costTierLabel(tier: ModelCostTier): string {
 function costTierColor(tier: ModelCostTier): string {
   switch (tier) {
     case "expensive":
-      return "var(--danger, #ef4444)";
+      return "var(--danger)";
     case "moderate":
-      return "var(--warning, #eab308)";
+      return "var(--warn)";
     case "cheap":
-      return "var(--ok, #22c55e)";
+      return "var(--ok)";
     case "free":
-      return "var(--info, #3b82f6)";
+      return "var(--info)";
     default:
-      return "var(--muted-fg, #888)";
+      return "var(--muted)";
   }
 }
 
@@ -386,7 +396,7 @@ function renderModelsSection(entry: ProviderHealthEntry, props: ProvidersProps) 
               class="chip"
               style="cursor: pointer; font-size: 11px; padding: 2px 8px; border: 1px solid var(--border); ${
                 props.modelsCostFilter === opt.value
-                  ? "background: var(--fg); color: var(--bg); border-color: var(--fg);"
+                  ? "background: var(--text-strong); color: var(--bg); border-color: var(--text-strong);"
                   : ""
               }"
               @click=${() => props.onCostFilterChange(opt.value)}
@@ -428,7 +438,7 @@ function renderModelRow(model: ProviderModelEntry, props: ProvidersProps, allowl
 
   return html`
     <div
-      style="display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: var(--surface, rgba(128,128,128,0.05));"
+      style="display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; background: var(--bg-elevated);"
     >
       <label
         style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; cursor: pointer;"
@@ -467,8 +477,8 @@ function renderModelRow(model: ProviderModelEntry, props: ProvidersProps, allowl
                   class="chip"
                   style="
                     font-size: 11px;
-                    background: color-mix(in srgb, var(--ok, #22c55e) 12%, transparent);
-                    color: var(--ok, #22c55e);
+                    background: color-mix(in srgb, var(--ok) 12%, transparent);
+                    color: var(--ok);
                   "
                 >
                   reasoning
@@ -483,8 +493,8 @@ function renderModelRow(model: ProviderModelEntry, props: ProvidersProps, allowl
                   class="chip"
                   style="
                     font-size: 11px;
-                    background: color-mix(in srgb, var(--info, #3b82f6) 12%, transparent);
-                    color: var(--info, #3b82f6);
+                    background: color-mix(in srgb, var(--info) 12%, transparent);
+                    color: var(--info);
                   "
                 >
                   vision
@@ -506,9 +516,9 @@ function renderModelRow(model: ProviderModelEntry, props: ProvidersProps, allowl
                   class="chip"
                   style="
                     font-size: 11px;
-                    background: color-mix(in srgb, var(--warning, #eab308) 15%, transparent);
-                    color: var(--warning, #eab308);
-                    border-color: color-mix(in srgb, var(--warning, #eab308) 30%, transparent);
+                    background: color-mix(in srgb, var(--warn) 15%, transparent);
+                    color: var(--warn);
+                    border-color: color-mix(in srgb, var(--warn) 30%, transparent);
                   "
                 >
                   Default
@@ -565,8 +575,7 @@ function renderUsageSection(entry: ProviderHealthEntry) {
 
 function renderUsageBar(window: UsageWindowEntry) {
   const pct = Math.min(100, Math.max(0, window.usedPercent));
-  const barColor =
-    pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warning)" : "var(--ok, #22c55e)";
+  const barColor = pct >= 90 ? "var(--danger)" : pct >= 70 ? "var(--warn)" : "var(--ok)";
 
   return html`
     <div style="margin-bottom: 8px;">
@@ -599,17 +608,17 @@ function renderUsageBar(window: UsageWindowEntry) {
 function getHealthColor(status: string): string {
   switch (status) {
     case "healthy":
-      return "var(--ok, #22c55e)";
+      return "var(--ok)";
     case "warning":
-      return "var(--warning, #eab308)";
+      return "var(--warn)";
     case "cooldown":
     case "expired":
     case "disabled":
-      return "var(--danger, #ef4444)";
+      return "var(--danger)";
     case "missing":
-      return "var(--muted-fg, #888)";
+      return "var(--muted)";
     default:
-      return "var(--muted-fg, #888)";
+      return "var(--muted)";
   }
 }
 

@@ -30,6 +30,7 @@ import type {
   NostrProfile,
 } from "./types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
+import type { ToastEntry, ToastType } from "./views/toast.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
   handleChannelConfigSave as handleChannelConfigSaveInternal,
@@ -257,6 +258,43 @@ export class OpenClawApp extends LitElement {
   @state() providersModelsSaving = false;
   @state() providersModelsCostFilter: "all" | "high" | "medium" | "low" = "all";
   @state() clockDisplay = "";
+
+  // Toast notifications
+  @state() toasts: ToastEntry[] = [];
+  private toastIdCounter = 0;
+  private toastTimers = new Map<number, number>();
+
+  // Usage tab
+  @state() usageLoading = false;
+  @state() usageError: string | null = null;
+  @state() usageStatus: unknown = null;
+  @state() usageCost: unknown = null;
+  @state() usagePeriod: "24h" | "7d" | "30d" | "all" = "7d";
+
+  // Health monitor tab
+  @state() healthLoading = false;
+  @state() healthError: string | null = null;
+  @state() healthData: unknown = null;
+  @state() healthChannels: Array<{ id: string; status: string }> = [];
+  private healthPollInterval: number | null = null;
+
+  // Voice controls tab
+  @state() voiceLoading = false;
+  @state() voiceError: string | null = null;
+  @state() voiceTtsEnabled = false;
+  @state() voiceTtsProvider: string | null = null;
+  @state() voiceTtsProviders: string[] = [];
+  @state() voiceWakeWord: string | null = null;
+  @state() voiceTalkMode: string | null = null;
+
+  // Confirm dialog
+  @state() confirmDialog: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+  } | null = null;
 
   @state() debugLoading = false;
   @state() debugStatus: StatusSummary | null = null;
@@ -526,6 +564,39 @@ export class OpenClawApp extends LitElement {
 
   async handleLoadProviders() {
     await loadProvidersHealthInternal(this);
+  }
+
+  showToast(type: ToastType, message: string) {
+    const id = ++this.toastIdCounter;
+    const dismissAt = Date.now() + 5000;
+    this.toasts = [...this.toasts, { id, type, message, dismissAt }];
+    const timer = window.setTimeout(() => {
+      this.dismissToast(id);
+    }, 5000);
+    this.toastTimers.set(id, timer);
+  }
+
+  dismissToast(id: number) {
+    this.toasts = this.toasts.filter((t) => t.id !== id);
+    const timer = this.toastTimers.get(id);
+    if (timer != null) {
+      window.clearTimeout(timer);
+      this.toastTimers.delete(id);
+    }
+  }
+
+  showConfirm(opts: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  }) {
+    this.confirmDialog = {
+      ...opts,
+      onCancel: () => {
+        this.confirmDialog = null;
+      },
+    };
   }
 
   render() {

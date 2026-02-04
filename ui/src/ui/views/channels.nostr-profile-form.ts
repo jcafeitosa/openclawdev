@@ -109,7 +109,7 @@ export function renderNostrProfileForm(params: {
             ?disabled=${state.saving}
           ></textarea>
           ${help ? html`<div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${help}</div>` : nothing}
-          ${error ? html`<div style="font-size: 12px; color: var(--danger-color); margin-top: 2px;">${error}</div>` : nothing}
+          ${error ? html`<div style="font-size: 12px; color: var(--danger); margin-top: 2px;">${error}</div>` : nothing}
         </div>
       `;
     }
@@ -133,7 +133,7 @@ export function renderNostrProfileForm(params: {
           ?disabled=${state.saving}
         />
         ${help ? html`<div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">${help}</div>` : nothing}
-        ${error ? html`<div style="font-size: 12px; color: var(--danger-color); margin-top: 2px;">${error}</div>` : nothing}
+        ${error ? html`<div style="font-size: 12px; color: var(--danger); margin-top: 2px;">${error}</div>` : nothing}
       </div>
     `;
   };
@@ -277,9 +277,7 @@ export function renderNostrProfileForm(params: {
       ${
         isDirty
           ? html`
-              <div style="font-size: 12px; color: var(--warning-color); margin-top: 8px">
-                You have unsaved changes
-              </div>
+              <div style="font-size: 12px; color: var(--warn); margin-top: 8px">You have unsaved changes</div>
             `
           : nothing
       }

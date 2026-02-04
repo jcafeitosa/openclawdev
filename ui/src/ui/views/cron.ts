@@ -1,7 +1,9 @@
 import { html, nothing } from "lit";
 import type { ChannelUiMetaEntry, CronJob, CronRunLogEntry, CronStatus } from "../types.ts";
 import type { CronFormState } from "../ui-types.ts";
+import { renderEmptyState } from "../app-render.helpers.ts";
 import { formatMs } from "../format.ts";
+import { icons } from "../icons.ts";
 import {
   formatCronPayload,
   formatCronSchedule,
@@ -84,7 +86,7 @@ export function renderCron(props: CronProps) {
           <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
             ${props.loading ? "Refreshing…" : "Refresh"}
           </button>
-          ${props.error ? html`<span class="muted">${props.error}</span>` : nothing}
+          ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
         </div>
       </div>
 
@@ -281,9 +283,11 @@ export function renderCron(props: CronProps) {
       <div class="card-sub">All scheduled jobs stored in the gateway.</div>
       ${
         props.jobs.length === 0
-          ? html`
-              <div class="muted" style="margin-top: 12px">No jobs yet.</div>
-            `
+          ? renderEmptyState({
+              icon: icons.loader,
+              title: "No scheduled jobs yet",
+              subtitle: "Create one using the form above.",
+            })
           : html`
             <div class="list" style="margin-top: 12px;">
               ${props.jobs.map((job) => renderJob(job, props))}

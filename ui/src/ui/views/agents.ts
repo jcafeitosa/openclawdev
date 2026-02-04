@@ -16,7 +16,9 @@ import {
   normalizeToolName,
   resolveToolProfilePolicy,
 } from "../../../../src/agents/tool-policy.js";
+import { renderEmptyState } from "../app-render.helpers.ts";
 import { formatAgo } from "../format.ts";
+import { icons } from "../icons.ts";
 import {
   formatCronPayload,
   formatCronSchedule,
@@ -562,9 +564,11 @@ export function renderAgents(props: AgentsProps) {
         <div class="agent-list" style="margin-top: 12px;">
           ${
             agents.length === 0
-              ? html`
-                  <div class="muted">No agents found.</div>
-                `
+              ? renderEmptyState({
+                  icon: icons.puzzle,
+                  title: "No agents configured",
+                  subtitle: "Add agents in your gateway config.",
+                })
               : agents.map((agent) => {
                   const badge = agentBadgeText(agent.id, defaultId);
                   const emoji = resolveAgentEmoji(agent, props.agentIdentityById[agent.id] ?? null);
@@ -1135,9 +1139,11 @@ function renderAgentChannels(params: {
         }
         ${
           entries.length === 0
-            ? html`
-                <div class="muted" style="margin-top: 16px">No channels found.</div>
-              `
+            ? html`<div style="margin-top: 16px">${renderEmptyState({
+                icon: icons.link,
+                title: "No channels found",
+                subtitle: "Configure channels in your gateway setup.",
+              })}</div>`
             : html`
               <div class="list" style="margin-top: 16px;">
                 ${entries.map((entry) => {
@@ -1238,9 +1244,11 @@ function renderAgentCron(params: {
       <div class="card-sub">Scheduled jobs targeting this agent.</div>
       ${
         jobs.length === 0
-          ? html`
-              <div class="muted" style="margin-top: 16px">No jobs assigned.</div>
-            `
+          ? html`<div style="margin-top: 16px">${renderEmptyState({
+              icon: icons.loader,
+              title: "No jobs assigned",
+              subtitle: "Create scheduled jobs targeting this agent.",
+            })}</div>`
           : html`
               <div class="list" style="margin-top: 16px;">
                 ${jobs.map(
@@ -1329,9 +1337,11 @@ function renderAgentFiles(params: {
                 <div class="agent-files-list">
                   ${
                     files.length === 0
-                      ? html`
-                          <div class="muted">No files found.</div>
-                        `
+                      ? renderEmptyState({
+                          icon: icons.fileText,
+                          title: "No files found",
+                          subtitle: "Load agent workspace files to get started.",
+                        })
                       : files.map((file) =>
                           renderAgentFileRow(file, active, () => params.onSelectFile(file.name)),
                         )
@@ -1828,9 +1838,11 @@ function renderAgentSkills(params: {
 
       ${
         filtered.length === 0
-          ? html`
-              <div class="muted" style="margin-top: 16px">No skills found.</div>
-            `
+          ? html`<div style="margin-top: 16px">${renderEmptyState({
+              icon: icons.zap,
+              title: "No skills found",
+              subtitle: "Adjust your filter or load skills for this agent.",
+            })}</div>`
           : html`
               <div class="agent-skills-groups" style="margin-top: 16px;">
                 ${groups.map((group) =>
