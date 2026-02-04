@@ -40,6 +40,9 @@ export type ProviderHealthEntry = {
   usageError?: string;
   isLocal: boolean;
   models: ProviderModelEntry[];
+  authModes?: string[];
+  envVars?: string[];
+  configured?: boolean;
 };
 
 export type ProvidersHealthHost = {

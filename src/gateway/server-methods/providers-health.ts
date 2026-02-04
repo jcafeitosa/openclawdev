@@ -169,6 +169,11 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
           ...(usage?.plan ? { usagePlan: usage.plan } : {}),
           ...(usage?.error ? { usageError: usage.error } : {}),
           ...(definition?.isLocal ? { isLocal: true } : {}),
+          ...(definition?.authModes ? { authModes: definition.authModes } : {}),
+          ...(definition?.envVars && definition.envVars.length > 0
+            ? { envVars: definition.envVars }
+            : {}),
+          configured: provider.detected,
         };
 
         return entry;

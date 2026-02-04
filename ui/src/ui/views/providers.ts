@@ -1,5 +1,4 @@
 import { html, nothing } from "lit";
-import type { AuthProviderEntry } from "../controllers/auth.ts";
 import type {
   ModelCostTier,
   ProviderHealthEntry,
@@ -113,15 +112,15 @@ export function renderProviders(props: ProvidersProps) {
   `;
 }
 
-function resolveAuthInfo(entry: ProviderHealthEntry, props: ProvidersProps) {
-  const authEntry = props.authProvidersList?.find((p) => p.id === entry.id);
-  const authModes = authEntry?.authModes ?? [];
+function resolveAuthInfo(entry: ProviderHealthEntry, _props: ProvidersProps) {
+  const authModes = entry.authModes ?? [];
   const hasApiKey = authModes.includes("api-key");
   const hasToken = authModes.includes("token");
-  const hasOAuthOnly = !hasApiKey && !hasToken && authModes.includes("oauth");
+  const hasOAuth = authModes.includes("oauth");
+  const hasOAuthOnly = !hasApiKey && !hasToken && hasOAuth;
   const hasAwsSdk = !hasApiKey && !hasToken && authModes.includes("aws-sdk");
   const canConfigure = hasApiKey || hasToken;
-  return { authModes, hasApiKey, hasToken, hasOAuthOnly, hasAwsSdk, canConfigure };
+  return { authModes, hasApiKey, hasToken, hasOAuth, hasOAuthOnly, hasAwsSdk, canConfigure };
 }
 
 function renderProviderCard(
@@ -191,58 +190,97 @@ function renderProviderCard(
   `;
 }
 
+function renderAuthModeChips(authModes: string[]) {
+  if (authModes.length === 0) return nothing;
+  return html`
+    <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px;">
+      ${authModes.map(
+        (mode) => html`
+          <span
+            class="chip"
+            style="font-size: 11px; background: color-mix(in srgb, var(--info) 10%, transparent); color: var(--info);"
+          >
+            ${mode}
+          </span>
+        `,
+      )}
+    </div>
+  `;
+}
+
 function renderConfigureSection(
   entry: ProviderHealthEntry,
   props: ProvidersProps,
   isConfiguring: boolean,
 ) {
-  const { hasApiKey, hasToken, hasOAuthOnly, hasAwsSdk, canConfigure } = resolveAuthInfo(
-    entry,
-    props,
-  );
+  const { authModes, hasApiKey, hasToken, hasOAuth, hasOAuthOnly, hasAwsSdk, canConfigure } =
+    resolveAuthInfo(entry, props);
 
-  // OAuth-only providers
-  if (hasOAuthOnly) {
-    return html`
-      <div style="margin-bottom: 12px">
-        <div class="muted" style="font-size: 13px">
-          This provider requires OAuth. Run
-          <code style="font-size: 12px">openclaw models auth login</code>
-          in your terminal.
-        </div>
-      </div>
-    `;
-  }
-
-  // AWS SDK providers
-  if (hasAwsSdk) {
-    return html`
-      <div style="margin-bottom: 12px">
-        <div class="muted" style="font-size: 13px">
-          Configure AWS credentials via CLI or environment variables.
-        </div>
-      </div>
-    `;
-  }
-
-  if (!canConfigure) {
+  if (authModes.length === 0) {
     return nothing;
   }
 
   if (!isConfiguring) {
+    const hints: unknown[] = [];
+
+    if (hasOAuth) {
+      hints.push(html`
+        <div class="muted" style="font-size: 12px;">
+          ${icons.key}
+          <span>OAuth: <code style="font-size: 11px">openclaw models auth login</code></span>
+        </div>
+      `);
+    }
+
+    if (hasAwsSdk) {
+      hints.push(html`
+        <div class="muted" style="font-size: 12px;">
+          ${icons.key}
+          <span>AWS SDK: set <code style="font-size: 11px">AWS_ACCESS_KEY_ID</code> and
+          <code style="font-size: 11px">AWS_SECRET_ACCESS_KEY</code> env vars</span>
+        </div>
+      `);
+    }
+
+    if (entry.envVars && entry.envVars.length > 0 && !hasAwsSdk) {
+      hints.push(html`
+        <div class="muted" style="font-size: 12px;">
+          Env: ${entry.envVars.map((v) => html`<code style="font-size: 11px">${v}</code> `)}
+        </div>
+      `);
+    }
+
     return html`
-      <div style="margin-bottom: 12px;">
-        <button
-          class="btn btn-sm"
-          @click=${(e: Event) => {
-            e.stopPropagation();
-            props.onConfigureProvider(entry.id);
-          }}
-        >
-          ${entry.detected ? "Reconfigure" : "Configure"}
-        </button>
+      <div
+        style="margin-bottom: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated);"
+      >
+        <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px;">Authentication</div>
+        ${renderAuthModeChips(authModes)}
+        <div style="display: flex; align-items: flex-start; gap: 12px;">
+          ${
+            canConfigure
+              ? html`
+                <button
+                  class="btn btn-sm"
+                  @click=${(e: Event) => {
+                    e.stopPropagation();
+                    props.onConfigureProvider(entry.id);
+                  }}
+                >
+                  ${entry.detected ? "Reconfigure" : "Configure"}
+                </button>
+              `
+              : nothing
+          }
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">${hints}</div>
+        </div>
       </div>
     `;
+  }
+
+  // Configuring mode — show credential input form
+  if (!canConfigure) {
+    return nothing;
   }
 
   const credentialType = hasToken && !hasApiKey ? "token" : "api_key";
@@ -253,7 +291,9 @@ function renderConfigureSection(
     <div
       style="margin-bottom: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-elevated);"
     >
-      <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px;">
+      <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px;">Authentication</div>
+      ${renderAuthModeChips(authModes)}
+      <div style="font-size: 13px; margin-bottom: 8px; color: var(--text);">
         ${inputLabel} for ${entry.name}
       </div>
       <div style="display: flex; gap: 8px; align-items: center;">
@@ -299,10 +339,11 @@ function renderConfigureSection(
         </button>
       </div>
       ${
-        hasApiKey && hasToken
+        hasOAuth
           ? html`
-              <div class="muted" style="font-size: 11px; margin-top: 4px">
-                This provider also supports OAuth login via CLI.
+              <div class="muted" style="font-size: 11px; margin-top: 6px">
+                Also supports OAuth:
+                <code style="font-size: 11px">openclaw models auth login</code>
               </div>
             `
           : nothing

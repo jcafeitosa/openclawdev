@@ -37,6 +37,9 @@ export const ProviderHealthEntrySchema = Type.Object(
     usagePlan: Type.Optional(Type.String()),
     usageError: Type.Optional(Type.String()),
     isLocal: Type.Optional(Type.Boolean()),
+    authModes: Type.Optional(Type.Array(Type.String())),
+    envVars: Type.Optional(Type.Array(Type.String())),
+    configured: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );
