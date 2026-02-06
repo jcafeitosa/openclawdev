@@ -6,6 +6,7 @@ import { authHandlers } from "./server-methods/auth.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
+import { collaborationAdvancedHandlers } from "./server-methods/collaboration-advanced.js";
 import { collaborationHandlers } from "./server-methods/collaboration.js";
 import { configHandlers } from "./server-methods/config.js";
 import { connectHandlers } from "./server-methods/connect.js";
@@ -185,6 +186,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...channelsHandlers,
   ...chatHandlers,
   ...collaborationHandlers,
+  ...collaborationAdvancedHandlers,
   ...cronHandlers,
   ...deviceHandlers,
   ...execApprovalsHandlers,
