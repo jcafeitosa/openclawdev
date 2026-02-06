@@ -1,4 +1,8 @@
-import { resolveAgentConfig, resolveAgentRole } from "../agents/agent-scope.js";
+import {
+  resolveAgentConfig,
+  resolveAgentRole,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
 import {
   listAllSubagentRuns,
   type SubagentRunRecord,
@@ -7,6 +11,7 @@ import {
 import { loadConfig } from "../config/config.js";
 import { onAgentEvent } from "../infra/agent-events.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
+import { getAllCollaborativeSessions } from "./server-methods/collaboration.js";
 
 export type HierarchyEventType =
   | "spawn"
@@ -42,8 +47,16 @@ export type HierarchyNode = {
   usage?: SubagentUsage;
 };
 
+export type CollaborationEdge = {
+  source: string; // agentId
+  target: string; // agentId
+  type: "proposal" | "challenge" | "agreement" | "decision" | "clarification";
+  topic?: string;
+};
+
 export type HierarchySnapshot = {
   roots: HierarchyNode[];
+  collaborationEdges: CollaborationEdge[];
   updatedAt: number;
 };
 
@@ -107,8 +120,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
   }
 
-  // Find roots
+  // Find roots: parents that are not themselves children
   const roots: HierarchyNode[] = [];
+  const rootSessionKeysUsed = new Set<string>();
   const parentKeys = new Set(childrenByParent.keys());
   for (const parentKey of parentKeys) {
     if (!childSessionKeys.has(parentKey)) {
@@ -126,12 +140,70 @@ function buildHierarchySnapshot(): HierarchySnapshot {
           children,
         };
         roots.push(rootNode);
+        rootSessionKeysUsed.add(parentKey);
       }
     }
   }
 
+  // Always include the default (orchestrator) agent as a root,
+  // even when no subagents have been spawned yet.
+  const defaultAgentId = resolveDefaultAgentId(cfg);
+  const defaultSessionKey = `agent:${defaultAgentId}:main`;
+  if (!rootSessionKeysUsed.has(defaultSessionKey)) {
+    const defaultRole = resolveAgentRole(cfg, defaultAgentId);
+    const defaultName = resolveAgentConfig(cfg, defaultAgentId)?.name;
+    roots.unshift({
+      sessionKey: defaultSessionKey,
+      agentId: defaultAgentId,
+      agentRole: defaultRole,
+      label: defaultName || `Agent: ${defaultAgentId}`,
+      status: "running",
+      children: [],
+    });
+  }
+
+  // Extract collaboration edges from active sessions
+  const collaborationEdges: CollaborationEdge[] = [];
+  try {
+    const sessions = getAllCollaborativeSessions();
+    for (const session of sessions) {
+      const members = session.members;
+      // Build edges from messages: each message implies interaction with all other members
+      for (const msg of session.messages) {
+        for (const member of members) {
+          if (member !== msg.from) {
+            collaborationEdges.push({
+              source: msg.from,
+              target: member,
+              type: msg.type,
+              topic: session.topic,
+            });
+          }
+        }
+      }
+      // Build edges from decision proposals: proposer interacts with all who challenged/agreed
+      for (const decision of session.decisions) {
+        const proposers = decision.proposals.map((p) => p.from);
+        // Each proposer connects to other proposers (they debated)
+        for (let i = 0; i < proposers.length; i++) {
+          for (let j = i + 1; j < proposers.length; j++) {
+            collaborationEdges.push({
+              source: proposers[i],
+              target: proposers[j],
+              type: "proposal",
+              topic: decision.topic,
+            });
+          }
+        }
+      }
+    }
+  } catch {
+    // Collaboration data is optional — don't break hierarchy if it fails
+  }
+
   return {
     roots,
+    collaborationEdges,
     updatedAt: Date.now(),
   };
 }

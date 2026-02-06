@@ -244,6 +244,13 @@ export function getCollaborationContext(sessionKey: string): CollaborativeSessio
 }
 
 /**
+ * Return all active collaboration sessions (for hierarchy visualization)
+ */
+export function getAllCollaborativeSessions(): CollaborativeSession[] {
+  return [...collaborativeSessions.values()];
+}
+
+/**
  * Get all messages in a decision thread (for an agent to read)
  */
 export function getDecisionThread(params: { sessionKey: string; decisionId: string }): Array<{

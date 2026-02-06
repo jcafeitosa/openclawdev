@@ -2320,10 +2320,11 @@
 .hierarchy-chart-container {
   width: 100%;
   min-height: 400px;
+  max-height: 700px;
   background: var(--bg-elevated);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  padding: 16px;
+  padding: 0;
 }
 
 .hierarchy-stats {

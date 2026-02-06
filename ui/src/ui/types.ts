@@ -588,7 +588,15 @@ export type AgentHierarchyNode = {
   usage?: AgentHierarchyUsage;
 };
 
+export type CollaborationEdge = {
+  source: string;
+  target: string;
+  type: "proposal" | "challenge" | "agreement" | "decision" | "clarification";
+  topic?: string;
+};
+
 export type AgentHierarchyResult = {
   roots: AgentHierarchyNode[];
+  collaborationEdges?: CollaborationEdge[];
   updatedAt: number;
 };
