@@ -64,6 +64,12 @@ const PROVIDER_DEFAULTS: Record<
     contextWindow: 128_000,
     maxTokens: 16_384,
   },
+  "openai-codex": {
+    api: "openai-codex-responses" as Api,
+    baseUrl: "https://chatgpt.com/backend-api",
+    contextWindow: 272_000,
+    maxTokens: 16_384,
+  },
 };
 
 /**

@@ -136,6 +136,14 @@ export const AgentDefaultsSchema = z
     blockStreamingChunk: BlockStreamingChunkSchema.optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     humanDelay: HumanDelaySchema.optional(),
+    role: z
+      .union([
+        z.literal("orchestrator"),
+        z.literal("lead"),
+        z.literal("specialist"),
+        z.literal("worker"),
+      ])
+      .optional(),
     timeoutSeconds: z.number().int().positive().optional(),
     mediaMaxMb: z.number().positive().optional(),
     typingIntervalSeconds: z.number().int().positive().optional(),

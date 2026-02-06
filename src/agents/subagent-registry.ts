@@ -26,7 +26,7 @@ export type SubagentRunRecord = {
   requesterOrigin?: DeliveryContext;
   requesterDisplayKey: string;
   task: string;
-  cleanup: "delete" | "keep";
+  cleanup: "delete" | "keep" | "idle";
   label?: string;
   createdAt: number;
   startedAt?: number;
@@ -106,6 +106,10 @@ function restoreSubagentRunsOnce() {
     return;
   }
   restoreAttempted = true;
+
+  // Always ensure listener is initialized to capture new spawn events
+  ensureListener();
+
   try {
     const restored = loadSubagentRegistryFromDisk();
     if (restored.size === 0) {
@@ -122,7 +126,6 @@ function restoreSubagentRunsOnce() {
     }
 
     // Resume pending work.
-    ensureListener();
     if ([...subagentRuns.values()].some((entry) => entry.archiveAtMs)) {
       startSweeper();
     }
@@ -276,16 +279,46 @@ function ensureListener() {
   });
 }
 
-function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didAnnounce: boolean) {
+function deleteChildSession(childSessionKey: string) {
+  void callGateway({
+    method: "sessions.delete",
+    params: { key: childSessionKey, deleteTranscript: true },
+    timeoutMs: 10_000,
+  }).catch(() => {
+    // Ignore session deletion failures — the archive sweeper is a fallback.
+  });
+}
+
+function finalizeSubagentCleanup(
+  runId: string,
+  cleanup: "delete" | "keep" | "idle",
+  didAnnounce: boolean,
+) {
   const entry = subagentRuns.get(runId);
   if (!entry) {
     return;
   }
+  const childSessionKey = entry.childSessionKey;
   if (cleanup === "delete") {
     subagentRuns.delete(runId);
     persistSubagentRuns();
+    deleteChildSession(childSessionKey);
     return;
   }
+  if (cleanup === "idle") {
+    // Idle mode: keep session alive for follow-up instructions.
+    // Reset archive timer from completion time (not creation time).
+    const cfg = loadConfig();
+    const archiveAfterMs = resolveArchiveAfterMs(cfg);
+    if (archiveAfterMs) {
+      entry.archiveAtMs = Date.now() + archiveAfterMs;
+    }
+    entry.cleanupCompletedAt = Date.now();
+    persistSubagentRuns();
+    startSweeper();
+    return;
+  }
+  // cleanup === "keep": delete after successful announce only.
   if (!didAnnounce) {
     // Allow retry on the next wake if the announce failed.
     entry.cleanupHandled = false;
@@ -294,6 +327,7 @@ function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didA
   }
   entry.cleanupCompletedAt = Date.now();
   persistSubagentRuns();
+  deleteChildSession(childSessionKey);
 }
 
 function beginSubagentCleanup(runId: string) {
@@ -370,7 +404,7 @@ export function registerSubagentRun(params: {
   requesterOrigin?: DeliveryContext;
   requesterDisplayKey: string;
   task: string;
-  cleanup: "delete" | "keep";
+  cleanup: "delete" | "keep" | "idle";
   label?: string;
   runTimeoutSeconds?: number;
 }) {

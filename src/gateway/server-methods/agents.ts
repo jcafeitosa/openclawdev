@@ -1,8 +1,13 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { GatewayRequestHandlers } from "./types.js";
-import { listAgentIds, resolveAgentWorkspaceDir } from "../../agents/agent-scope.js";
-import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
+import {
+  listAgentIds,
+  resolveAgentModelPrimary,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../../agents/agent-scope.js";
+import { modelKey, resolveDefaultModelForAgent } from "../../agents/model-selection.js";
 import {
   DEFAULT_AGENTS_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
@@ -14,7 +19,7 @@ import {
   DEFAULT_TOOLS_FILENAME,
   DEFAULT_USER_FILENAME,
 } from "../../agents/workspace.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, writeConfigFile } from "../../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
 import { resolveHeartbeatSummaryForAgent } from "../../infra/heartbeat-runner.js";
 import { loadCostUsageSummary } from "../../infra/session-cost-usage.js";
@@ -27,6 +32,7 @@ import {
   validateAgentsFilesListParams,
   validateAgentsFilesSetParams,
   validateAgentsListParams,
+  validateAgentsModelSetParams,
 } from "../protocol/index.js";
 import { listAgentsForGateway } from "../session-utils.js";
 
@@ -144,6 +150,69 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const cfg = loadConfig();
     const result = listAgentsForGateway(cfg);
     respond(true, result, undefined);
+  },
+  "agents.model.set": async ({ params, respond }) => {
+    if (!validateAgentsModelSetParams(params)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid agents.model.set params: ${formatValidationErrors(
+            validateAgentsModelSetParams.errors,
+          )}`,
+        ),
+      );
+      return;
+    }
+    const cfg = loadConfig();
+    const agentId = resolveAgentIdOrError(String(params.agentId ?? ""), cfg);
+    if (!agentId) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+      return;
+    }
+    const newModel = params.model;
+    const agents = cfg.agents?.list ?? [];
+    const entryIndex = agents.findIndex((entry) => entry && normalizeAgentId(entry.id) === agentId);
+    if (entryIndex === -1) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "agent not found in config"),
+      );
+      return;
+    }
+    const nextAgents = [...agents];
+    const entry = { ...nextAgents[entryIndex] };
+    if (newModel === null) {
+      delete entry.model;
+    } else {
+      entry.model = { primary: newModel };
+    }
+    nextAgents[entryIndex] = entry;
+    const nextCfg = {
+      ...cfg,
+      agents: { ...cfg.agents, list: nextAgents },
+    };
+    await writeConfigFile(nextCfg);
+
+    const updatedCfg = loadConfig();
+    const agentOverride = resolveAgentModelPrimary(updatedCfg, agentId);
+    const effective = resolveDefaultModelForAgent({ cfg: updatedCfg, agentId });
+    const effectiveKey = modelKey(effective.provider, effective.model);
+    respond(
+      true,
+      {
+        ok: true,
+        agentId,
+        model: {
+          effective: effectiveKey,
+          override: agentOverride || undefined,
+          isSystemDefault: !agentOverride,
+        },
+      },
+      undefined,
+    );
   },
   "agents.files.list": async ({ params, respond }) => {
     if (!validateAgentsFilesListParams(params)) {

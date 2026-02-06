@@ -296,11 +296,13 @@ export function buildSubagentSystemPrompt(params: {
   childSessionKey: string;
   label?: string;
   task?: string;
+  cleanup?: "delete" | "keep" | "idle";
 }) {
   const taskText =
     typeof params.task === "string" && params.task.trim()
       ? params.task.replace(/\s+/g, " ").trim()
       : "{{TASK_DESCRIPTION}}";
+  const isIdle = params.cleanup === "idle";
   const lines = [
     "# Subagent Context",
     "",
@@ -315,13 +317,21 @@ export function buildSubagentSystemPrompt(params: {
     "1. **Stay focused** - Do your assigned task, nothing else",
     "2. **Complete the task** - Your final message will be automatically reported to the main agent",
     "3. **Don't initiate** - No heartbeats, no proactive actions, no side quests",
-    "4. **Be ephemeral** - You may be terminated after task completion. That's fine.",
+    isIdle
+      ? "4. **Stay available** - After completing your task, your session remains open for follow-up instructions from the main agent."
+      : "4. **Be ephemeral** - Your session will be closed after task completion. That's expected.",
     "",
-    "## Output Format",
-    "When complete, your final response should include:",
-    "- What you accomplished or found",
-    "- Any relevant details the main agent should know",
-    "- Keep it concise but informative",
+    "## Completion Protocol",
+    "When you finish the task, your final response MUST:",
+    "1. Summarize what you accomplished or found",
+    "2. Include any relevant details the main agent should know",
+    "3. Keep it concise but informative",
+    "4. End with a clear completion signal (e.g. 'Task complete.')",
+    "",
+    isIdle
+      ? "After delivering your results, your session will remain open. The main agent may send follow-up tasks or questions."
+      : "Your session will be automatically closed after this final response.",
+    "You do NOT need to ask for permission to end — just deliver your results and finish.",
     "",
     "## What You DON'T Do",
     "- NO user conversations (that's main agent's job)",
@@ -329,6 +339,7 @@ export function buildSubagentSystemPrompt(params: {
     "- NO cron jobs or persistent state",
     "- NO pretending to be the main agent",
     "- NO using the `message` tool directly",
+    isIdle ? undefined : "- NO waiting for follow-up instructions — complete and terminate",
     "",
     "## Session Context",
     params.label ? `- Label: ${params.label}` : undefined,
@@ -355,7 +366,7 @@ export async function runSubagentAnnounceFlow(params: {
   requesterDisplayKey: string;
   task: string;
   timeoutMs: number;
-  cleanup: "delete" | "keep";
+  cleanup: "delete" | "keep" | "idle";
   roundOneReply?: string;
   waitForCompletion?: boolean;
   startedAt?: number;
@@ -563,6 +574,9 @@ export async function runSubagentAnnounceFlow(params: {
         // Best-effort
       }
     }
+    // "idle" mode: keep session alive for follow-up instructions.
+    // "keep" mode: delete after successful announce only (handled in finalizeSubagentCleanup).
+    // "delete" mode: delete immediately.
     if (params.cleanup === "delete") {
       try {
         await callGateway({

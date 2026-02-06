@@ -1,4 +1,4 @@
-import { resolveAgentRole } from "../agents/agent-scope.js";
+import { resolveAgentConfig, resolveAgentRole } from "../agents/agent-scope.js";
 import {
   listAllSubagentRuns,
   type SubagentRunRecord,
@@ -74,12 +74,13 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     const status = resolveStatus(run);
     const agentId = extractAgentIdFromSessionKey(run.childSessionKey);
     const agentRole = agentId ? resolveAgentRole(cfg, agentId) : undefined;
+    const agentName = agentId ? resolveAgentConfig(cfg, agentId)?.name : undefined;
     const node: HierarchyNode = {
       sessionKey: run.childSessionKey,
       runId: run.runId,
       agentId,
       agentRole,
-      label: run.label,
+      label: run.label || agentName || (agentId ? `Agent: ${agentId}` : undefined),
       task: run.task,
       status,
       startedAt: run.startedAt,
@@ -115,11 +116,12 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       if (children.length > 0) {
         const rootAgentId = extractAgentIdFromSessionKey(parentKey);
         const rootRole = rootAgentId ? resolveAgentRole(cfg, rootAgentId) : undefined;
+        const rootName = rootAgentId ? resolveAgentConfig(cfg, rootAgentId)?.name : undefined;
         const rootNode: HierarchyNode = {
           sessionKey: parentKey,
           agentId: rootAgentId,
           agentRole: rootRole,
-          label: "Root Session",
+          label: rootName || (rootAgentId ? `Agent: ${rootAgentId}` : "Root Session"),
           status: "running",
           children,
         };

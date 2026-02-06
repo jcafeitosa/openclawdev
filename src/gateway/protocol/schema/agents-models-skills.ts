@@ -12,6 +12,15 @@ export const ModelChoiceSchema = Type.Object(
   { additionalProperties: false },
 );
 
+export const AgentModelInfoSchema = Type.Object(
+  {
+    effective: NonEmptyString,
+    override: Type.Optional(NonEmptyString),
+    isSystemDefault: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+
 export const AgentSummarySchema = Type.Object(
   {
     id: NonEmptyString,
@@ -28,6 +37,7 @@ export const AgentSummarySchema = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    model: Type.Optional(AgentModelInfoSchema),
   },
   { additionalProperties: false },
 );
@@ -40,6 +50,23 @@ export const AgentsListResultSchema = Type.Object(
     mainKey: NonEmptyString,
     scope: Type.Union([Type.Literal("per-sender"), Type.Literal("global")]),
     agents: Type.Array(AgentSummarySchema),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentsModelSetParamsSchema = Type.Object(
+  {
+    agentId: NonEmptyString,
+    model: Type.Union([NonEmptyString, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+
+export const AgentsModelSetResultSchema = Type.Object(
+  {
+    ok: Type.Literal(true),
+    agentId: NonEmptyString,
+    model: AgentModelInfoSchema,
   },
   { additionalProperties: false },
 );

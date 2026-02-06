@@ -169,6 +169,104 @@ async function discoverOpenAIModels(apiKey: string): Promise<ModelCatalogEntry[]
   return models;
 }
 
+// ─── OpenAI Codex (ChatGPT OAuth) ───────────────────────────────────
+
+/** JWT claim path where ChatGPT account ID lives. */
+const CHATGPT_JWT_CLAIM_PATH = "https://api.openai.com/auth";
+
+interface ChatGPTModelsResponse {
+  models?: Array<{
+    slug?: string;
+    title?: string;
+    max_tokens?: number;
+    tags?: string[];
+  }>;
+}
+
+function extractChatGptAccountId(token: string): string | undefined {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      return undefined;
+    }
+    const payload = JSON.parse(atob(parts[1])) as Record<string, unknown>;
+    const authClaim = payload[CHATGPT_JWT_CLAIM_PATH] as
+      | { chatgpt_account_id?: string }
+      | undefined;
+    return authClaim?.chatgpt_account_id || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Slugs that aren't chat-capable models
+const CODEX_EXCLUDE_SLUGS = new Set(["text-davinci-002-render-sha"]);
+
+function inferCodexContextWindow(slug: string): number {
+  if (slug.includes("gpt-5.2")) {
+    return 272_000;
+  }
+  if (slug.includes("gpt-5.1")) {
+    return 272_000;
+  }
+  if (slug.includes("gpt-5")) {
+    return 272_000;
+  }
+  if (slug.includes("gpt-4")) {
+    return 128_000;
+  }
+  if (slug.includes("o3") || slug.includes("o4")) {
+    return 200_000;
+  }
+  return 128_000;
+}
+
+async function discoverOpenAICodexModels(token: string): Promise<ModelCatalogEntry[]> {
+  const accountId = extractChatGptAccountId(token);
+  if (!accountId) {
+    return [];
+  }
+
+  const response = await fetch("https://chatgpt.com/backend-api/models", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "chatgpt-account-id": accountId,
+      "OpenAI-Beta": "responses=experimental",
+    },
+    signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  const data = (await response.json()) as ChatGPTModelsResponse;
+  if (!Array.isArray(data.models)) {
+    return [];
+  }
+
+  const models: ModelCatalogEntry[] = [];
+  for (const m of data.models) {
+    const slug = m.slug?.trim();
+    if (!slug || CODEX_EXCLUDE_SLUGS.has(slug)) {
+      continue;
+    }
+    const isReasoning =
+      slug.includes("o1") || slug.includes("o3") || slug.includes("o4") || slug.includes("gpt-5");
+    const hasVision = slug.includes("gpt-4") || slug.includes("gpt-5") || slug.includes("o3");
+    models.push({
+      id: slug,
+      name: m.title || slug,
+      provider: "openai-codex",
+      reasoning: isReasoning,
+      input: hasVision ? ["text", "image"] : ["text"],
+      contextWindow: inferCodexContextWindow(slug),
+    });
+  }
+
+  return models;
+}
+
 // ─── Resolve auth tokens ───────────────────────────────────────────
 
 type AuthProfileStore = {
@@ -260,6 +358,16 @@ export async function discoverSupplementalModels(
     tasks.push(
       discoverOpenAIModels(openaiToken).catch((err) => {
         console.warn(`[model-discovery] OpenAI discovery failed: ${String(err)}`);
+        return [] as ModelCatalogEntry[];
+      }),
+    );
+  }
+
+  const codexToken = resolveToken("openai-codex", authStore, "CODEX_API_KEY");
+  if (codexToken) {
+    tasks.push(
+      discoverOpenAICodexModels(codexToken).catch((err) => {
+        console.warn(`[model-discovery] OpenAI Codex discovery failed: ${String(err)}`);
         return [] as ModelCatalogEntry[];
       }),
     );

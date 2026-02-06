@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { GatewayRequestHandlers } from "./types.js";
 import { listAgentIds } from "../../agents/agent-scope.js";
-import { listAllSubagentRuns } from "../../agents/subagent-registry.js";
 import { agentCommand } from "../../commands/agent.js";
 import { loadConfig } from "../../config/config.js";
 import {
@@ -37,6 +36,7 @@ import {
   validateAgentParams,
   validateAgentWaitParams,
 } from "../protocol/index.js";
+import { getHierarchySnapshot } from "../server-hierarchy-events.js";
 import { loadSessionEntry } from "../session-utils.js";
 import { formatForLog } from "../ws-log.js";
 import { waitForAgentJob } from "./agent-job.js";
@@ -505,88 +505,6 @@ export const agentHandlers: GatewayRequestHandlers = {
     });
   },
   "agents.hierarchy": ({ respond }) => {
-    const runs = listAllSubagentRuns();
-    type HierarchyNode = {
-      sessionKey: string;
-      runId?: string;
-      label?: string;
-      task?: string;
-      status: "running" | "completed" | "error" | "pending";
-      startedAt?: number;
-      endedAt?: number;
-      children: HierarchyNode[];
-    };
-
-    // Build lookup maps
-    const childrenByParent = new Map<string, HierarchyNode[]>();
-    const nodeBySession = new Map<string, HierarchyNode>();
-    const childSessionKeys = new Set<string>();
-
-    // First pass: create nodes for all runs
-    for (const run of runs) {
-      const status: HierarchyNode["status"] = run.outcome
-        ? run.outcome.status === "ok"
-          ? "completed"
-          : "error"
-        : run.startedAt
-          ? "running"
-          : "pending";
-
-      const node: HierarchyNode = {
-        sessionKey: run.childSessionKey,
-        runId: run.runId,
-        label: run.label,
-        task: run.task,
-        status,
-        startedAt: run.startedAt,
-        endedAt: run.endedAt,
-        children: [],
-      };
-
-      nodeBySession.set(run.childSessionKey, node);
-      childSessionKeys.add(run.childSessionKey);
-
-      // Group by parent
-      const parentKey = run.requesterSessionKey;
-      if (!childrenByParent.has(parentKey)) {
-        childrenByParent.set(parentKey, []);
-      }
-      childrenByParent.get(parentKey)!.push(node);
-    }
-
-    // Second pass: link children to their nodes
-    for (const [parentKey, children] of childrenByParent.entries()) {
-      const parentNode = nodeBySession.get(parentKey);
-      if (parentNode) {
-        parentNode.children = children;
-      }
-    }
-
-    // Find roots: nodes whose parent session is not itself a child session
-    const roots: HierarchyNode[] = [];
-    const parentKeys = new Set(childrenByParent.keys());
-    for (const parentKey of parentKeys) {
-      if (!childSessionKeys.has(parentKey)) {
-        const children = childrenByParent.get(parentKey) ?? [];
-        if (children.length > 0) {
-          // Create a synthetic root node for this parent session
-          const rootNode: HierarchyNode = {
-            sessionKey: parentKey,
-            label: "Root Session",
-            status: "running",
-            children,
-          };
-          roots.push(rootNode);
-        }
-      }
-    }
-
-    // If there are orphan nodes (child nodes without a parent node that's not also a child),
-    // they're already included via the roots
-
-    respond(true, {
-      roots,
-      updatedAt: Date.now(),
-    });
+    respond(true, getHierarchySnapshot());
   },
 };

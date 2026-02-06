@@ -10,6 +10,7 @@ import {
   WakeParamsSchema,
 } from "./agent.js";
 import {
+  AgentModelInfoSchema,
   AgentSummarySchema,
   AgentsFileEntrySchema,
   AgentsFilesGetParamsSchema,
@@ -20,6 +21,8 @@ import {
   AgentsFilesSetResultSchema,
   AgentsListParamsSchema,
   AgentsListResultSchema,
+  AgentsModelSetParamsSchema,
+  AgentsModelSetResultSchema,
   ModelChoiceSchema,
   ModelsListParamsSchema,
   ModelsListResultSchema,
@@ -198,6 +201,9 @@ export const ProtocolSchemas: Record<string, TSchema> = {
   AgentsFilesSetResult: AgentsFilesSetResultSchema,
   AgentsListParams: AgentsListParamsSchema,
   AgentsListResult: AgentsListResultSchema,
+  AgentModelInfo: AgentModelInfoSchema,
+  AgentsModelSetParams: AgentsModelSetParamsSchema,
+  AgentsModelSetResult: AgentsModelSetResultSchema,
   ModelChoice: ModelChoiceSchema,
   ModelsListParams: ModelsListParamsSchema,
   ModelsListResult: ModelsListResultSchema,

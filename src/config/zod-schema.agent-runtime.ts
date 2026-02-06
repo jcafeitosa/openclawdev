@@ -424,6 +424,14 @@ export const AgentEntrySchema = z
     id: z.string(),
     default: z.boolean().optional(),
     name: z.string().optional(),
+    role: z
+      .union([
+        z.literal("orchestrator"),
+        z.literal("lead"),
+        z.literal("specialist"),
+        z.literal("worker"),
+      ])
+      .optional(),
     workspace: z.string().optional(),
     agentDir: z.string().optional(),
     model: AgentModelSchema.optional(),

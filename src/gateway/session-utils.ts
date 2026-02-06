@@ -6,10 +6,18 @@ import type {
   GatewaySessionsDefaults,
   SessionsListResult,
 } from "./session-utils.types.js";
-import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  resolveAgentModelPrimary,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+} from "../agents/agent-scope.js";
 import { lookupContextTokens } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
-import { resolveConfiguredModelRef } from "../agents/model-selection.js";
+import {
+  modelKey,
+  resolveConfiguredModelRef,
+  resolveDefaultModelForAgent,
+} from "../agents/model-selection.js";
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import {
@@ -319,10 +327,18 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
   }
   const agents = agentIds.map((id) => {
     const meta = configuredById.get(id);
+    const agentOverride = resolveAgentModelPrimary(cfg, id);
+    const effective = resolveDefaultModelForAgent({ cfg, agentId: id });
+    const effectiveKey = modelKey(effective.provider, effective.model);
     return {
       id,
       name: meta?.name,
       identity: meta?.identity,
+      model: {
+        effective: effectiveKey,
+        override: agentOverride || undefined,
+        isSystemDefault: !agentOverride,
+      },
     };
   });
   return { defaultId, mainKey, scope, agents };

@@ -53,6 +53,11 @@ export type GatewayAgentRow = {
     avatar?: string;
     avatarUrl?: string;
   };
+  model?: {
+    effective: string;
+    override?: string;
+    isSystemDefault: boolean;
+  };
 };
 
 export type SessionPreviewItem = {
