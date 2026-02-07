@@ -5,6 +5,8 @@ import type { RuntimeEnv } from "../runtime.js";
 import type { ControlUiRootState } from "./control-ui.js";
 import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { initCapabilitiesRegistry } from "../agents/capabilities-registry.js";
+import { initDelegationRegistry } from "../agents/delegation-registry.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
@@ -229,6 +231,7 @@ export async function startGatewayServer(
   }
   setGatewaySigusr1RestartPolicy({ allowExternal: cfgAtStart.commands?.restart === true });
   initSubagentRegistry();
+  initCapabilitiesRegistry(cfgAtStart);
 
   // Initialize storage and cache (non-blocking, with automatic fallback)
   // Storage: PostgreSQL → SQLite → Memory
@@ -245,8 +248,12 @@ export async function startGatewayServer(
   const securityEventsReady = initializeSecurityEventsStore().catch((err) => {
     log.warn(`security events store initialization error: ${String(err)}`);
   });
+  // Initialize delegation registry (restore from disk)
+  const delegationReady = initDelegationRegistry().catch((err) => {
+    log.warn(`delegation registry initialization error: ${String(err)}`);
+  });
   // Fire-and-forget: don't block gateway startup
-  Promise.all([storageReady, cacheReady, securityEventsReady]).catch(() => {});
+  Promise.all([storageReady, cacheReady, securityEventsReady, delegationReady]).catch(() => {});
 
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);

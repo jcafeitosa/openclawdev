@@ -16,12 +16,84 @@ import type {
   DelegationReview,
   DelegationState,
 } from "./delegation-types.js";
+import { loadConfig } from "../config/config.js";
 import { emitAgentEvent } from "../infra/agent-events.js";
 import { AGENT_ROLE_RANK } from "./agent-scope.js";
-import { loadAllDelegationRecords, saveDelegationRecord } from "./delegation-storage.js";
+import {
+  deleteDelegationRecord,
+  loadAllDelegationRecords,
+  saveDelegationRecord,
+} from "./delegation-storage.js";
 
 const delegations = new Map<string, DelegationRecord>();
 let restoreAttempted = false;
+
+// ---------- TTL sweeper ----------
+
+const TERMINAL_STATES = new Set<DelegationState>(["completed", "failed", "rejected", "redirected"]);
+
+let sweeper: ReturnType<typeof setInterval> | null = null;
+const SWEEP_INTERVAL_MS = 60_000;
+
+function resolveDelegationTtlMs(): number | undefined {
+  const cfg = loadConfig();
+  const minutes = cfg.agents?.defaults?.subagents?.archiveAfterMinutes ?? 60;
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return undefined;
+  }
+  return Math.max(1, Math.floor(minutes)) * 60_000;
+}
+
+function startSweeper() {
+  if (sweeper) {
+    return;
+  }
+  sweeper = setInterval(() => {
+    void sweepDelegations();
+  }, SWEEP_INTERVAL_MS);
+  sweeper.unref?.();
+}
+
+function stopSweeper() {
+  if (!sweeper) {
+    return;
+  }
+  clearInterval(sweeper);
+  sweeper = null;
+}
+
+async function sweepDelegations() {
+  const ttlMs = resolveDelegationTtlMs();
+  if (!ttlMs) {
+    return;
+  }
+  const now = Date.now();
+  const toDelete: string[] = [];
+
+  for (const [id, record] of delegations.entries()) {
+    if (!TERMINAL_STATES.has(record.state)) {
+      continue;
+    }
+    // Use completedAt if available, otherwise fall back to createdAt
+    const anchor = record.completedAt ?? record.createdAt;
+    if (now - anchor < ttlMs) {
+      continue;
+    }
+    toDelete.push(id);
+  }
+
+  for (const id of toDelete) {
+    delegations.delete(id);
+    await deleteDelegationRecord(id).catch(() => {});
+  }
+
+  // Stop sweeper when there's nothing left to sweep
+  if (delegations.size === 0) {
+    stopSweeper();
+  }
+}
+
+// ---------- persistence ----------
 
 function persist(record: DelegationRecord) {
   void saveDelegationRecord(record);
@@ -39,10 +111,19 @@ async function restoreOnce() {
         delegations.set(id, record);
       }
     }
+    // Start sweeper if any terminal records exist
+    for (const record of delegations.values()) {
+      if (TERMINAL_STATES.has(record.state)) {
+        startSweeper();
+        break;
+      }
+    }
   } catch {
     // ignore restore failures
   }
 }
+
+// ---------- direction ----------
 
 /**
  * Determine delegation direction between two roles.
@@ -60,9 +141,8 @@ export function resolveDelegationDirection(
   return "upward";
 }
 
-/**
- * Validate that a state transition is allowed.
- */
+// ---------- state transitions ----------
+
 const VALID_TRANSITIONS: Record<DelegationState, DelegationState[]> = {
   created: ["pending_review", "assigned", "rejected"],
   pending_review: ["assigned", "rejected", "redirected"],
@@ -77,6 +157,8 @@ const VALID_TRANSITIONS: Record<DelegationState, DelegationState[]> = {
 function canTransition(from: DelegationState, to: DelegationState): boolean {
   return VALID_TRANSITIONS[from]?.includes(to) ?? false;
 }
+
+// ---------- mutations ----------
 
 export function registerDelegation(params: {
   fromAgentId: string;
@@ -155,6 +237,7 @@ export function updateDelegationState(
   }
   if (newState === "completed" || newState === "failed") {
     record.completedAt = now;
+    startSweeper();
   }
 
   record.interactions.push({
@@ -183,8 +266,10 @@ export function reviewDelegation(id: string, review: DelegationReview): Delegati
     record.state = "assigned";
   } else if (review.decision === "reject") {
     record.state = "rejected";
+    startSweeper();
   } else if (review.decision === "redirect") {
     record.state = "redirected";
+    startSweeper();
   }
 
   record.interactions.push({
@@ -223,6 +308,7 @@ export function completeDelegation(id: string, result: DelegationResult): Delega
   });
 
   persist(record);
+  startSweeper();
   emitAgentEvent({
     runId: id,
     stream: "delegation",
@@ -254,6 +340,7 @@ export function redirectDelegation(
   });
 
   persist(record);
+  startSweeper();
   emitAgentEvent({
     runId: id,
     stream: "delegation",
@@ -271,6 +358,8 @@ export function addDelegationInteraction(id: string, interaction: DelegationInte
   record.interactions.push(interaction);
   persist(record);
 }
+
+// ---------- queries ----------
 
 export function getDelegation(id: string): DelegationRecord | null {
   return delegations.get(id) ?? null;
@@ -354,8 +443,14 @@ export function getAgentDelegationMetrics(agentId: string): DelegationMetrics {
 }
 
 export function getAllDelegations(): DelegationRecord[] {
+  // Trigger lazy restore if init hasn't been called yet
+  if (!restoreAttempted) {
+    void restoreOnce();
+  }
   return [...delegations.values()];
 }
+
+// ---------- lifecycle ----------
 
 export async function initDelegationRegistry() {
   await restoreOnce();
@@ -364,4 +459,5 @@ export async function initDelegationRegistry() {
 export function resetDelegationRegistryForTests() {
   delegations.clear();
   restoreAttempted = false;
+  stopSweeper();
 }
