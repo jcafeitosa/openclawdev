@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { ReasoningLevel, ThinkLevel } from "../auto-reply/thinking.js";
 import type { MemoryCitationsMode } from "../config/types.memory.js";
 import type { ResolvedTimeFormat } from "./date-time.js";
@@ -5,7 +7,12 @@ import type { EmbeddedContextFile } from "./pi-embedded-helpers.js";
 import { SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
 import { listDeliverableMessageChannels } from "../utils/message-channel.js";
-import { listAgentIds, resolveAgentConfig, resolveAgentRole } from "./agent-scope.js";
+import {
+  listAgentIds,
+  resolveAgentConfig,
+  resolveAgentDir,
+  resolveAgentRole,
+} from "./agent-scope.js";
 import { resolveAgentIdentity } from "./identity.js";
 
 /**
@@ -374,6 +381,48 @@ function buildTeamContext(agentId: string | undefined, cfgOverride?: OpenClawCon
   return sections;
 }
 
+/**
+ * Build identity section that tells the agent who they are (name, theme, expertise).
+ * Also loads custom system.md profile from the agent's directory if it exists.
+ */
+function buildIdentitySection(agentId: string | undefined): string[] {
+  if (!agentId) {
+    return [];
+  }
+  const cfg = loadConfig();
+  const identity = resolveAgentIdentity(cfg, agentId);
+  const name = identity?.name?.trim();
+  const theme = identity?.theme?.trim();
+
+  const sections: string[] = [];
+
+  if (name) {
+    sections.push("## Identity");
+    const parts = [`You are **${name}** (agent ID: \`${agentId}\`).`];
+    if (theme) {
+      parts.push(`Your expertise: ${theme}.`);
+    }
+    sections.push(parts.join(" "));
+    sections.push("");
+  }
+
+  // Load custom system.md profile (agent-specific expertise, responsibilities, etc.)
+  try {
+    const agentDir = resolveAgentDir(cfg, agentId);
+    const systemMdPath = path.join(path.dirname(agentDir), "system.md");
+    const content = fs.readFileSync(systemMdPath, "utf-8").trim();
+    if (content) {
+      sections.push("## Agent Profile");
+      sections.push(content);
+      sections.push("");
+    }
+  } catch {
+    // No system.md file — that's fine
+  }
+
+  return sections;
+}
+
 export function buildAgentSystemPrompt(params: {
   workspaceDir: string;
   defaultThinkLevel?: ThinkLevel;
@@ -620,6 +669,7 @@ export function buildAgentSystemPrompt(params: {
         ].join("\n"),
     "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",
     ...buildRoleSection(runtimeInfo?.agentRole, isMinimal),
+    ...buildIdentitySection(runtimeInfo?.agentId),
     ...buildTeamContext(runtimeInfo?.agentId),
     "",
     "## Tool Call Style",
