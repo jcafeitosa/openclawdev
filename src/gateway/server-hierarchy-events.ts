@@ -389,6 +389,25 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     referencedAgentIds.add(edge.source);
     referencedAgentIds.add(edge.target);
   }
+  // Build a set of agents that have active (non-terminal) delegations
+  const agentsWithActiveDelegations = new Set<string>();
+  try {
+    const allDelegations = getAllDelegations();
+    for (const deleg of allDelegations) {
+      if (
+        deleg.state !== "completed" &&
+        deleg.state !== "failed" &&
+        deleg.state !== "rejected" &&
+        deleg.state !== "redirected"
+      ) {
+        agentsWithActiveDelegations.add(deleg.fromAgentId);
+        agentsWithActiveDelegations.add(deleg.toAgentId);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
   for (const referencedAgentId of referencedAgentIds) {
     const agentId = resolveKnownAgentId(cfg, referencedAgentId);
     if (!agentId) {
@@ -403,12 +422,15 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
     const role = resolveAgentRole(cfg, agentId);
     const delegMetrics = getAgentDelegationMetrics(agentId);
+    // Agents only referenced via delegation edges inherit status from delegation state:
+    // "running" if they have active delegations, "completed" otherwise.
+    const derivedStatus = agentsWithActiveDelegations.has(agentId) ? "running" : "completed";
     roots.push({
       sessionKey,
       agentId,
       agentRole: role,
       label: computeAgentDisplayLabel(cfg, agentId),
-      status: "running",
+      status: derivedStatus,
       children: [],
       delegations: delegMetrics,
     });

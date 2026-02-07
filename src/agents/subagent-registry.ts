@@ -134,6 +134,25 @@ function restoreSubagentRunsOnce() {
       }
     }
 
+    // Mark orphaned runs (started but never finished before gateway restart)
+    // as failed so they don't appear permanently stuck as "running".
+    const now = Date.now();
+    const ORPHAN_THRESHOLD_MS = 5 * 60_000; // 5 minutes
+    for (const [_runId, entry] of subagentRuns.entries()) {
+      if (entry.outcome || entry.cleanupCompletedAt) {
+        continue;
+      }
+      const anchor = entry.startedAt ?? entry.createdAt ?? 0;
+      if (anchor > 0 && now - anchor > ORPHAN_THRESHOLD_MS && !entry.endedAt) {
+        entry.endedAt = now;
+        entry.outcome = {
+          status: "error",
+          error: "Orphaned: gateway restarted before run completed",
+        };
+      }
+    }
+    persistSubagentRuns();
+
     // Resume pending work.
     if ([...subagentRuns.values()].some((entry) => entry.archiveAtMs)) {
       startSweeper();

@@ -77,10 +77,7 @@ function makeToolPolicyMatcher(policy: SandboxToolPolicy) {
 }
 
 const DEFAULT_SUBAGENT_TOOL_DENY = [
-  // Session management - main agent orchestrates
-  "sessions_list",
-  "sessions_history",
-  "sessions_send",
+  // Session management - main agent orchestrates spawning
   "sessions_spawn",
   // System admin - dangerous from subagent
   "gateway",

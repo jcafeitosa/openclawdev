@@ -111,6 +111,22 @@ async function restoreOnce() {
         delegations.set(id, record);
       }
     }
+    // Mark orphaned delegations (non-terminal, older than threshold) as failed
+    // so they don't keep agents permanently stuck as "running" after gateway restart.
+    const now = Date.now();
+    const ORPHAN_THRESHOLD_MS = 5 * 60_000;
+    for (const record of delegations.values()) {
+      if (TERMINAL_STATES.has(record.state)) {
+        continue;
+      }
+      const anchor = record.startedAt ?? record.createdAt;
+      if (now - anchor > ORPHAN_THRESHOLD_MS) {
+        record.state = "failed";
+        record.completedAt = now;
+        persist(record);
+      }
+    }
+
     // Start sweeper if any terminal records exist
     for (const record of delegations.values()) {
       if (TERMINAL_STATES.has(record.state)) {
