@@ -634,10 +634,79 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
             >
               ${renderHierarchyTree(roots, onNodeClick)}
             </div>
+            ${renderGraphLegend()}
             ${scheduleEChartsInit(roots, collabEdges, onNodeClick)}
           `
       }
     </section>
+  `;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Lit template: graph legend
+   ═══════════════════════════════════════════════════════════════ */
+
+function renderGraphLegend() {
+  const legendStyle =
+    "display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; padding: 12px 16px; border-radius: 8px; background: rgba(0,0,0,0.03); font-size: 11px; color: #71717a;";
+  const groupStyle = "display: flex; align-items: center; gap: 6px;";
+  const sectionStyle = "display: flex; flex-wrap: wrap; gap: 10px; align-items: center;";
+  const labelStyle = "font-weight: 600; color: #a1a1aa; margin-right: 2px;";
+
+  return html`
+    <div style=${legendStyle}>
+      <div style=${sectionStyle}>
+        <span style=${labelStyle}>Roles:</span>
+        ${ROLE_CATEGORIES.map(
+          (cat) => html`
+            <div style=${groupStyle}>
+              <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${cat.itemStyle.color};"></span>
+              <span>${cat.name}</span>
+            </div>
+          `,
+        )}
+      </div>
+      <span style="color:#e4e4e7;">|</span>
+      <div style=${sectionStyle}>
+        <span style=${labelStyle}>Status:</span>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;box-shadow:0 0 6px #3b82f6;border:1.5px solid #fff;"></span>
+          <span>running</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;"></span>
+          <span>completed</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>
+          <span>error</span>
+        </div>
+      </div>
+      <span style="color:#e4e4e7;">|</span>
+      <div style=${sectionStyle}>
+        <span style=${labelStyle}>Edges:</span>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px solid rgba(245,158,11,0.7);"></span>
+          <span>delegation</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px solid rgba(34,197,94,0.6);"></span>
+          <span>approval</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed rgba(124,58,237,0.5);"></span>
+          <span>proposal</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed rgba(239,68,68,0.5);"></span>
+          <span>challenge</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:1.5px solid rgba(161,161,170,0.5);"></span>
+          <span>spawn</span>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -893,16 +962,7 @@ function initECharts(
       triggerOn: "mousemove" as const,
       formatter: tooltipFormatter,
     },
-    legend: [
-      {
-        data: graphData.categories.map((c) => c.name),
-        bottom: 10,
-        textStyle: { color: "#a1a1aa", fontSize: 11 },
-        icon: "circle",
-        itemWidth: 10,
-        itemHeight: 10,
-      },
-    ],
+    legend: { show: false },
     series: [
       {
         type: "graph",
@@ -1003,8 +1063,9 @@ function schedulePositionLock() {
 }
 
 /**
- * Gentle glow animation for running nodes.
- * Reads visual data from currentGraphData (picks up status/usage changes).
+ * Pulse animation for running nodes and active edges.
+ * - Running nodes: pulsating shadow glow around the avatar
+ * - Edges between two running nodes: highlighted with animated opacity
  * ALL nodes are pinned to lockedPositions to prevent force restarts from moving them.
  */
 function startPulseTimer() {
@@ -1031,14 +1092,24 @@ function startPulseTimer() {
       return;
     }
 
-    phase = (phase + 1) % 12;
-    const intensity = 8 + Math.sin((phase / 12) * Math.PI * 2) * 6;
+    phase = (phase + 1) % 20;
+    const t = (phase / 20) * Math.PI * 2;
+    // Shadow intensity oscillates between 4 and 20 for a visible pulse
+    const shadowIntensity = 12 + Math.sin(t) * 8;
+    // Border width oscillates between 2 and 3.5
+    const borderWidth = 2.75 + Math.sin(t) * 0.75;
+
+    // Collect running node IDs for edge highlighting
+    const runningNodeIds = new Set<string>();
+    for (const n of gd.nodes) {
+      if (n._meta?.status === "running") {
+        runningNodeIds.add(n.id);
+      }
+    }
 
     const updatedNodes = gd.nodes.map((n) => {
       const pos = lockedPositions?.get(n.id);
-      // Pin ALL nodes to their locked positions
       const base = pos ? { ...n, fixed: true, x: pos.x, y: pos.y } : n;
-      // Pulse shadow for running nodes only
       if (n._meta?.status !== "running") {
         return base;
       }
@@ -1048,13 +1119,32 @@ function startPulseTimer() {
         itemStyle: {
           color: c,
           borderColor: "#fff",
-          borderWidth: 2,
-          shadowBlur: intensity,
+          borderWidth,
+          shadowBlur: shadowIntensity,
           shadowColor: c,
         },
       };
     });
 
-    chartInstance.setOption({ series: [{ data: updatedNodes }] });
-  }, 500);
+    // Highlight edges between two running nodes
+    const edgeOpacity = 0.6 + Math.sin(t) * 0.3;
+    const updatedLinks = gd.links.map((link) => {
+      const srcRunning = runningNodeIds.has(link.source);
+      const tgtRunning = runningNodeIds.has(link.target);
+      if (srcRunning && tgtRunning) {
+        return {
+          ...link,
+          lineStyle: {
+            ...link.lineStyle,
+            color: "rgba(59, 130, 246, 0.8)",
+            width: 2.5 + Math.sin(t) * 0.5,
+            opacity: edgeOpacity,
+          },
+        };
+      }
+      return link;
+    });
+
+    chartInstance.setOption({ series: [{ data: updatedNodes, links: updatedLinks }] });
+  }, 400);
 }

@@ -156,7 +156,7 @@ function resolveKnownAgentId(cfg: ReturnType<typeof loadConfig>, raw: string): s
   }
 
   // Match by human identity name (case-insensitive), e.g. "Rafael" -> "software-architect"
-  const byName = cfg.agents.list.find(
+  const byName = (cfg.agents?.list ?? []).find(
     (agent) => (agent.identity?.name?.trim().toLowerCase() ?? "") === value.toLowerCase(),
   );
   if (byName?.id) {
