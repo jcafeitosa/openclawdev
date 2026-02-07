@@ -17,6 +17,8 @@ import {
   resolveAgentConfig,
   resolveAgentRole,
 } from "../agent-scope.js";
+import { buildCollaborationAwareTask } from "../collaboration-spawn.js";
+import { registerDelegation } from "../delegation-registry.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { buildSubagentSystemPrompt } from "../subagent-announce.js";
@@ -38,6 +40,9 @@ const SessionsSpawnToolSchema = Type.Object({
   // Back-compat alias. Prefer runTimeoutSeconds.
   timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
   cleanup: optionalStringEnum(["delete", "keep", "idle"] as const),
+  debateSessionKey: Type.Optional(
+    Type.String({ description: "Collaboration session key for team context injection" }),
+  ),
 });
 
 function splitModelRef(ref?: string) {
@@ -91,7 +96,7 @@ export function createSessionsSpawnTool(opts?: {
     parameters: SessionsSpawnToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
-      const task = readStringParam(params, "task", { required: true });
+      let task = readStringParam(params, "task", { required: true });
       const label = typeof params.label === "string" ? params.label.trim() : "";
       const requestedAgentId = readStringParam(params, "agentId");
       const modelOverride = readStringParam(params, "model");
@@ -191,6 +196,8 @@ export function createSessionsSpawnTool(opts?: {
         });
       }
 
+      const debateSessionKey = readStringParam(params, "debateSessionKey");
+
       const childSessionKey = `agent:${targetAgentId}:subagent:${crypto.randomUUID()}`;
       const spawnedByKey = requesterInternalKey;
       const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
@@ -240,6 +247,20 @@ export function createSessionsSpawnTool(opts?: {
           modelWarning = messageText;
         }
       }
+      // Enrich task with collaboration context when spawning after a team debate
+      if (debateSessionKey) {
+        try {
+          task = await buildCollaborationAwareTask({
+            task,
+            agentId: targetAgentId,
+            debateSessionKey,
+            agentRole: targetRole,
+          });
+        } catch {
+          // Non-critical — proceed with original task
+        }
+      }
+
       const childSystemPrompt = buildSubagentSystemPrompt({
         requesterSessionKey,
         requesterOrigin,
@@ -297,6 +318,22 @@ export function createSessionsSpawnTool(opts?: {
         label: label || undefined,
         runTimeoutSeconds,
       });
+
+      // Auto-create delegation record for graph visibility
+      try {
+        registerDelegation({
+          fromAgentId: requesterAgentId,
+          fromSessionKey: requesterInternalKey,
+          fromRole: requesterRole,
+          toAgentId: targetAgentId,
+          toSessionKey: childSessionKey,
+          toRole: targetRole,
+          task: task.slice(0, 200),
+          priority: "normal",
+        });
+      } catch {
+        // Non-critical — don't fail the spawn
+      }
 
       return jsonResult({
         status: "accepted",

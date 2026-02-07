@@ -18,6 +18,7 @@ import {
   normalizeDeliveryContext,
 } from "../utils/delivery-context.js";
 import { resolveAgentConfig } from "./agent-scope.js";
+import { completeDelegation, listDelegationsForAgent } from "./delegation-registry.js";
 import { resolveAgentIdentity } from "./identity.js";
 import { isEmbeddedPiRunActive, queueEmbeddedPiMessage } from "./pi-embedded.js";
 import { type AnnounceQueueItem, enqueueAnnounce } from "./subagent-announce-queue.js";
@@ -558,6 +559,24 @@ export async function runSubagentAnnounceFlow(params: {
     }
 
     didAnnounce = true;
+    // Auto-close delegation records when subagent finishes
+    try {
+      const targetAgentId = resolveAgentIdFromSessionKey(params.childSessionKey);
+      const delegs = listDelegationsForAgent(targetAgentId).filter(
+        (d) =>
+          d.toSessionKey === params.childSessionKey &&
+          d.state !== "completed" &&
+          d.state !== "failed",
+      );
+      for (const d of delegs) {
+        completeDelegation(d.id, {
+          status: outcome.status === "ok" ? "success" : "failure",
+          summary: "Subagent task completed",
+        });
+      }
+    } catch {
+      // Non-critical
+    }
   } catch (err) {
     defaultRuntime.error?.(`Subagent announce failed: ${String(err)}`);
     // Best-effort follow-ups; ignore failures to avoid breaking the caller response.

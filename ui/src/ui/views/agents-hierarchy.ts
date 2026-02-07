@@ -12,6 +12,10 @@ import { renderEmptyState } from "../app-render.helpers.ts";
 import { formatAgo } from "../format.ts";
 import { icons } from "../icons.ts";
 
+/* ═══════════════════════════════════════════════════════════════
+   Public API
+   ═══════════════════════════════════════════════════════════════ */
+
 export type AgentsHierarchyProps = {
   loading: boolean;
   error: string | null;
@@ -19,6 +23,10 @@ export type AgentsHierarchyProps = {
   onRefresh: () => void;
   onNodeClick?: (sessionKey: string) => void;
 };
+
+/* ═══════════════════════════════════════════════════════════════
+   Internal types
+   ═══════════════════════════════════════════════════════════════ */
 
 type NodeMeta = {
   sessionKey: string;
@@ -37,6 +45,7 @@ type GraphNodeData = {
   id: string;
   name: string;
   symbolSize: number;
+  value: number;
   category: number;
   fixed?: boolean;
   x?: number;
@@ -46,7 +55,7 @@ type GraphNodeData = {
   _meta?: NodeMeta;
 };
 
-type GraphEdgeData = {
+type GraphLinkData = {
   source: string;
   target: string;
   lineStyle?: Record<string, unknown>;
@@ -55,8 +64,13 @@ type GraphEdgeData = {
 
 type GraphData = {
   nodes: GraphNodeData[];
-  edges: GraphEdgeData[];
+  links: GraphLinkData[];
+  categories: { name: string; itemStyle: { color: string } }[];
 };
+
+/* ═══════════════════════════════════════════════════════════════
+   Constants
+   ═══════════════════════════════════════════════════════════════ */
 
 const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   running: { bg: "#3b82f6", border: "#2563eb", text: "#ffffff" },
@@ -72,7 +86,7 @@ const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
   worker: { bg: "#6b7280", text: "#ffffff" },
 };
 
-// Force graph constants
+/** Categories for the ECharts legend — one per role. */
 const ROLE_CATEGORIES = [
   { name: "orchestrator", itemStyle: { color: "#7c3aed" } },
   { name: "lead", itemStyle: { color: "#2563eb" } },
@@ -94,31 +108,51 @@ const NODE_SIZE_BY_ROLE: Record<string, number> = {
   worker: 12,
 };
 
-// Per-agent unique colors — deterministic from agentId hash
+/** Deterministic color palette keyed by agentId hash. */
 const AGENT_PALETTE = [
-  "#7c3aed", // violet
-  "#2563eb", // blue
-  "#0891b2", // cyan
-  "#059669", // emerald
-  "#d97706", // amber
-  "#dc2626", // red
-  "#db2777", // pink
-  "#7c2d12", // brown
-  "#4f46e5", // indigo
-  "#0d9488", // teal
-  "#ea580c", // orange
-  "#9333ea", // purple
-  "#0284c7", // sky
-  "#65a30d", // lime
-  "#e11d48", // rose
+  "#7c3aed",
+  "#2563eb",
+  "#0891b2",
+  "#059669",
+  "#d97706",
+  "#dc2626",
+  "#db2777",
+  "#7c2d12",
+  "#4f46e5",
+  "#0d9488",
+  "#ea580c",
+  "#9333ea",
+  "#0284c7",
+  "#65a30d",
+  "#e11d48",
 ];
+
+/** Edge styling for collaboration/delegation types. */
+const EDGE_STYLES: Record<string, { color: string; type: string; width: number }> = {
+  // Hierarchy
+  delegation: { color: "rgba(245, 158, 11, 0.7)", type: "solid", width: 2 },
+  request: { color: "rgba(168, 85, 247, 0.5)", type: "dashed", width: 1.5 },
+  approval: { color: "rgba(34, 197, 94, 0.6)", type: "solid", width: 2 },
+  rejection: { color: "rgba(239, 68, 68, 0.5)", type: "dashed", width: 1.5 },
+  // Collaboration
+  proposal: { color: "rgba(124, 58, 237, 0.5)", type: "dashed", width: 1.5 },
+  challenge: { color: "rgba(239, 68, 68, 0.5)", type: "dashed", width: 1.5 },
+  agreement: { color: "rgba(34, 197, 94, 0.5)", type: "dashed", width: 1.5 },
+  decision: { color: "rgba(245, 158, 11, 0.5)", type: "dashed", width: 1.5 },
+  clarification: { color: "rgba(59, 130, 246, 0.4)", type: "dashed", width: 1 },
+};
+
+const DEFAULT_EDGE_STYLE = { color: "rgba(161, 161, 170, 0.3)", type: "solid", width: 1 };
+
+/* ═══════════════════════════════════════════════════════════════
+   Helpers
+   ═══════════════════════════════════════════════════════════════ */
 
 function hashString(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit int
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash = hash & hash;
   }
   return Math.abs(hash);
 }
@@ -127,21 +161,9 @@ function getAgentColor(agentId: string | undefined): string {
   if (!agentId) {
     return "#6b7280";
   }
-  const idx = hashString(agentId) % AGENT_PALETTE.length;
-  return AGENT_PALETTE[idx];
+  return AGENT_PALETTE[hashString(agentId) % AGENT_PALETTE.length];
 }
 
-// Connection colors by hierarchy direction
-const HIERARCHY_EDGE_COLORS: Record<string, { color: string; dash: string }> = {
-  delegation: { color: "rgba(245, 158, 11, 0.7)", dash: "solid" },
-  request: { color: "rgba(168, 85, 247, 0.5)", dash: "dashed" },
-  approval: { color: "rgba(34, 197, 94, 0.6)", dash: "solid" },
-  rejection: { color: "rgba(239, 68, 68, 0.5)", dash: "dashed" },
-};
-
-/**
- * Dynamic node sizing: base from role + logarithmic growth from interactions.
- */
 function computeNodeSize(node: AgentHierarchyNode): number {
   const roleBase = NODE_SIZE_BY_ROLE[node.agentRole ?? "worker"] ?? 12;
   let total = node.interactionCount ?? 0;
@@ -152,35 +174,47 @@ function computeNodeSize(node: AgentHierarchyNode): number {
   if (node.delegations) {
     total += node.delegations.sent + node.delegations.received;
   }
-  // Logarithmic growth, capped at +20px
   const scale = total > 0 ? Math.min(20, Math.log2(total + 1) * 3) : 0;
   return roleBase + scale;
 }
 
+/** Compute a value weight for the node (used for sizing + tooltip). */
+function computeNodeValue(node: AgentHierarchyNode): number {
+  let total = node.interactionCount ?? 0;
+  if (node.usage) {
+    total += node.usage.toolCalls;
+    total += Math.floor((node.usage.inputTokens + node.usage.outputTokens) / 10_000);
+  }
+  if (node.delegations) {
+    total += node.delegations.sent + node.delegations.received;
+  }
+  return total;
+}
+
 function computeRepulsion(nodeCount: number): number {
   if (nodeCount <= 5) {
-    return 120;
+    return 150;
   }
   if (nodeCount <= 15) {
-    return 250;
+    return 300;
   }
   if (nodeCount <= 30) {
-    return 400;
+    return 450;
   }
-  return 500;
+  return 600;
 }
 
 function computeEdgeLength(nodeCount: number): number {
   if (nodeCount <= 5) {
-    return 80;
+    return 100;
   }
   if (nodeCount <= 15) {
-    return 120;
+    return 150;
   }
   if (nodeCount <= 30) {
-    return 160;
+    return 200;
   }
-  return 200;
+  return 250;
 }
 
 function formatTokenCount(tokens: number): string {
@@ -204,16 +238,11 @@ function formatDurationMs(ms: number): string {
 }
 
 function extractAgentName(sessionKey: string): string {
-  // Extract a readable name from session key
-  // Format: agent:<agentId>:main or agent:<agentId>:subagent:<uuid>
   const parts = sessionKey.split(":");
   if (parts.length >= 4 && parts[2] === "subagent") {
-    // subagent - return "subagent" or a short uuid prefix
-    const uuid = parts[3];
-    return `Subagent ${uuid.slice(0, 8)}`;
+    return `Subagent ${parts[3].slice(0, 8)}`;
   }
   if (parts.length >= 3) {
-    // Main agent - return the agent ID
     const agentId = parts[1];
     const role = parts[2];
     if (role === "main") {
@@ -227,54 +256,54 @@ function extractAgentName(sessionKey: string): string {
   return sessionKey.slice(0, 20);
 }
 
-const COLLAB_EDGE_COLORS: Record<string, string> = {
-  proposal: "rgba(124, 58, 237, 0.5)", // purple
-  challenge: "rgba(239, 68, 68, 0.5)", // red
-  agreement: "rgba(34, 197, 94, 0.5)", // green
-  decision: "rgba(245, 158, 11, 0.5)", // amber
-  clarification: "rgba(59, 130, 246, 0.4)", // blue
-  delegation: "rgba(245, 158, 11, 0.7)", // amber solid
-  request: "rgba(168, 85, 247, 0.5)", // purple
-  approval: "rgba(34, 197, 94, 0.6)", // green
-  rejection: "rgba(239, 68, 68, 0.5)", // red
-};
+/* ═══════════════════════════════════════════════════════════════
+   Data transformation — tree → flat graph {nodes, links, categories}
+
+   KEY FIX: The collaboration edges from the backend use agentId
+   as source/target, but graph nodes are keyed by sessionKey.
+   We build an agentId→sessionKey map during traversal to resolve
+   collaboration edges correctly.
+   ═══════════════════════════════════════════════════════════════ */
 
 function transformToGraphData(
   roots: AgentHierarchyNode[],
-  containerWidth: number,
-  containerHeight: number,
   collaborationEdges?: CollaborationEdge[],
 ): GraphData {
   const nodes: GraphNodeData[] = [];
-  const edges: GraphEdgeData[] = [];
-  let isFirstRoot = true;
+  const links: GraphLinkData[] = [];
+  const nodeIdSet = new Set<string>();
 
   // Map agentId → sessionKey for collaboration edge resolution
   const agentIdToSessionKey = new Map<string, string>();
 
   function traverse(node: AgentHierarchyNode, parentKey?: string) {
+    // Deduplicate: a node may appear in multiple paths
+    if (nodeIdSet.has(node.sessionKey)) {
+      return;
+    }
+    nodeIdSet.add(node.sessionKey);
+
     const label = node.label || extractAgentName(node.sessionKey);
     const role = node.agentRole ?? "worker";
     const symbolSize = computeNodeSize(node);
     const isRunning = node.status === "running";
     const agentColor = getAgentColor(node.agentId);
 
-    // Track agentId → sessionKey mapping
     if (node.agentId) {
       agentIdToSessionKey.set(node.agentId, node.sessionKey);
     }
 
-    const graphNode: GraphNodeData = {
+    nodes.push({
       id: node.sessionKey,
       name: label,
       symbolSize,
+      value: computeNodeValue(node),
       category: ROLE_CATEGORY_INDEX[role] ?? 3,
       itemStyle: {
         color: agentColor,
         borderColor: isRunning ? "#fff" : "transparent",
         borderWidth: isRunning ? 2 : 0,
-        // Pulsing glow for running agents
-        shadowBlur: isRunning ? 18 : 0,
+        shadowBlur: isRunning ? 12 : 0,
         shadowColor: isRunning ? agentColor : "transparent",
       },
       _meta: {
@@ -289,20 +318,20 @@ function transformToGraphData(
         usage: node.usage,
         delegations: node.delegations,
       },
-    };
+    });
 
-    // Fix first root at center
-    if (!parentKey && isFirstRoot) {
-      graphNode.fixed = true;
-      graphNode.x = containerWidth / 2;
-      graphNode.y = containerHeight / 2;
-      isFirstRoot = false;
-    }
-
-    nodes.push(graphNode);
-
+    // Parent→child spawn link (structural hierarchy)
     if (parentKey) {
-      edges.push({ source: parentKey, target: node.sessionKey });
+      links.push({
+        source: parentKey,
+        target: node.sessionKey,
+        lineStyle: {
+          color: "rgba(161, 161, 170, 0.5)",
+          width: 1.5,
+          type: "solid",
+          curveness: 0.2,
+        },
+      });
     }
 
     for (const child of node.children) {
@@ -314,85 +343,55 @@ function transformToGraphData(
     traverse(root);
   }
 
-  // Add collaboration edges (agent-to-agent communication)
+  // Resolve and add collaboration/delegation edges
   if (collaborationEdges && collaborationEdges.length > 0) {
     const seen = new Set<string>();
     for (const collab of collaborationEdges) {
+      // Resolve agentId → sessionKey
       const sourceSession = agentIdToSessionKey.get(collab.source);
       const targetSession = agentIdToSessionKey.get(collab.target);
-      if (!sourceSession || !targetSession || sourceSession === targetSession) {
+
+      // Skip unresolvable or self-referencing edges
+      if (!sourceSession || !targetSession) {
+        continue;
+      }
+      if (sourceSession === targetSession) {
         continue;
       }
 
+      // Verify both nodes actually exist in the graph
+      if (!nodeIdSet.has(sourceSession) || !nodeIdSet.has(targetSession)) {
+        continue;
+      }
+
+      // Deduplicate by direction + type
       const pairKey = `${sourceSession}→${targetSession}:${collab.type}`;
       if (seen.has(pairKey)) {
         continue;
       }
       seen.add(pairKey);
 
-      // Use hierarchy-aware edge styling for delegation types
-      const hierarchyStyle = HIERARCHY_EDGE_COLORS[collab.type];
-      const edgeColor =
-        hierarchyStyle?.color ?? COLLAB_EDGE_COLORS[collab.type] ?? "rgba(161, 161, 170, 0.3)";
-      const edgeDash = hierarchyStyle?.dash ?? "dashed";
+      const style = EDGE_STYLES[collab.type] ?? DEFAULT_EDGE_STYLE;
 
-      edges.push({
+      links.push({
         source: sourceSession,
         target: targetSession,
         lineStyle: {
-          color: edgeColor,
-          width: hierarchyStyle ? 2 : 1.5,
-          type: edgeDash,
+          color: style.color,
+          width: style.width,
+          type: style.type,
           curveness: 0.3,
         },
       });
     }
   }
 
-  // Infer sibling edges: children of the same parent likely collaborate
-  // Connect completed siblings to running siblings (feedback/handoff pattern)
-  const childrenByParent = new Map<string, GraphNodeData[]>();
-  for (const edge of edges) {
-    if (!edge.lineStyle) {
-      // Only spawn edges (no lineStyle = spawn)
-      const siblings = childrenByParent.get(edge.source) ?? [];
-      const childNode = nodes.find((n) => n.id === edge.target);
-      if (childNode) {
-        siblings.push(childNode);
-      }
-      childrenByParent.set(edge.source, siblings);
-    }
-  }
-  for (const siblings of childrenByParent.values()) {
-    if (siblings.length < 2) {
-      continue;
-    }
-    // Connect siblings that share context (completed→running or same-role clusters)
-    for (let i = 0; i < siblings.length; i++) {
-      for (let j = i + 1; j < siblings.length; j++) {
-        const a = siblings[i];
-        const b = siblings[j];
-        // Connect completed→running (implies the running agent can use completed output)
-        const aCompleted = a._meta?.status === "completed";
-        const bCompleted = b._meta?.status === "completed";
-        if (aCompleted !== bCompleted) {
-          edges.push({
-            source: aCompleted ? a.id : b.id,
-            target: aCompleted ? b.id : a.id,
-            lineStyle: {
-              color: "rgba(34, 197, 94, 0.25)",
-              width: 1,
-              type: "dotted",
-              curveness: 0.4,
-            },
-          });
-        }
-      }
-    }
-  }
-
-  return { nodes, edges };
+  return { nodes, links, categories: ROLE_CATEGORIES };
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Statistics helpers
+   ═══════════════════════════════════════════════════════════════ */
 
 function countTotalNodes(nodes: AgentHierarchyNode[]): number {
   let count = nodes.length;
@@ -417,6 +416,44 @@ function countByStatus(nodes: AgentHierarchyNode[]): Record<string, number> {
   traverse(nodes);
   return counts;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Tooltip formatter
+   ═══════════════════════════════════════════════════════════════ */
+
+function tooltipFormatter(params: { data?: GraphNodeData; dataType?: string }): string {
+  if (params.dataType === "edge") {
+    return "";
+  }
+  const meta = params.data?._meta;
+  if (!meta) {
+    return params.data?.name ?? "";
+  }
+
+  const statusColors = STATUS_COLORS[meta.status] ?? STATUS_COLORS.pending;
+  const roleLabel = meta.agentRole
+    ? `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${ROLE_COLORS[meta.agentRole]?.bg ?? "#6b7280"};color:${ROLE_COLORS[meta.agentRole]?.text ?? "#fff"};">${meta.agentRole}</span>`
+    : "";
+  const usageLines = meta.usage
+    ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Tokens: ${formatTokenCount(meta.usage.inputTokens)}in / ${formatTokenCount(meta.usage.outputTokens)}out<br/>Tools: ${meta.usage.toolCalls} | Duration: ${formatDurationMs(meta.usage.durationMs)}${meta.usage.costUsd > 0 ? `<br/>Cost: $${meta.usage.costUsd.toFixed(4)}` : ""}</div>`
+    : "";
+  const delegLines = meta.delegations
+    ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Delegations: ${meta.delegations.sent} sent / ${meta.delegations.received} received${meta.delegations.pending > 0 ? ` | ${meta.delegations.pending} pending` : ""}</div>`
+    : "";
+
+  return `<div style="max-width:350px;">
+    <strong>${params.data?.name ?? ""}</strong> ${roleLabel}<br/>
+    <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${statusColors.bg};color:${statusColors.text};">${meta.status}</span>
+    ${meta.task ? `<div style="margin-top:4px;font-size:12px;color:#ccc;">${meta.task.slice(0, 120)}</div>` : ""}
+    ${usageLines}
+    ${delegLines}
+    <div style="margin-top:4px;font-size:10px;color:#666;">${meta.sessionKey}</div>
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Lit template: main render
+   ═══════════════════════════════════════════════════════════════ */
 
 export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
   const { loading, error, data, onRefresh, onNodeClick } = props;
@@ -444,8 +481,8 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
       ${
         updatedAt
           ? html`<div class="muted" style="margin-top: 8px; font-size: 11px;">
-              Last updated: ${formatAgo(updatedAt)}
-            </div>`
+            Last updated: ${formatAgo(updatedAt)}
+          </div>`
           : nothing
       }
 
@@ -454,55 +491,59 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
       ${
         roots.length > 0
           ? html`
-              <div class="hierarchy-stats" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
-                <div class="hierarchy-stat">
-                  <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.running.bg};"></span>
-                  <span>Running: ${statusCounts.running}</span>
-                </div>
-                <div class="hierarchy-stat">
-                  <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.completed.bg};"></span>
-                  <span>Completed: ${statusCounts.completed}</span>
-                </div>
-                <div class="hierarchy-stat">
-                  <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.error.bg};"></span>
-                  <span>Error: ${statusCounts.error}</span>
-                </div>
-                <div class="hierarchy-stat">
-                  <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.pending.bg};"></span>
-                  <span>Pending: ${statusCounts.pending}</span>
-                </div>
+            <div class="hierarchy-stats" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+              <div class="hierarchy-stat">
+                <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.running.bg};"></span>
+                <span>Running: ${statusCounts.running}</span>
               </div>
-            `
+              <div class="hierarchy-stat">
+                <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.completed.bg};"></span>
+                <span>Completed: ${statusCounts.completed}</span>
+              </div>
+              <div class="hierarchy-stat">
+                <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.error.bg};"></span>
+                <span>Error: ${statusCounts.error}</span>
+              </div>
+              <div class="hierarchy-stat">
+                <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.pending.bg};"></span>
+                <span>Pending: ${statusCounts.pending}</span>
+              </div>
+            </div>
+          `
           : nothing
       }
 
       ${
         roots.length === 0
           ? html`
-              <div style="margin-top: 16px;">
-                ${renderEmptyState({
-                  icon: icons.link,
-                  title: "No hierarchy data",
-                  subtitle: loading
-                    ? "Loading hierarchy..."
-                    : "Spawn subagents to see their relationships here.",
-                })}
-              </div>
-            `
+            <div style="margin-top: 16px;">
+              ${renderEmptyState({
+                icon: icons.link,
+                title: "No hierarchy data",
+                subtitle: loading
+                  ? "Loading hierarchy..."
+                  : "Spawn subagents to see their relationships here.",
+              })}
+            </div>
+          `
           : html`
-              <div
-                class="hierarchy-chart-container"
-                id="hierarchy-echarts-container"
-                style="margin-top: 16px; min-height: 500px; height: ${Math.max(500, Math.min(900, totalNodes * 80))}px; transition: height 0.3s ease;"
-              >
-                ${renderHierarchyTree(roots, onNodeClick)}
-              </div>
-              ${scheduleEChartsInit(roots, collabEdges, onNodeClick)}
-            `
+            <div
+              class="hierarchy-chart-container"
+              id="hierarchy-echarts-container"
+              style="margin-top: 16px; min-height: 500px; height: ${Math.max(500, Math.min(900, totalNodes * 80))}px; transition: height 0.3s ease;"
+            >
+              ${renderHierarchyTree(roots, onNodeClick)}
+            </div>
+            ${scheduleEChartsInit(roots, collabEdges, onNodeClick)}
+          `
       }
     </section>
   `;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Lit template: tree fallback / detail list
+   ═══════════════════════════════════════════════════════════════ */
 
 function renderHierarchyTree(
   nodes: AgentHierarchyNode[],
@@ -519,7 +560,6 @@ function renderHierarchyTree(
         const colors = STATUS_COLORS[node.status] ?? STATUS_COLORS.pending;
         const label = node.label || extractAgentName(node.sessionKey);
         const hasChildren = node.children.length > 0;
-
         const roleColor = node.agentRole ? ROLE_COLORS[node.agentRole] : undefined;
         const usage = node.usage;
 
@@ -581,17 +621,33 @@ function renderHierarchyTree(
   `;
 }
 
-// Track chart instance and last data hash to avoid unnecessary re-renders
+/* ═══════════════════════════════════════════════════════════════
+   ECharts lifecycle management
+
+   Simplified approach inspired by the ECharts "graph-label-overlap"
+   example: use `layout: "force"` with `links` (not `edges`),
+   `labelLayout.hideOverlap`, and minimal setOption calls.
+
+   KEY FIXES:
+   1. Use `links` property (canonical) instead of `edges` alias
+   2. Properly resolve agentId→sessionKey for collaboration edges
+   3. Removed phantom sibling-inference edges
+   4. Reduced pulse timer from 100ms to 500ms to avoid force restarts
+   5. Differential updates: topology change → full re-init;
+      visual-only change → in-place node update without restarting force
+   ═══════════════════════════════════════════════════════════════ */
+
 // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
 let chartInstance: echarts.ECharts | null = null;
 let lastDataHash = "";
 let lastTopologyHash = "";
-let clickHandlerAttached = false;
 let pulseTimer: ReturnType<typeof setInterval> | null = null;
+let _resizeObserver: ResizeObserver | null = null;
 let settleTimer: ReturnType<typeof setTimeout> | null = null;
 let lockedPositions: Map<string, { x: number; y: number }> | null = null;
+let currentGraphData: GraphData | null = null;
 
-/** Topology hash: only node keys and parent-child structure. Changes here → full force re-run. */
+/** Topology hash: node keys + parent-child structure. */
 function computeTopologyHash(roots: AgentHierarchyNode[]): string {
   const keys: string[] = [];
   function collect(nodes: AgentHierarchyNode[]) {
@@ -606,24 +662,22 @@ function computeTopologyHash(roots: AgentHierarchyNode[]): string {
   return keys.join("|");
 }
 
-/** Full data hash including status/usage. Changes here → visual-only in-place update. */
+/** Full data hash: status, usage, interactions. */
 function computeDataHash(roots: AgentHierarchyNode[]): string {
-  const keys: string[] = [];
+  const parts: string[] = [];
   function collect(nodes: AgentHierarchyNode[]) {
     for (const node of nodes) {
-      keys.push(node.sessionKey);
-      keys.push(node.status);
-      keys.push(node.agentRole ?? "");
-      const u = node.usage;
-      if (u) {
-        keys.push(`${u.inputTokens}:${u.outputTokens}:${u.toolCalls}`);
+      parts.push(node.sessionKey, node.status, node.agentRole ?? "");
+      if (node.usage) {
+        parts.push(`${node.usage.inputTokens}:${node.usage.outputTokens}:${node.usage.toolCalls}`);
       }
-      const d = node.delegations;
-      if (d) {
-        keys.push(`d:${d.sent}:${d.received}:${d.pending}`);
+      if (node.delegations) {
+        parts.push(
+          `d:${node.delegations.sent}:${node.delegations.received}:${node.delegations.pending}`,
+        );
       }
       if (node.interactionCount) {
-        keys.push(`ic:${node.interactionCount}`);
+        parts.push(`ic:${node.interactionCount}`);
       }
       if (node.children.length > 0) {
         collect(node.children);
@@ -631,7 +685,24 @@ function computeDataHash(roots: AgentHierarchyNode[]): string {
     }
   }
   collect(roots);
-  return keys.join("|");
+  return parts.join("|");
+}
+
+function cleanupChart() {
+  if (pulseTimer) {
+    clearInterval(pulseTimer);
+    pulseTimer = null;
+  }
+  if (settleTimer) {
+    clearTimeout(settleTimer);
+    settleTimer = null;
+  }
+  if (_resizeObserver) {
+    _resizeObserver.disconnect();
+    _resizeObserver = null;
+  }
+  lockedPositions = null;
+  currentGraphData = null;
 }
 
 function scheduleEChartsInit(
@@ -639,7 +710,6 @@ function scheduleEChartsInit(
   collabEdges: CollaborationEdge[],
   onNodeClick?: (sessionKey: string) => void,
 ): typeof nothing {
-  // Schedule update after DOM is ready
   requestAnimationFrame(() => {
     const container = document.getElementById("hierarchy-echarts-container");
     if (!container) {
@@ -647,70 +717,50 @@ function scheduleEChartsInit(
     }
 
     const newDataHash = computeDataHash(roots);
+    const newTopoHash = computeTopologyHash(roots);
 
-    // Check if chart already exists and data hasn't changed at all
+    // Check existing chart
     const existingChart = echarts.getInstanceByDom(container);
     if (existingChart && chartInstance === existingChart && lastDataHash === newDataHash) {
-      return;
+      return; // Nothing changed
     }
 
-    const w = container.clientWidth || 800;
-    const h = container.clientHeight || 500;
-    const graphData = transformToGraphData(roots, w, h, collabEdges);
+    const graphData = transformToGraphData(roots, collabEdges);
 
-    // If chart exists, check whether topology changed or just visuals
     if (existingChart && chartInstance === existingChart) {
-      const newTopoHash = computeTopologyHash(roots);
-      const topologyChanged = newTopoHash !== lastTopologyHash;
+      // Chart exists — decide: topology change or visual-only?
       lastDataHash = newDataHash;
 
-      if (topologyChanged) {
-        // Topology changed (new/removed nodes) → re-run force for new nodes
+      if (newTopoHash !== lastTopologyHash) {
+        // Topology changed → re-init. Pin existing nodes at locked positions,
+        // only new nodes will be placed by force.
         lastTopologyHash = newTopoHash;
-        if (settleTimer) {
-          clearTimeout(settleTimer);
+        const savedPositions = lockedPositions;
+        cleanupChart();
+        if (savedPositions && savedPositions.size > 0) {
+          for (const node of graphData.nodes) {
+            const pos = savedPositions.get(node.id);
+            if (pos) {
+              node.x = pos.x;
+              node.y = pos.y;
+              node.fixed = true;
+            }
+          }
         }
-        if (pulseTimer) {
-          clearInterval(pulseTimer);
-          pulseTimer = null;
-        }
-        // Pin existing nodes, let new ones be placed by force
-        const updatedNodes = applyLockedPositions(graphData.nodes);
-        const nodeCount = updatedNodes.length;
-        existingChart.setOption({
-          series: [
-            {
-              data: updatedNodes,
-              edges: graphData.edges,
-              force: {
-                repulsion: computeRepulsion(nodeCount),
-                edgeLength: computeEdgeLength(nodeCount),
-              },
-            },
-          ],
-        });
-        // Re-lock all positions after force settles
-        schedulePositionLock(graphData);
+        initECharts(container, graphData, onNodeClick);
       } else {
-        // Visual-only change (status/usage) → update in place, no force re-run
-        const updatedNodes = applyLockedPositions(graphData.nodes);
-        existingChart.setOption({
-          series: [{ data: updatedNodes, edges: graphData.edges }],
-        });
-        // Keep existing pulse timer running — no need to restart
-        // Just update graphData reference for the pulse timer
-        if (pulseTimer) {
-          // Restart pulse with fresh graphData but keep positions locked
-          startPulseTimer(graphData);
-        }
+        // Visual-only change (status/usage) → do NOT call setOption (it restarts force).
+        // Just update the shared graphData reference; the pulse timer picks it up.
+        currentGraphData = graphData;
       }
       return;
     }
 
-    // Initialize new chart
+    // No chart yet → initialize
+    cleanupChart();
     initECharts(container, graphData, onNodeClick);
     lastDataHash = newDataHash;
-    lastTopologyHash = computeTopologyHash(roots);
+    lastTopologyHash = newTopoHash;
   });
 
   return nothing;
@@ -721,15 +771,13 @@ function initECharts(
   graphData: GraphData,
   onNodeClick?: (sessionKey: string) => void,
 ) {
-  // Dispose existing chart if any
-  const existingChart = echarts.getInstanceByDom(container);
-  if (existingChart) {
-    existingChart.dispose();
+  // Dispose existing
+  const existing = echarts.getInstanceByDom(container);
+  if (existing) {
+    existing.dispose();
   }
 
   const nodeCount = graphData.nodes.length;
-
-  // Use container's actual size (dynamically set via inline style)
   const chartWidth = container.clientWidth || 800;
   const chartHeight = container.clientHeight || 500;
 
@@ -741,70 +789,46 @@ function initECharts(
 
   const option = {
     tooltip: {
-      trigger: "item",
-      triggerOn: "mousemove",
-      formatter: (params: { data?: GraphNodeData; dataType?: string }) => {
-        if (params.dataType === "edge") {
-          return "";
-        }
-        const meta = params.data?._meta;
-        if (!meta) {
-          return params.data?.name ?? "";
-        }
-        const statusColors = STATUS_COLORS[meta.status] ?? STATUS_COLORS.pending;
-        const roleLabel = meta.agentRole
-          ? `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${ROLE_COLORS[meta.agentRole]?.bg ?? "#6b7280"};color:${ROLE_COLORS[meta.agentRole]?.text ?? "#fff"};">${meta.agentRole}</span>`
-          : "";
-        const usageLines = meta.usage
-          ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Tokens: ${formatTokenCount(meta.usage.inputTokens)}in / ${formatTokenCount(meta.usage.outputTokens)}out<br/>Tools: ${meta.usage.toolCalls} | Duration: ${formatDurationMs(meta.usage.durationMs)}${meta.usage.costUsd > 0 ? `<br/>Cost: $${meta.usage.costUsd.toFixed(4)}` : ""}</div>`
-          : "";
-        const delegLines = meta.delegations
-          ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Delegations: ${meta.delegations.sent} sent / ${meta.delegations.received} received${meta.delegations.pending > 0 ? ` | ${meta.delegations.pending} pending` : ""}</div>`
-          : "";
-        return `<div style="max-width:350px;">
-          <strong>${params.data?.name ?? ""}</strong> ${roleLabel}<br/>
-          <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${statusColors.bg};color:${statusColors.text};">${meta.status}</span>
-          ${meta.task ? `<div style="margin-top:4px;font-size:12px;color:#ccc;">${meta.task.slice(0, 120)}</div>` : ""}
-          ${usageLines}
-          ${delegLines}
-          <div style="margin-top:4px;font-size:10px;color:#666;">${meta.sessionKey}</div>
-        </div>`;
+      trigger: "item" as const,
+      triggerOn: "mousemove" as const,
+      formatter: tooltipFormatter,
+    },
+    legend: [
+      {
+        data: graphData.categories.map((c) => c.name),
+        bottom: 10,
+        textStyle: { color: "#a1a1aa", fontSize: 11 },
+        icon: "circle",
+        itemWidth: 10,
+        itemHeight: 10,
       },
-    },
-    legend: {
-      data: ROLE_CATEGORIES.map((c) => c.name),
-      bottom: 10,
-      textStyle: { color: "#a1a1aa", fontSize: 11 },
-      icon: "circle",
-      itemWidth: 10,
-      itemHeight: 10,
-    },
+    ],
     series: [
       {
         type: "graph",
         layout: "force",
         data: graphData.nodes,
-        edges: graphData.edges,
-        categories: ROLE_CATEGORIES,
+        links: graphData.links,
+        categories: graphData.categories,
         roam: true,
         draggable: true,
         label: {
           show: true,
-          position: "right",
+          position: "right" as const,
           formatter: "{b}",
+        },
+        labelLayout: {
+          hideOverlap: true,
         },
         force: {
           repulsion: computeRepulsion(nodeCount),
           gravity: 0.1,
           edgeLength: computeEdgeLength(nodeCount),
-          friction: 0.6,
+          friction: 0.85,
         },
         lineStyle: {
           color: "source",
           curveness: 0.3,
-        },
-        labelLayout: {
-          hideOverlap: true,
         },
         scaleLimit: {
           min: 0.4,
@@ -816,8 +840,8 @@ function initECharts(
 
   chartInstance.setOption(option);
 
-  if (onNodeClick && !clickHandlerAttached) {
-    clickHandlerAttached = true;
+  // Click handler
+  if (onNodeClick) {
     chartInstance.on("click", (params: unknown) => {
       const p = params as { data?: GraphNodeData };
       const meta = p.data?._meta;
@@ -827,40 +851,24 @@ function initECharts(
     });
   }
 
-  const resizeObserver = new ResizeObserver(() => {
-    chartInstance?.resize();
-  });
-  resizeObserver.observe(container);
+  // Resize observer
+  _resizeObserver = new ResizeObserver(() => chartInstance?.resize());
+  _resizeObserver.observe(container);
 
-  // Lock positions after force layout settles, then start pulse animation
-  schedulePositionLock(graphData);
+  // Wait for force to converge, then lock positions and start pulse animation.
+  // Do NOT start pulse timer immediately — setOption during force causes jitter.
+  currentGraphData = graphData;
+  schedulePositionLock();
 }
 
 /**
- * Pin existing nodes at their locked positions so only new nodes
- * are free for the force simulation to place.
+ * After force converges (~3s), capture all node positions and lock them.
+ * Then start the gentle pulse animation.
  */
-function applyLockedPositions(nodes: GraphNodeData[]): GraphNodeData[] {
-  if (!lockedPositions || lockedPositions.size === 0) {
-    return nodes;
-  }
-  return nodes.map((n) => {
-    const pos = lockedPositions?.get(n.id);
-    if (pos) {
-      return { ...n, fixed: true, x: pos.x, y: pos.y };
-    }
-    return n;
-  });
-}
-
-/**
- * After force layout converges (~2.5s), capture node positions and lock them.
- * Then start pulse animation — since nodes have fixed positions, setOption
- * won't trigger force recalculation and labels stay stable.
- */
-function schedulePositionLock(graphData: GraphData) {
+function schedulePositionLock() {
   if (settleTimer) {
     clearTimeout(settleTimer);
+    settleTimer = null;
   }
   if (pulseTimer) {
     clearInterval(pulseTimer);
@@ -869,35 +877,40 @@ function schedulePositionLock(graphData: GraphData) {
   lockedPositions = null;
 
   settleTimer = setTimeout(() => {
-    if (!chartInstance) {
-      return;
-    }
-    // Extract computed positions from the chart
+    settleTimer = null;
+    if (!chartInstance) return;
+
+    // Extract settled positions from the chart
     const opt = chartInstance.getOption() as {
       series?: { data?: { id?: string; x?: number; y?: number }[] }[];
     };
-    const seriesData = opt?.series?.[0]?.data;
-    if (!Array.isArray(seriesData)) {
-      return;
-    }
+    const data = opt?.series?.[0]?.data;
+    if (!Array.isArray(data)) return;
 
     lockedPositions = new Map();
-    for (const node of seriesData) {
-      if (node.id && typeof node.x === "number" && typeof node.y === "number") {
-        lockedPositions.set(node.id, { x: node.x, y: node.y });
+    for (const n of data) {
+      if (n.id && typeof n.x === "number" && typeof n.y === "number") {
+        lockedPositions.set(n.id, { x: n.x, y: n.y });
       }
     }
 
-    // Start pulse animation with locked positions
-    startPulseTimer(graphData);
-  }, 2500);
+    startPulseTimer();
+  }, 3000);
 }
 
-function startPulseTimer(graphData: GraphData) {
+/**
+ * Gentle glow animation for running nodes.
+ * Reads visual data from currentGraphData (picks up status/usage changes).
+ * ALL nodes are pinned to lockedPositions to prevent force restarts from moving them.
+ */
+function startPulseTimer() {
   if (pulseTimer) {
     clearInterval(pulseTimer);
+    pulseTimer = null;
   }
-  let pulsePhase = 0;
+  if (!lockedPositions || lockedPositions.size === 0) return;
+
+  let phase = 0;
   pulseTimer = setInterval(() => {
     if (!chartInstance || !lockedPositions) {
       if (pulseTimer) {
@@ -906,26 +919,34 @@ function startPulseTimer(graphData: GraphData) {
       }
       return;
     }
-    pulsePhase = (pulsePhase + 1) % 20;
-    // Sinusoidal pulse: shadow oscillates between 8 and 22
-    const intensity = 8 + Math.sin((pulsePhase / 20) * Math.PI * 2) * 7;
-    const updatedNodes = graphData.nodes.map((n) => {
+
+    const gd = currentGraphData;
+    if (!gd) return;
+
+    phase = (phase + 1) % 12;
+    const intensity = 8 + Math.sin((phase / 12) * Math.PI * 2) * 6;
+
+    const updatedNodes = gd.nodes.map((n) => {
       const pos = lockedPositions?.get(n.id);
-      // Lock position to prevent force recalculation
+      // Pin ALL nodes to their locked positions
       const base = pos ? { ...n, fixed: true, x: pos.x, y: pos.y } : n;
+      // Pulse shadow for running nodes only
       if (n._meta?.status !== "running") {
         return base;
       }
-      const c = (n.itemStyle?.color as string) ?? "#6b7280";
+      const c = getAgentColor(n._meta?.agentId);
       return {
         ...base,
         itemStyle: {
-          ...n.itemStyle,
+          color: c,
+          borderColor: "#fff",
+          borderWidth: 2,
           shadowBlur: intensity,
           shadowColor: c,
         },
       };
     });
+
     chartInstance.setOption({ series: [{ data: updatedNodes }] });
-  }, 100);
+  }, 500);
 }
