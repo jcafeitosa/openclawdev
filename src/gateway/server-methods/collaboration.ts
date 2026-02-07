@@ -1,4 +1,7 @@
 import type { GatewayRequestHandlers } from "./types.js";
+import { getAllDelegations } from "../../agents/delegation-registry.js";
+import { listAllSubagentRuns } from "../../agents/subagent-registry.js";
+import { callGateway } from "../call.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import { broadcastHierarchyFullRefresh } from "../server-hierarchy-events.js";
 
@@ -46,6 +49,50 @@ export type CollaborativeSession = {
 };
 
 const collaborativeSessions = new Map<string, CollaborativeSession>();
+
+/**
+ * POLL SYSTEM
+ *
+ * Lightweight yes/no or multi-choice polls for quick decisions.
+ */
+
+export type PollRecord = {
+  id: string;
+  question: string;
+  options: string[];
+  voters: string[];
+  votes: Record<string, string>;
+  createdAt: number;
+  timeoutAt?: number;
+  initiatorId: string;
+  completed: boolean;
+};
+
+const polls = new Map<string, PollRecord>();
+
+/**
+ * REVIEW REQUEST SYSTEM
+ *
+ * Async review requests where an agent submits work for review.
+ */
+
+export type ReviewRequest = {
+  id: string;
+  artifact: string;
+  reviewers: string[];
+  submitterId: string;
+  context?: string;
+  reviews: Array<{
+    reviewerId: string;
+    approved: boolean;
+    feedback?: string;
+    timestamp: number;
+  }>;
+  createdAt: number;
+  completed: boolean;
+};
+
+const reviewRequests = new Map<string, ReviewRequest>();
 
 /**
  * Initialize a collaborative session where multiple agents can debate
@@ -276,6 +323,199 @@ export function sendAgentMessage(params: {
   // For now, return the messageId as acknowledgement
 
   return messageId;
+}
+
+/**
+ * Create a poll and notify voters
+ */
+export async function createPoll(params: {
+  question: string;
+  options: string[];
+  voters: string[];
+  timeoutSeconds?: number;
+  initiatorId: string;
+}): Promise<{ id: string; result?: string; votes: Record<string, string>; unanimous: boolean }> {
+  const pollId = `poll:${Date.now()}`;
+  const timeoutAt =
+    typeof params.timeoutSeconds === "number" && params.timeoutSeconds > 0
+      ? Date.now() + params.timeoutSeconds * 1000
+      : undefined;
+
+  const poll: PollRecord = {
+    id: pollId,
+    question: params.question,
+    options: params.options,
+    voters: params.voters,
+    votes: {},
+    createdAt: Date.now(),
+    timeoutAt,
+    initiatorId: params.initiatorId,
+    completed: false,
+  };
+
+  polls.set(pollId, poll);
+
+  // Notify voters via sessions_send
+  const optionsText = params.options.map((opt, idx) => `${idx + 1}. ${opt}`).join("\n");
+  const message = `Poll from ${params.initiatorId}:\n${params.question}\n\nOptions:\n${optionsText}\n\nReply with the number of your choice.`;
+
+  for (const voterId of params.voters) {
+    try {
+      await callGateway({
+        method: "sessions.send",
+        params: {
+          target: voterId,
+          message,
+        },
+        timeoutMs: 10_000,
+      });
+    } catch {
+      // Non-critical: voter will miss the poll
+    }
+  }
+
+  // Wait for all votes or timeout
+  const waitUntil = timeoutAt ?? Date.now() + 60_000; // Default 60s timeout
+  while (Date.now() < waitUntil && Object.keys(poll.votes).length < params.voters.length) {
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  poll.completed = true;
+
+  // Determine result
+  const voteCounts: Record<string, number> = {};
+  for (const vote of Object.values(poll.votes)) {
+    voteCounts[vote] = (voteCounts[vote] || 0) + 1;
+  }
+
+  const maxVotes = Math.max(...Object.values(voteCounts), 0);
+  const winners = Object.keys(voteCounts).filter((opt) => voteCounts[opt] === maxVotes);
+  const result = winners.length === 1 ? winners[0] : undefined;
+  const unanimous = result !== undefined && maxVotes === params.voters.length;
+
+  return {
+    id: pollId,
+    result,
+    votes: poll.votes,
+    unanimous,
+  };
+}
+
+/**
+ * Submit work for review
+ */
+export function submitReview(params: {
+  artifact: string;
+  reviewers: string[];
+  context?: string;
+  submitterId: string;
+}): { id: string } {
+  const reviewId = `review:${Date.now()}`;
+
+  const request: ReviewRequest = {
+    id: reviewId,
+    artifact: params.artifact,
+    reviewers: params.reviewers,
+    submitterId: params.submitterId,
+    context: params.context,
+    reviews: [],
+    createdAt: Date.now(),
+    completed: false,
+  };
+
+  reviewRequests.set(reviewId, request);
+
+  // Notify reviewers (async, non-blocking)
+  const contextText = params.context ? `\nContext: ${params.context}` : "";
+  const message = `Review request from ${params.submitterId}:\n${params.artifact}${contextText}\n\nPlease review when you're spawned.`;
+
+  for (const reviewerId of params.reviewers) {
+    void callGateway({
+      method: "sessions.send",
+      params: {
+        target: reviewerId,
+        message,
+      },
+      timeoutMs: 10_000,
+    }).catch(() => {
+      // Non-critical
+    });
+  }
+
+  return { id: reviewId };
+}
+
+/**
+ * Generate aggregated standup status of all active agents
+ */
+export function generateStandup(): {
+  agents: Array<{
+    agentId: string;
+    status: string;
+    task?: string;
+    progress?: string;
+    duration?: number;
+  }>;
+} {
+  const now = Date.now();
+  const agentMap = new Map<
+    string,
+    {
+      agentId: string;
+      status: string;
+      task?: string;
+      progress?: string;
+      duration?: number;
+    }
+  >();
+
+  // Gather from subagent runs
+  const subagentRuns = listAllSubagentRuns();
+  for (const run of subagentRuns) {
+    const agentId = run.childSessionKey.split(":")[1] || "unknown";
+    const duration = run.endedAt
+      ? run.endedAt - run.createdAt
+      : run.startedAt
+        ? now - run.startedAt
+        : undefined;
+
+    const status = run.outcome ? run.outcome.status : run.startedAt ? "in_progress" : "pending";
+
+    agentMap.set(agentId, {
+      agentId,
+      status,
+      task: run.task,
+      progress: run.progress?.status,
+      duration,
+    });
+  }
+
+  // Gather from delegation registry
+  const delegations = getAllDelegations();
+  for (const deleg of delegations) {
+    if (deleg.state === "completed" || deleg.state === "rejected") {
+      continue;
+    }
+
+    const agentId = deleg.toAgentId;
+    const existing = agentMap.get(agentId);
+    if (existing) {
+      continue; // Subagent data takes precedence
+    }
+
+    const duration = deleg.startedAt ? now - deleg.startedAt : undefined;
+
+    agentMap.set(agentId, {
+      agentId,
+      status: deleg.state,
+      task: deleg.task,
+      duration,
+    });
+  }
+
+  return {
+    agents: Array.from(agentMap.values()),
+  };
 }
 
 /**

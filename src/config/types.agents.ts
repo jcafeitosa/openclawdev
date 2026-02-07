@@ -30,6 +30,12 @@ export type AgentConfig = {
   model?: AgentModelConfig;
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
+  /** Capability tags for smart agent routing (e.g., "api-design", "security", "react", "database"). */
+  capabilities?: string[];
+  /** Domain expertise descriptions for detailed capability matching. */
+  expertise?: string[];
+  /** Whether to auto-route based on workload. Default: "auto". */
+  availability?: "auto" | "manual";
   memorySearch?: MemorySearchConfig;
   /** Human-like delay between block replies for this agent. */
   humanDelay?: HumanDelayConfig;

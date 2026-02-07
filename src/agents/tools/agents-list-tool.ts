@@ -7,6 +7,7 @@ import {
   parseAgentSessionKey,
 } from "../../routing/session-key.js";
 import { resolveAgentConfig } from "../agent-scope.js";
+import { getAgentCapabilities } from "../capabilities-registry.js";
 import { jsonResult } from "./common.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
 
@@ -16,6 +17,10 @@ type AgentListEntry = {
   id: string;
   name?: string;
   configured: boolean;
+  role?: string;
+  capabilities?: string[];
+  expertise?: string[];
+  availability?: "auto" | "manual";
 };
 
 export function createAgentsListTool(opts?: {
@@ -81,11 +86,18 @@ export function createAgentsListTool(opts?: {
         .filter((id) => id !== requesterAgentId)
         .toSorted((a, b) => a.localeCompare(b));
       const ordered = [requesterAgentId, ...rest];
-      const agents: AgentListEntry[] = ordered.map((id) => ({
-        id,
-        name: configuredNameMap.get(id),
-        configured: configuredIds.includes(id),
-      }));
+      const agents: AgentListEntry[] = ordered.map((id) => {
+        const capabilityProfile = getAgentCapabilities(id);
+        return {
+          id,
+          name: configuredNameMap.get(id),
+          configured: configuredIds.includes(id),
+          role: capabilityProfile?.role,
+          capabilities: capabilityProfile?.capabilities,
+          expertise: capabilityProfile?.expertise,
+          availability: capabilityProfile?.availability,
+        };
+      });
 
       return jsonResult({
         requester: requesterAgentId,

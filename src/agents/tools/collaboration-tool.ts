@@ -12,6 +12,9 @@ const COLLAB_ACTIONS = [
   "decision.finalize",
   "session.get",
   "thread.get",
+  "poll",
+  "submit_review",
+  "standup",
 ] as const;
 
 // Flattened schema — discriminator (action) determines which fields are relevant.
@@ -25,7 +28,10 @@ const CollaborationToolSchema = Type.Object({
       "proposal.agree: agree with a decision. " +
       "decision.finalize: moderator finalizes a decision. " +
       "session.get: read full session state. " +
-      "thread.get: read a specific decision thread.",
+      "thread.get: read a specific decision thread. " +
+      "poll: create a quick yes/no or multi-choice poll. " +
+      "submit_review: submit work for async review. " +
+      "standup: get aggregated status of all active agents.",
   }),
   // session.init
   topic: Type.Optional(Type.String({ description: "Session topic (for session.init)" })),
@@ -64,6 +70,23 @@ const CollaborationToolSchema = Type.Object({
   // decision.finalize
   finalDecision: Type.Optional(
     Type.String({ description: "The final decision text (for decision.finalize)" }),
+  ),
+  // poll
+  question: Type.Optional(Type.String({ description: "Poll question (for poll)" })),
+  options: Type.Optional(Type.Array(Type.String(), { description: "Poll options (for poll)" })),
+  voters: Type.Optional(Type.Array(Type.String(), { description: "Agent IDs to poll (for poll)" })),
+  timeoutSeconds: Type.Optional(
+    Type.Number({ description: "Poll timeout in seconds (for poll, optional)" }),
+  ),
+  // submit_review
+  artifact: Type.Optional(
+    Type.String({ description: "Work artifact to review (for submit_review)" }),
+  ),
+  reviewers: Type.Optional(
+    Type.Array(Type.String(), { description: "Agent IDs to review (for submit_review)" }),
+  ),
+  context: Type.Optional(
+    Type.String({ description: "Additional context for review (for submit_review, optional)" }),
   ),
 });
 
@@ -172,6 +195,48 @@ export function createCollaborationTool(opts?: { agentSessionKey?: string }): An
         const sessionKey = readStringParam(params, "sessionKey", { required: true });
         const decisionId = readStringParam(params, "decisionId", { required: true });
         const result = await callGatewayTool("collab.thread.get", {}, { sessionKey, decisionId });
+        return jsonResult(result);
+      }
+
+      if (action === "poll") {
+        const question = readStringParam(params, "question", { required: true });
+        const options = readStringArrayParam(params, "options", { required: true });
+        const voters = readStringArrayParam(params, "voters", { required: true });
+        const timeoutSeconds =
+          typeof params.timeoutSeconds === "number" ? params.timeoutSeconds : undefined;
+        const result = await callGatewayTool(
+          "collab.poll",
+          {},
+          {
+            question,
+            options,
+            voters,
+            timeoutSeconds,
+            initiatorId: agentId,
+          },
+        );
+        return jsonResult(result);
+      }
+
+      if (action === "submit_review") {
+        const artifact = readStringParam(params, "artifact", { required: true });
+        const reviewers = readStringArrayParam(params, "reviewers", { required: true });
+        const context = readStringParam(params, "context");
+        const result = await callGatewayTool(
+          "collab.submit_review",
+          {},
+          {
+            artifact,
+            reviewers,
+            context,
+            submitterId: agentId,
+          },
+        );
+        return jsonResult(result);
+      }
+
+      if (action === "standup") {
+        const result = await callGatewayTool("collab.standup", {}, {});
         return jsonResult(result);
       }
 
