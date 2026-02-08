@@ -2,8 +2,10 @@ import type { CliDeps } from "../cli/deps.js";
 import type { loadConfig } from "../config/config.js";
 import type { loadOpenClawPlugins } from "../plugins/loader.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
+import { initAutoModelSelection } from "../agents/model-auto-select.js";
 import { loadModelCatalog } from "../agents/model-catalog.js";
 import {
+  buildAllowedModelSet,
   getModelRefStatus,
   resolveConfiguredModelRef,
   resolveHooksGmailModel,
@@ -44,6 +46,23 @@ export async function startGatewaySidecars(params: {
     browserControl = await startBrowserControlServerIfEnabled();
   } catch (err) {
     params.logBrowser.error(`server failed to start: ${String(err)}`);
+  }
+
+  // Initialize auto-model-selection: discover available models, classify by
+  // cost/capability/recency, and pre-compute the optimal model for each agent role.
+  try {
+    const catalog = await loadModelCatalog({ config: params.cfg });
+    if (catalog.length > 0) {
+      const { allowedKeys, allowAny } = buildAllowedModelSet({
+        cfg: params.cfg,
+        catalog,
+        defaultProvider: DEFAULT_PROVIDER,
+        defaultModel: DEFAULT_MODEL,
+      });
+      initAutoModelSelection(catalog, allowAny ? undefined : allowedKeys);
+    }
+  } catch (err) {
+    params.log.warn(`auto-model-selection init failed: ${String(err)}`);
   }
 
   // Start Gmail watcher if configured (hooks.gmail.account).

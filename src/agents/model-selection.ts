@@ -1,8 +1,9 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import type { TaskType } from "./task-classifier.js";
-import { resolveAgentModelPrimary } from "./agent-scope.js";
+import { resolveAgentModelPrimary, resolveAgentRole } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
+import { getAutoSelectedModel } from "./model-auto-select.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
 
 export type ModelRef = {
@@ -202,29 +203,46 @@ export function resolveDefaultModelForAgent(params: {
   cfg: OpenClawConfig;
   agentId?: string;
 }): ModelRef {
+  // 1. Check explicit per-agent model override
   const agentModelOverride = params.agentId
     ? resolveAgentModelPrimary(params.cfg, params.agentId)
     : undefined;
-  const cfg =
-    agentModelOverride && agentModelOverride.length > 0
-      ? {
-          ...params.cfg,
-          agents: {
-            ...params.cfg.agents,
-            defaults: {
-              ...params.cfg.agents?.defaults,
-              model: {
-                ...(typeof params.cfg.agents?.defaults?.model === "object"
-                  ? params.cfg.agents.defaults.model
-                  : undefined),
-                primary: agentModelOverride,
-              },
-            },
+
+  if (agentModelOverride && agentModelOverride.length > 0) {
+    const cfg = {
+      ...params.cfg,
+      agents: {
+        ...params.cfg.agents,
+        defaults: {
+          ...params.cfg.agents?.defaults,
+          model: {
+            ...(typeof params.cfg.agents?.defaults?.model === "object"
+              ? params.cfg.agents.defaults.model
+              : undefined),
+            primary: agentModelOverride,
           },
-        }
-      : params.cfg;
+        },
+      },
+    };
+    return resolveConfiguredModelRef({
+      cfg,
+      defaultProvider: DEFAULT_PROVIDER,
+      defaultModel: DEFAULT_MODEL,
+    });
+  }
+
+  // 2. Auto-select based on agent role (if catalog has been initialized)
+  if (params.agentId) {
+    const role = resolveAgentRole(params.cfg, params.agentId);
+    const autoSelected = getAutoSelectedModel(role);
+    if (autoSelected) {
+      return autoSelected;
+    }
+  }
+
+  // 3. Fall back to global default
   return resolveConfiguredModelRef({
-    cfg,
+    cfg: params.cfg,
     defaultProvider: DEFAULT_PROVIDER,
     defaultModel: DEFAULT_MODEL,
   });
