@@ -1,6 +1,11 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { FailoverReason } from "./pi-embedded-helpers.js";
 import {
+  CircuitBreakerOpenError,
+  createCircuitBreaker,
+  type CircuitBreaker,
+} from "../infra/circuit-breaker.js";
+import {
   ensureAuthProfileStore,
   getProfileCooldownRemainingMs,
   isProfileApproachingCooldown,
@@ -21,6 +26,35 @@ import {
   resolveConfiguredModelRef,
   resolveModelRefFromString,
 } from "./model-selection.js";
+
+// Per-provider circuit breakers for instant fail-fast on repeated upstream failures.
+const providerBreakers = new Map<string, CircuitBreaker>();
+
+/** Reset all provider circuit breakers. Exported for test isolation. */
+export function resetProviderBreakers(): void {
+  providerBreakers.clear();
+}
+
+function getProviderBreaker(provider: string): CircuitBreaker {
+  let breaker = providerBreakers.get(provider);
+  if (!breaker) {
+    breaker = createCircuitBreaker(provider, {
+      failureThreshold: 5,
+      resetTimeoutMs: 60_000,
+      shouldTrip: (err) => {
+        const normalized = coerceToFailoverError(err);
+        if (!normalized) {
+          return true;
+        }
+        const described = describeFailoverError(normalized);
+        // Auth and billing errors won't fix themselves with time — don't trip the breaker.
+        return described.reason !== "auth" && described.reason !== "billing";
+      },
+    });
+    providerBreakers.set(provider, breaker);
+  }
+  return breaker;
+}
 
 type ModelCandidate = {
   provider: string;
@@ -534,8 +568,27 @@ export async function runWithModelFallback<T>(params: {
         }
       }
     }
+    // Circuit-breaker: skip provider entirely if breaker is open
+    const breaker = getProviderBreaker(candidate.provider);
+    if (breaker.state() === "open") {
+      try {
+        // Probe will throw CircuitBreakerOpenError if timeout hasn't elapsed
+        await breaker.execute(() => Promise.resolve());
+      } catch (err) {
+        if (err instanceof CircuitBreakerOpenError) {
+          attempts.push({
+            provider: candidate.provider,
+            model: candidate.model,
+            error: `Provider ${candidate.provider} circuit breaker open`,
+            reason: "rate_limit",
+          });
+          continue;
+        }
+      }
+    }
+
     try {
-      const result = await params.run(candidate.provider, candidate.model);
+      const result = await breaker.execute(() => params.run(candidate.provider, candidate.model));
       return {
         result,
         provider: candidate.provider,
@@ -543,6 +596,15 @@ export async function runWithModelFallback<T>(params: {
         attempts,
       };
     } catch (err) {
+      if (err instanceof CircuitBreakerOpenError) {
+        attempts.push({
+          provider: candidate.provider,
+          model: candidate.model,
+          error: `Provider ${candidate.provider} circuit breaker open`,
+          reason: "rate_limit",
+        });
+        continue;
+      }
       if (shouldRethrowAbort(err)) {
         throw err;
       }
