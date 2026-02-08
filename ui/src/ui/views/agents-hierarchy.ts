@@ -78,6 +78,7 @@ const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }
   completed: { bg: "#22c55e", border: "#16a34a", text: "#ffffff" },
   error: { bg: "#ef4444", border: "#dc2626", text: "#ffffff" },
   pending: { bg: "#6b7280", border: "#4b5563", text: "#ffffff" },
+  idle: { bg: "#374151", border: "#1f2937", text: "#9ca3af" },
 };
 
 const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
@@ -493,7 +494,13 @@ function countTotalNodes(nodes: AgentHierarchyNode[]): number {
 }
 
 function countByStatus(nodes: AgentHierarchyNode[]): Record<string, number> {
-  const counts: Record<string, number> = { running: 0, completed: 0, error: 0, pending: 0 };
+  const counts: Record<string, number> = {
+    running: 0,
+    completed: 0,
+    error: 0,
+    pending: 0,
+    idle: 0,
+  };
   function traverse(n: AgentHierarchyNode[]) {
     for (const node of n) {
       counts[node.status] = (counts[node.status] ?? 0) + 1;
@@ -608,6 +615,10 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
                 <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.pending.bg};"></span>
                 <span>Pending: ${statusCounts.pending}</span>
               </div>
+              <div class="hierarchy-stat">
+                <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.idle.bg};"></span>
+                <span>Idle: ${statusCounts.idle}</span>
+              </div>
             </div>
           `
           : nothing
@@ -680,6 +691,10 @@ function renderGraphLegend() {
         <div style=${groupStyle}>
           <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;"></span>
           <span>error</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#374151;border:1px solid #4b5563;"></span>
+          <span>idle</span>
         </div>
       </div>
       <span style="color:#e4e4e7;">|</span>

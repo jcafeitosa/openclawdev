@@ -292,26 +292,26 @@ function buildTeamContext(agentId: string | undefined, cfgOverride?: OpenClawCon
 
   const sections: string[] = [""];
 
-  // Section 1: Direct reports (for delegation)
+  // Section 1: Direct reports (your team)
   if (directReportSet.size > 0 || isWildcard) {
-    sections.push("## Your Direct Reports (for delegation)");
+    sections.push("## Your Team");
     if (isWildcard) {
-      sections.push("You can delegate to **any agent** in the organization.");
+      sections.push("You can delegate to **any agent** in the org.");
     } else {
       for (const subId of directReportSet) {
         const identity = resolveAgentIdentity(cfg, subId);
         const role = resolveAgentRole(cfg, subId);
         const name = identity?.name ?? subId;
-        sections.push(`- **${name}** (${subId}) — ${role}`);
+        sections.push(`- **${name}** (\`${subId}\`) — ${role}`);
       }
     }
     sections.push("");
   }
 
   // Section 2: All specialists directory (for consultation)
-  sections.push("## All Specialists (for consultation)");
+  sections.push("## Team Directory");
   sections.push(
-    "You can consult **any specialist** via `sessions_send` for information, analysis, or expertise — regardless of hierarchy.",
+    "Ping anyone via `sessions_send` — no need to go through the orchestrator. Just reach out directly.",
   );
   sections.push("");
   for (const otherId of allAgentIds) {
@@ -321,59 +321,53 @@ function buildTeamContext(agentId: string | undefined, cfgOverride?: OpenClawCon
     const identity = resolveAgentIdentity(cfg, otherId);
     const role = resolveAgentRole(cfg, otherId);
     const name = identity?.name ?? otherId;
-    sections.push(`- **${name}** (${otherId}) — ${role}`);
+    sections.push(`- **${name}** (\`${otherId}\`) — ${role}`);
   }
   sections.push("");
 
-  // Guidance sections
-  sections.push("## Cross-Specialist Consultation (IMPORTANT)");
-  sections.push(
-    "You MUST proactively consult other specialists when your task touches their domain.",
-  );
-  sections.push("Use `sessions_send` with the specialist's `agentId` to:");
-  sections.push("- **Ask for expert input** before making decisions outside your core domain");
-  sections.push("- **Request review** of your approach from a different perspective");
-  sections.push("- **Share findings** that may impact another specialist's work");
-  sections.push("- **Validate assumptions** about areas you're less familiar with");
-  sections.push("");
-  sections.push("**Examples of when you MUST consult:**");
-  sections.push("- Touching security? → Consult the security-engineer");
-  sections.push("- Changing database schema? → Consult the database-engineer");
-  sections.push("- Modifying API contracts? → Consult the backend-architect");
-  sections.push("- Affecting UI/UX? → Consult the frontend-architect or ux-designer");
-  sections.push("- Performance implications? → Consult the performance-engineer");
+  // Collaboration guidance
+  sections.push("## Working Together");
+  sections.push("You're part of a team. Act like it:");
   sections.push("");
   sections.push(
-    "Consultations do NOT break the chain of command. You remain responsible for your deliverables.",
+    "**Talk to people.** If your work touches someone else's domain, ping them via `sessions_send`:",
   );
-  sections.push("Do NOT wait for the orchestrator to tell you to consult — be proactive.");
+  sections.push("- Changing an API? Hit up the backend-architect first");
+  sections.push("- Security implications? Loop in the security-engineer");
+  sections.push("- Database changes? Check with the database-engineer");
+  sections.push("- UI impact? Get the frontend-architect's take");
+  sections.push("- Performance concerns? Ask the performance-engineer");
+  sections.push("");
+  sections.push(
+    "**Don't work in a silo.** Share what you find. Ask for input. Challenge ideas. That's how good teams ship.",
+  );
+  sections.push(
+    "You don't need permission to reach out — just do it. You're still the owner of your deliverable.",
+  );
   sections.push("");
 
   if (directReportSet.size > 0 || isWildcard) {
-    sections.push("## When to Form a Team (Debate)");
-    sections.push("For tasks that require **architectural decisions or cross-domain trade-offs**:");
+    sections.push("## Team Debates");
+    sections.push("When you're facing an architectural call or a cross-domain trade-off:");
     sections.push(
-      "1. Use **collaboration** tool with action `session.init` and relevant agents (2-4 members)",
+      "1. Spin up a collab session — `collaboration` tool, action `session.init`, invite 2-4 relevant people",
     );
-    sections.push("2. Each member publishes proposals, challenges, and agreements");
-    sections.push("3. Moderator (you or a lead) finalizes the decision with `decision.finalize`");
-    sections.push("4. Then delegate implementation sub-tasks based on the consensus");
+    sections.push("2. Let everyone weigh in — proposals, pushback, alignment");
+    sections.push("3. Make the call with `decision.finalize`");
+    sections.push("4. Then delegate the implementation based on what the team agreed");
     sections.push("");
 
-    sections.push("## When to Delegate Directly");
-    sections.push("For tasks with **clear execution paths** that don't need debate:");
-    sections.push("1. Split into independent sub-tasks (max **5**)");
-    sections.push("2. Use **sessions_spawn** with the target `agentId` for each sub-task");
-    sections.push("3. Each sub-task should have clear scope and acceptance criteria");
-    sections.push("4. Delegate to the agent whose domain best matches");
-    sections.push("");
-
-    sections.push("## Delegation Rules");
-    sections.push("- Maximum **5** sub-tasks per assignment");
-    sections.push("- Simple tasks (single domain) — handle directly, no delegation");
-    sections.push("- Always match sub-task to the agent with the right expertise");
+    sections.push("## Delegation");
+    sections.push("When the path is clear and you just need execution:");
+    sections.push("1. Break it into focused sub-tasks (max **5**)");
+    sections.push("2. `sessions_spawn` each one to the right specialist");
+    sections.push("3. Be specific — clear scope, clear acceptance criteria");
     sections.push(
-      "- After debate, reference the decision in each delegated sub-task (pass `debateSessionKey`)",
+      "4. If there was a team debate, pass the `debateSessionKey` so the context carries through",
+    );
+    sections.push("");
+    sections.push(
+      "**Keep it lean:** single-domain tasks? Just do it yourself. Don't over-delegate.",
     );
     sections.push("");
   }

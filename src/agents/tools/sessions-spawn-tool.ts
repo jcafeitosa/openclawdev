@@ -23,7 +23,11 @@ import { resolveAgentIdentity } from "../identity.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { buildSubagentSystemPrompt } from "../subagent-announce.js";
-import { listSubagentRunsForRequester, registerSubagentRun } from "../subagent-registry.js";
+import {
+  getSubagentRunBySessionKey,
+  listSubagentRunsForRequester,
+  registerSubagentRun,
+} from "../subagent-registry.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
   resolveDisplaySessionKey,
@@ -132,11 +136,25 @@ export function createSessionsSpawnTool(opts?: {
       const cfg = loadConfig();
       const { mainKey, alias } = resolveMainSessionAlias(cfg);
       const requesterSessionKey = opts?.agentSessionKey;
+      // Allow multi-level delegation with a depth limit (max 3 levels)
+      const MAX_SPAWN_DEPTH = 3;
       if (typeof requesterSessionKey === "string" && isSubagentSessionKey(requesterSessionKey)) {
-        return jsonResult({
-          status: "forbidden",
-          error: "sessions_spawn is not allowed from sub-agent sessions",
-        });
+        let depth = 0;
+        let currentKey: string | undefined = requesterSessionKey;
+        while (currentKey && isSubagentSessionKey(currentKey)) {
+          depth += 1;
+          if (depth >= MAX_SPAWN_DEPTH) {
+            break;
+          }
+          const parentRun = getSubagentRunBySessionKey(currentKey);
+          currentKey = parentRun?.requesterSessionKey;
+        }
+        if (depth >= MAX_SPAWN_DEPTH) {
+          return jsonResult({
+            status: "forbidden",
+            error: `Maximum delegation depth (${MAX_SPAWN_DEPTH}) reached. Complete your assigned work instead of delegating further.`,
+          });
+        }
       }
       const requesterInternalKey = requesterSessionKey
         ? resolveInternalSessionKey({

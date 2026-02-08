@@ -1,5 +1,6 @@
 import type { DelegationMetrics } from "../agents/delegation-types.js";
 import {
+  listAgentIds,
   resolveAgentConfig,
   resolveAgentRole,
   resolveDefaultAgentId,
@@ -36,7 +37,7 @@ export type HierarchyEvent = {
   parentSessionKey?: string;
   label?: string;
   task?: string;
-  status?: "running" | "completed" | "error" | "pending";
+  status?: "running" | "completed" | "error" | "pending" | "idle";
   outcome?: { status: string; error?: string };
 };
 
@@ -47,7 +48,7 @@ export type HierarchyNode = {
   agentRole?: string;
   label?: string;
   task?: string;
-  status: "running" | "completed" | "error" | "pending";
+  status: "running" | "completed" | "error" | "pending" | "idle";
   startedAt?: number;
   endedAt?: number;
   children: HierarchyNode[];
@@ -234,7 +235,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
   }
 
   // Find roots: parents that are not themselves children
-  const roots: HierarchyNode[] = [];
+  let roots: HierarchyNode[] = [];
   const rootSessionKeysUsed = new Set<string>();
   const parentKeys = new Set(childrenByParent.keys());
   for (const parentKey of parentKeys) {
@@ -438,8 +439,85 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     allNodeAgentIds.add(agentId);
   }
 
+  // Build parent-child relationships from allowAgents config
+  // Only include agents that are already active in the graph
+  const allAgentIds = listAgentIds(cfg);
+  const nodeByAgentId = new Map<string, HierarchyNode>();
+  for (const root of roots) {
+    if (root.agentId) {
+      nodeByAgentId.set(root.agentId, root);
+    }
+    // Also index children recursively
+    const indexChildren = (node: HierarchyNode) => {
+      for (const child of node.children) {
+        if (child.agentId) {
+          nodeByAgentId.set(child.agentId, child);
+        }
+        indexChildren(child);
+      }
+    };
+    indexChildren(root);
+  }
+
+  // Remove completed/error agents that have been idle longer than the TTL.
+  // Agents without endedAt are kept (they have no known completion time).
+  const COMPLETED_TTL_MS = 120_000; // 2 minutes
+  const now = Date.now();
+  const filterByTTL = (node: HierarchyNode): boolean => {
+    if (node.status === "completed" || node.status === "error") {
+      if (typeof node.endedAt === "number" && node.endedAt > 0) {
+        if (now - node.endedAt > COMPLETED_TTL_MS) {
+          return false; // expired — remove from graph
+        }
+      }
+    }
+    node.children = node.children.filter(filterByTTL);
+    return true;
+  };
+  roots = roots.filter(filterByTTL);
+
+  // Link active agents based on allowAgents config (parent-child hierarchy)
+  const agentsAttachedToParent = new Set<string>();
+  for (const agentId of allAgentIds) {
+    const parentNode = nodeByAgentId.get(agentId);
+    if (!parentNode) {
+      continue;
+    }
+    const agentCfg = resolveAgentConfig(cfg, agentId);
+    const allowAgents = agentCfg?.subagents?.allowAgents;
+    if (!allowAgents || allowAgents.length === 0) {
+      continue;
+    }
+    if (allowAgents.length === 1 && allowAgents[0] === "*") {
+      continue;
+    }
+    const existingChildIds = new Set(parentNode.children.map((c) => c.agentId).filter(Boolean));
+    for (const childId of allowAgents) {
+      if (existingChildIds.has(childId)) {
+        continue;
+      }
+      const childNode = nodeByAgentId.get(childId);
+      if (!childNode) {
+        continue;
+      }
+      if (agentsAttachedToParent.has(childId)) {
+        continue;
+      }
+      parentNode.children.push(childNode);
+      agentsAttachedToParent.add(childId);
+    }
+  }
+
+  // Rebuild roots: only agents NOT attached as children should be roots
+  const finalRoots: HierarchyNode[] = [];
+  for (const root of roots) {
+    if (!root.agentId || !agentsAttachedToParent.has(root.agentId)) {
+      finalRoots.push(root);
+    }
+  }
+
   return {
-    roots,
+    roots: finalRoots,
     collaborationEdges,
     updatedAt: Date.now(),
   };

@@ -590,7 +590,7 @@ export type AgentHierarchyNode = {
   agentRole?: string;
   label?: string;
   task?: string;
-  status: "running" | "completed" | "error" | "pending";
+  status: "running" | "completed" | "error" | "pending" | "idle";
   startedAt?: number;
   endedAt?: number;
   children: AgentHierarchyNode[];
