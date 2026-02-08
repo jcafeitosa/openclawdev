@@ -28,7 +28,10 @@ export async function saveDelegationRecord(record: DelegationRecord): Promise<vo
     await fs.mkdir(storePath, { recursive: true });
     const filePath = getDelegationPath(record.id);
     const content = JSON.stringify(record, null, 2);
-    await fs.writeFile(filePath, content, "utf-8");
+    // Atomic write: write to temp file then rename to prevent empty/corrupt files
+    const tmpPath = `${filePath}.tmp`;
+    await fs.writeFile(tmpPath, content, "utf-8");
+    await fs.rename(tmpPath, filePath);
   } catch (err) {
     console.error("Failed to save delegation record:", err);
   }
@@ -38,6 +41,11 @@ export async function loadDelegationRecord(id: string): Promise<DelegationRecord
   try {
     const filePath = getDelegationPath(id);
     const content = await fs.readFile(filePath, "utf-8");
+    if (!content.trim()) {
+      // Empty file — likely a result of interrupted write; clean it up
+      await fs.unlink(filePath).catch(() => {});
+      return null;
+    }
     return JSON.parse(content) as DelegationRecord;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
