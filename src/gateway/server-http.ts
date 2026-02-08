@@ -31,8 +31,11 @@ import {
   resolveHookChannel,
   resolveHookDeliver,
 } from "./hooks.js";
+import { getBearerToken, getHeader } from "./http-utils.js";
+import { isLoopbackAddress, resolveGatewayClientIp } from "./net.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
+import { buildAllowedOrigins, checkRequestOrigin, isOriginAllowed } from "./origin-guard.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
@@ -248,6 +251,37 @@ export function createGatewayHttpServer(opts: {
     try {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
+      const method = req.method ?? "GET";
+
+      // CSRF defense-in-depth: validate Origin/Referer on state-changing requests.
+      // Bearer-authenticated and loopback requests bypass this check.
+      if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS") {
+        const port = configSnapshot.gateway?.port ?? 18789;
+        const originResult = checkRequestOrigin({
+          method,
+          origin: getHeader(req, "origin"),
+          referer: getHeader(req, "referer"),
+          clientIp: resolveGatewayClientIp({
+            remoteAddr: req.socket?.remoteAddress,
+            forwardedFor: getHeader(req, "x-forwarded-for"),
+            realIp: getHeader(req, "x-real-ip"),
+            trustedProxies,
+          }),
+          hasBearerToken: !!getBearerToken(req),
+          config: {
+            allowLoopback: true,
+            allowBearerBypass: true,
+            allowedOrigins: buildAllowedOrigins(port),
+          },
+        });
+        if (!originResult.allowed) {
+          res.statusCode = 403;
+          res.setHeader("Content-Type", "application/json; charset=utf-8");
+          res.end(JSON.stringify({ error: "origin_rejected", reason: originResult.reason }));
+          return;
+        }
+      }
+
       if (await handleHooksRequest(req, res)) {
         return;
       }
@@ -331,12 +365,30 @@ export function attachGatewayUpgradeHandler(opts: {
   httpServer: HttpServer;
   wss: WebSocketServer;
   canvasHost: CanvasHostHandler | null;
+  port: number;
 }) {
-  const { httpServer, wss, canvasHost } = opts;
+  const { httpServer, wss, canvasHost, port } = opts;
+  const allowedWsOrigins = buildAllowedOrigins(port);
+
   httpServer.on("upgrade", (req, socket, head) => {
     if (canvasHost?.handleUpgrade(req, socket, head)) {
       return;
     }
+
+    // WebSocket origin validation: reject cross-origin connections from browsers.
+    // Programmatic clients (CLI, SDKs) typically don't send Origin headers — they're
+    // authenticated via the connect handshake. Browsers always send Origin, so if present
+    // and mismatched, this is a cross-site WebSocket hijacking attempt.
+    const origin = req.headers.origin;
+    const clientIp = req.socket?.remoteAddress;
+    if (typeof origin === "string" && origin.length > 0 && !isLoopbackAddress(clientIp)) {
+      if (!isOriginAllowed(origin, allowedWsOrigins)) {
+        socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+    }
+
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
     });
