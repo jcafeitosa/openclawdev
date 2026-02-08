@@ -11,7 +11,33 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+
+// Mock LanceDB to avoid native module loading issues in tests
+vi.mock("@lancedb/lancedb", () => ({
+  connect: vi.fn(async () => ({
+    tableNames: vi.fn(async () => []),
+    createTable: vi.fn(async () => ({
+      add: vi.fn(async () => {}),
+      search: vi.fn(() => ({
+        limit: vi.fn(() => ({
+          execute: vi.fn(async () => []),
+        })),
+      })),
+      delete: vi.fn(async () => {}),
+      createIndex: vi.fn(async () => {}),
+    })),
+    openTable: vi.fn(async () => ({
+      add: vi.fn(async () => {}),
+      search: vi.fn(() => ({
+        limit: vi.fn(() => ({
+          execute: vi.fn(async () => []),
+        })),
+      })),
+      delete: vi.fn(async () => {}),
+    })),
+  })),
+}));
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "test-key";
 const HAS_OPENAI_KEY = Boolean(process.env.OPENAI_API_KEY);

@@ -20,6 +20,8 @@
 **OpenClaw** is a _personal AI assistant_ you run on your own devices.
 It answers you on the channels you already use (WhatsApp, Telegram, Slack, Discord, Google Chat, Signal, iMessage, Microsoft Teams, WebChat), plus extension channels like BlueBubbles, Matrix, Zalo, and Zalo Personal. It can speak and listen on macOS/iOS/Android, and can render a live Canvas you control. The Gateway is just the control plane — the product is the assistant.
 
+> **Note:** This is a **fork** of the main OpenClaw project ([github.com/openclaw/openclaw](https://github.com/openclaw/openclaw)). We maintain this fork to extend the platform with custom features for our specific use cases while keeping in sync with upstream improvements.
+
 If you want a personal, single-user assistant that feels local, fast, and always-on, this is it.
 
 [Website](https://openclaw.ai) · [Docs](https://docs.openclaw.ai) · [DeepWiki](https://deepwiki.com/openclaw/openclaw) · [Getting Started](https://docs.openclaw.ai/start/getting-started) · [Updating](https://docs.openclaw.ai/install/updating) · [Showcase](https://docs.openclaw.ai/start/showcase) · [FAQ](https://docs.openclaw.ai/start/faq) · [Wizard](https://docs.openclaw.ai/start/wizard) · [Nix](https://github.com/openclaw/nix-clawdbot) · [Docker](https://docs.openclaw.ai/install/docker) · [Discord](https://discord.gg/clawd)
@@ -128,6 +130,25 @@ Run `openclaw doctor` to surface risky/misconfigured DM policies.
 - **[Onboarding](https://docs.openclaw.ai/start/wizard) + [skills](https://docs.openclaw.ai/tools/skills)** — wizard-driven setup with bundled/managed/workspace skills.
 
 ## Star History
+
+## Fork Information
+
+This repository is a **fork** of [OpenClaw](https://github.com/openclaw/openclaw), the personal AI assistant platform.
+
+### Relationship with Upstream
+
+- **Upstream repository:** [openclaw/openclaw](https://github.com/openclaw/openclaw)
+- **Purpose:** Extending OpenClaw with custom features while maintaining compatibility
+- **Synchronization:** We keep in sync with upstream changes and merge relevant improvements
+
+### Key Differences
+
+This fork includes additional features and customizations specific to our deployment:
+
+- Enhanced multi-agent coordination capabilities
+- Custom skills and agent templates
+- Additional channel integrations
+- Extended tooling for our specific use cases
 
 [![Star History Chart](https://api.star-history.com/svg?repos=jcafeitosa/openclawdev&type=date&legend=top-left)](https://www.star-history.com/#jcafeitosa/openclawdev&type=date&legend=top-left)
 
