@@ -155,10 +155,15 @@ const AGENT_ID_PAREN_RE = /\(([a-z0-9][a-z0-9_-]{0,63})\)\s*$/i;
 /**
  * Extract a plausible agent ID from a raw string.
  * Handles: "backend-architect", "Carlos (backend-architect)", etc.
+ * Excludes UUIDs which look like agent IDs but should be resolved as session IDs.
  */
 export function extractAgentIdCandidate(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
+    return null;
+  }
+  // Exclude UUIDs — they match AGENT_ID_RE but are session IDs, not agent IDs
+  if (SESSION_ID_RE.test(trimmed)) {
     return null;
   }
   if (AGENT_ID_RE.test(trimmed)) {

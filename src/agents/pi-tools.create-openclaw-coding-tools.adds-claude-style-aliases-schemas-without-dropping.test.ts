@@ -318,9 +318,10 @@ describe("createOpenClawCodingTools", () => {
       sessionKey: "agent:main:subagent:test",
     });
     const names = new Set(tools.map((tool) => tool.name));
-    expect(names.has("sessions_list")).toBe(false);
-    expect(names.has("sessions_history")).toBe(false);
-    expect(names.has("sessions_send")).toBe(false);
+    // Sub-agents can read sessions and communicate, but cannot spawn new agents
+    expect(names.has("sessions_list")).toBe(true);
+    expect(names.has("sessions_history")).toBe(true);
+    expect(names.has("sessions_send")).toBe(true);
     expect(names.has("sessions_spawn")).toBe(false);
 
     expect(names.has("read")).toBe(true);

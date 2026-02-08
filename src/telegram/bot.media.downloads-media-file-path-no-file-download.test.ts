@@ -19,12 +19,14 @@ type ApiStub = {
   config: { use: (arg: unknown) => void };
   sendChatAction: typeof sendChatActionSpy;
   setMyCommands: (commands: Array<{ command: string; description: string }>) => Promise<void>;
+  deleteMyCommands: () => Promise<void>;
 };
 
 const apiStub: ApiStub = {
   config: { use: useSpy },
   sendChatAction: sendChatActionSpy,
   setMyCommands: vi.fn(async () => undefined),
+  deleteMyCommands: vi.fn(async () => undefined),
 };
 
 beforeEach(() => {

@@ -98,6 +98,7 @@ const setMyCommandsSpy = vi.fn(async () => undefined);
 const sendMessageSpy = vi.fn(async () => ({ message_id: 77 }));
 const sendAnimationSpy = vi.fn(async () => ({ message_id: 78 }));
 const sendPhotoSpy = vi.fn(async () => ({ message_id: 79 }));
+const deleteMyCommandsSpy = vi.fn(async () => undefined);
 type ApiStub = {
   config: { use: (arg: unknown) => void };
   answerCallbackQuery: typeof answerCallbackQuerySpy;
@@ -105,6 +106,7 @@ type ApiStub = {
   editMessageText: typeof editMessageTextSpy;
   setMessageReaction: typeof setMessageReactionSpy;
   setMyCommands: typeof setMyCommandsSpy;
+  deleteMyCommands: typeof deleteMyCommandsSpy;
   sendMessage: typeof sendMessageSpy;
   sendAnimation: typeof sendAnimationSpy;
   sendPhoto: typeof sendPhotoSpy;
@@ -116,6 +118,7 @@ const apiStub: ApiStub = {
   editMessageText: editMessageTextSpy,
   setMessageReaction: setMessageReactionSpy,
   setMyCommands: setMyCommandsSpy,
+  deleteMyCommands: deleteMyCommandsSpy,
   sendMessage: sendMessageSpy,
   sendAnimation: sendAnimationSpy,
   sendPhoto: sendPhotoSpy,
@@ -214,7 +217,7 @@ describe("createTelegramBot", () => {
     expect(useSpy).toHaveBeenCalledWith("throttler");
   });
 
-  it("merges custom commands with native commands", () => {
+  it("merges custom commands with native commands", async () => {
     const config = {
       channels: {
         telegram: {
@@ -228,6 +231,11 @@ describe("createTelegramBot", () => {
     loadConfig.mockReturnValue(config);
 
     createTelegramBot({ token: "tok" });
+
+    // Wait for async setMyCommands to be called
+    await vi.waitFor(() => {
+      expect(setMyCommandsSpy).toHaveBeenCalled();
+    });
 
     const registered = setMyCommandsSpy.mock.calls[0]?.[0] as Array<{
       command: string;
@@ -245,7 +253,7 @@ describe("createTelegramBot", () => {
     ]);
   });
 
-  it("ignores custom commands that collide with native commands", () => {
+  it("ignores custom commands that collide with native commands", async () => {
     const errorSpy = vi.fn();
     const config = {
       channels: {
@@ -270,6 +278,11 @@ describe("createTelegramBot", () => {
       },
     });
 
+    // Wait for async setMyCommands to be called
+    await vi.waitFor(() => {
+      expect(setMyCommandsSpy).toHaveBeenCalled();
+    });
+
     const registered = setMyCommandsSpy.mock.calls[0]?.[0] as Array<{
       command: string;
       description: string;
@@ -287,7 +300,7 @@ describe("createTelegramBot", () => {
     expect(errorSpy).toHaveBeenCalled();
   });
 
-  it("registers custom commands when native commands are disabled", () => {
+  it("registers custom commands when native commands are disabled", async () => {
     const config = {
       commands: { native: false },
       channels: {
@@ -302,6 +315,11 @@ describe("createTelegramBot", () => {
     loadConfig.mockReturnValue(config);
 
     createTelegramBot({ token: "tok" });
+
+    // Wait for async setMyCommands to be called
+    await vi.waitFor(() => {
+      expect(setMyCommandsSpy).toHaveBeenCalled();
+    });
 
     const registered = setMyCommandsSpy.mock.calls[0]?.[0] as Array<{
       command: string;
