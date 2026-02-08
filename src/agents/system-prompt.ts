@@ -118,7 +118,7 @@ function buildMessagingSection(params: {
   return [
     "## Messaging",
     "- Reply in current session → automatically routes to the source channel (Signal, Telegram, etc.)",
-    "- Cross-session messaging → use sessions_send(sessionKey, message)",
+    "- Cross-agent messaging → use sessions_send({ agentId, message }) or sessions_send({ sessionKey, message })",
     "- Never use exec/curl for provider messaging; OpenClaw handles all routing internally.",
     params.availableTools.has("message")
       ? [
@@ -311,7 +311,7 @@ function buildTeamContext(agentId: string | undefined, cfgOverride?: OpenClawCon
   // Section 2: All specialists directory (for consultation)
   sections.push("## Team Directory");
   sections.push(
-    "Ping anyone via `sessions_send` — no need to go through the orchestrator. Just reach out directly.",
+    'Reach any agent directly via `sessions_send` with `agentId` set to their id (e.g. `sessions_send({ agentId: "backend-architect", message: "..." })`). No need to go through the orchestrator.',
   );
   sections.push("");
   for (const otherId of allAgentIds) {
@@ -369,7 +369,9 @@ function buildTeamContext(agentId: string | undefined, cfgOverride?: OpenClawCon
   );
   sections.push("");
   sections.push("**Consult anyone freely (no permission needed):**");
-  sections.push("- `sessions_send` any specialist for input, review, or data");
+  sections.push(
+    "- `sessions_send` with `agentId` to reach any specialist for input, review, or data",
+  );
   sections.push("- Challenge ideas, share findings, raise concerns");
   sections.push("- Short focused exchanges > isolated work. Don't be a silo.");
   sections.push("");
@@ -523,7 +525,8 @@ export function buildAgentSystemPrompt(params: {
     agents_list: "List agent ids allowed for sessions_spawn",
     sessions_list: "List other sessions (incl. sub-agents) with filters/last",
     sessions_history: "Fetch history for another session/sub-agent",
-    sessions_send: "Send a message to another session/sub-agent",
+    sessions_send:
+      "Send a message to another agent (use agentId) or session (use sessionKey/label)",
     sessions_spawn: "Spawn a sub-agent session",
     session_status:
       "Show a /status-equivalent status card (usage + time + Reasoning/Verbose/Elevated); use for model-use questions (📊 session_status); optional per-session model override",
@@ -685,7 +688,7 @@ export function buildAgentSystemPrompt(params: {
           "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
           "- sessions_list: list sessions",
           "- sessions_history: fetch session history",
-          "- sessions_send: send to another session",
+          "- sessions_send: send message to an agent (agentId) or session (sessionKey/label)",
           '- session_status: show usage/time/model state and answer "what model are we using?"',
         ].join("\n"),
     "TOOLS.md does not control tool availability; it is user guidance for how to use external tools.",

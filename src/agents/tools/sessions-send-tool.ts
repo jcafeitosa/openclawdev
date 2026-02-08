@@ -22,6 +22,7 @@ import { deliverToInbox } from "./agent-inbox.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
   createAgentToAgentPolicy,
+  extractAgentIdCandidate,
   extractAssistantText,
   resolveInternalSessionKey,
   resolveMainSessionAlias,
@@ -48,7 +49,7 @@ export function createSessionsSendTool(opts?: {
     label: "Session Send",
     name: "sessions_send",
     description:
-      "Send a message into another session. Use sessionKey or label to identify the target.",
+      "Send a message to another agent or session. Use agentId to target an agent directly, or sessionKey/label to target a specific session.",
     parameters: SessionsSendToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -93,6 +94,13 @@ export function createSessionsSendTool(opts?: {
       };
 
       let sessionKey = sessionKeyParam;
+
+      // Allow standalone agentId targeting: sessions_send({ agentId: "backend-architect", message: "..." })
+      if (!sessionKey && !labelParam && labelAgentIdParam) {
+        const targetId = normalizeAgentId(labelAgentIdParam);
+        sessionKey = `agent:${targetId}:${mainKey}`;
+      }
+
       if (!sessionKey && labelParam) {
         const requesterAgentId = requesterInternalKey
           ? resolveAgentIdFromSessionKey(requesterInternalKey)
@@ -145,20 +153,16 @@ export function createSessionsSendTool(opts?: {
             timeoutMs: 10_000,
           });
           resolvedKey = typeof resolved?.key === "string" ? resolved.key.trim() : "";
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          if (restrictToSpawned) {
-            return jsonResult({
-              runId: crypto.randomUUID(),
-              status: "forbidden",
-              error: "Session not visible from this sandboxed agent session.",
-            });
+        } catch {
+          // Label resolution failed — will try agent ID fallback below
+        }
+
+        // Fallback: if label looks like an agent ID (e.g. "backend-architect"), convert directly
+        if (!resolvedKey) {
+          const candidate = extractAgentIdCandidate(labelParam);
+          if (candidate) {
+            resolvedKey = `agent:${normalizeAgentId(candidate)}:${mainKey}`;
           }
-          return jsonResult({
-            runId: crypto.randomUUID(),
-            status: "error",
-            error: msg || `No session found with label: ${labelParam}`,
-          });
         }
 
         if (!resolvedKey) {
