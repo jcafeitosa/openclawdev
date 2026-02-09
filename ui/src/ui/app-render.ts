@@ -100,6 +100,7 @@ import { renderLogs } from "./views/logs.ts";
 import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
 import { renderProviders } from "./views/providers.ts";
+import { renderResources } from "./views/resources.ts";
 import { renderSecurity } from "./views/security.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
@@ -1069,6 +1070,19 @@ export function renderApp(state: AppViewState) {
                       ? { kind: "node" as const, nodeId: state.execApprovalsTargetNodeId }
                       : { kind: "gateway" as const };
                   return saveExecApprovals(state, target);
+                },
+              })
+            : nothing
+        }
+
+        ${
+          state.tab === "resources"
+            ? renderResources({
+                loading: state.agentResourcesLoading,
+                error: state.agentResourcesError,
+                data: state.agentResourcesData,
+                onRefresh: () => {
+                  void loadAgentResources(state);
                 },
               })
             : nothing

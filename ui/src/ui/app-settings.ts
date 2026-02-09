@@ -9,6 +9,7 @@ import {
 import { scheduleChatScroll, scheduleLogsScroll } from "./app-scroll.ts";
 import { loadAgentHierarchy, type AgentHierarchyState } from "./controllers/agent-hierarchy.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
+import { loadAgentResources, type AgentResourcesState } from "./controllers/agent-resources.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
 import { loadProvidersList, type AuthHost } from "./controllers/auth.ts";
@@ -210,6 +211,9 @@ export async function refreshActiveTab(host: SettingsHost) {
   }
   if (host.tab === "hierarchy") {
     await loadAgentHierarchy(host as unknown as AgentHierarchyState);
+  }
+  if (host.tab === "resources") {
+    await loadAgentResources(host as unknown as AgentResourcesState);
   }
   if (host.tab === "agents") {
     const app = host as unknown as OpenClawApp;
