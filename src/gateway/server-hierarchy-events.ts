@@ -533,6 +533,23 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     return false;
   });
 
+  // Rebuild the agentId index after TTL filtering removed expired nodes.
+  nodeByAgentId.clear();
+  for (const root of roots) {
+    if (root.agentId) {
+      nodeByAgentId.set(root.agentId, root);
+    }
+    const reindexChildren = (node: HierarchyNode) => {
+      for (const child of node.children) {
+        if (child.agentId) {
+          nodeByAgentId.set(child.agentId, child);
+        }
+        reindexChildren(child);
+      }
+    };
+    reindexChildren(root);
+  }
+
   // Link active agents based on allowAgents config (parent-child hierarchy)
   const agentsAttachedToParent = new Set<string>();
   for (const agentId of allAgentIds) {
