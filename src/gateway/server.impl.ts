@@ -6,9 +6,11 @@ import type { ControlUiRootState } from "./control-ui.js";
 import type { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { initCapabilitiesRegistry } from "../agents/capabilities-registry.js";
+import { loadModelPatternsFromConfig } from "../agents/capability-patterns-loader.js";
 import { initDelegationRegistry } from "../agents/delegation-registry.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
+import { ensureTeamChatAutoJoin } from "../agents/team-chat.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
 import { formatCliCommand } from "../cli/command-format.js";
 import { createDefaultDeps } from "../cli/deps.js";
@@ -234,6 +236,8 @@ export async function startGatewayServer(
   // is listening. Calling it here would cause "gateway closed (1006)" errors because
   // restoreSubagentRunsOnce() opens WS connections to announce completed runs.
   initCapabilitiesRegistry(cfgAtStart);
+  loadModelPatternsFromConfig(cfgAtStart);
+  ensureTeamChatAutoJoin(cfgAtStart);
 
   // Initialize storage and cache (non-blocking, with automatic fallback)
   // Storage: PostgreSQL → SQLite → Memory

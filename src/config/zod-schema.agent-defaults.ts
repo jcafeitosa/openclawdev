@@ -13,8 +13,42 @@ import {
   HumanDelaySchema,
 } from "./zod-schema.core.js";
 
+// Schema for ModelCapabilities partial (for dynamic patterns)
+const ModelCapabilitiesPartialSchema = z
+  .object({
+    coding: z.boolean().optional(),
+    reasoning: z.boolean().optional(),
+    vision: z.boolean().optional(),
+    general: z.boolean().optional(),
+    fast: z.boolean().optional(),
+    creative: z.boolean().optional(),
+    performanceTier: z
+      .union([z.literal("fast"), z.literal("balanced"), z.literal("powerful")])
+      .optional(),
+    costTier: z
+      .union([z.literal("free"), z.literal("cheap"), z.literal("moderate"), z.literal("expensive")])
+      .optional(),
+    primary: z
+      .union([
+        z.literal("coding"),
+        z.literal("reasoning"),
+        z.literal("vision"),
+        z.literal("general"),
+      ])
+      .optional(),
+  })
+  .strict();
+
 export const AgentDefaultsSchema = z
   .object({
+    delegation: z
+      .object({
+        autoRun: z.boolean().optional(),
+        debounceMs: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
+    persona: z.string().optional(),
     model: z
       .object({
         primary: z.string().optional(),
@@ -26,6 +60,30 @@ export const AgentDefaultsSchema = z
       .object({
         primary: z.string().optional(),
         fallbacks: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    toolModel: z
+      .object({
+        primary: z.string().optional(),
+        fallbacks: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    codingModel: z
+      .object({
+        primary: z.string().optional(),
+        fallbacks: z.array(z.string()).optional(),
+      })
+      .strict()
+      .optional(),
+    modelByComplexity: z
+      .object({
+        enabled: z.boolean().optional(),
+        autoPickFromPool: z.boolean().optional(),
+        trivial: z.string().optional(),
+        moderate: z.string().optional(),
+        complex: z.string().optional(),
       })
       .strict()
       .optional(),
@@ -41,6 +99,7 @@ export const AgentDefaultsSchema = z
           .strict(),
       )
       .optional(),
+    modelPatterns: z.record(z.string(), ModelCapabilitiesPartialSchema).optional(),
     workspace: z.string().optional(),
     repoRoot: z.string().optional(),
     projects: z
