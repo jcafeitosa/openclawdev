@@ -1,9 +1,12 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { FailoverReason } from "./pi-embedded-helpers.js";
+import { cacheGet, cacheSet, cacheDelete, CACHE_KEYS } from "../infra/cache/cache.js";
+import { isRedisConnected } from "../infra/cache/redis.js";
 import {
   CircuitBreakerOpenError,
   createCircuitBreaker,
   type CircuitBreaker,
+  type CircuitBreakerSnapshot,
 } from "../infra/circuit-breaker.js";
 import {
   ensureAuthProfileStore,
@@ -26,6 +29,9 @@ import {
   resolveConfiguredModelRef,
   resolveModelRefFromString,
 } from "./model-selection.js";
+
+// Default circuit breaker reset timeout (used for Redis TTL calculation).
+const DEFAULT_BREAKER_RESET_TIMEOUT_MS = 60_000;
 
 // Per-provider circuit breakers for instant fail-fast on repeated upstream failures.
 const providerBreakers = new Map<string, CircuitBreaker>();
@@ -59,6 +65,97 @@ export function resetModelCooldowns(): void {
   modelCooldowns.clear();
 }
 
+// ---------------------------------------------------------------------------
+// Redis persistence helpers (fire-and-forget, best-effort)
+// ---------------------------------------------------------------------------
+
+/** Persist a cooldown entry to Redis. TTL matches cooldown duration for auto-expiry. */
+function persistCooldown(key: string, state: ModelCooldownState): void {
+  const ttlMs = state.until - Date.now();
+  if (ttlMs <= 0) {
+    return;
+  }
+  const ttlSeconds = Math.ceil(ttlMs / 1000);
+  cacheSet(CACHE_KEYS.modelCooldown(key), state, { ttlSeconds }).catch(() => {});
+}
+
+/** Remove a cooldown entry from Redis. */
+function removeCooldownFromRedis(key: string): void {
+  cacheDelete(CACHE_KEYS.modelCooldown(key)).catch(() => {});
+}
+
+/** Load cooldown entries from Redis into the in-memory Map. Called once at startup. */
+export async function loadCooldownsFromRedis(): Promise<number> {
+  try {
+    if (!(await isRedisConnected())) {
+      return 0;
+    }
+    const { getRedis, getRedisConfig } = await import("../infra/cache/redis.js");
+    const redis = getRedis();
+    const config = getRedisConfig();
+    const prefix = config.keyPrefix ?? "openclaw:";
+    const pattern = `${prefix}model:cooldown:*`;
+    const keys = await redis.keys(pattern);
+    if (keys.length === 0) {
+      return 0;
+    }
+    const now = Date.now();
+    let restored = 0;
+    for (const fullKey of keys) {
+      const unprefixed = fullKey.startsWith(prefix) ? fullKey.slice(prefix.length) : fullKey;
+      // Strip "model:cooldown:" prefix to get the cooldown key
+      const cooldownKey = unprefixed.replace(/^model:cooldown:/, "");
+      const state = await cacheGet<ModelCooldownState>(unprefixed);
+      if (state && state.until > now) {
+        modelCooldowns.set(cooldownKey, state);
+        restored++;
+      }
+    }
+    return restored;
+  } catch {
+    return 0;
+  }
+}
+
+/** Persist circuit breaker state to Redis. */
+function persistBreakerState(provider: string, snap: CircuitBreakerSnapshot): void {
+  // TTL = 2x the reset timeout so stale entries auto-expire
+  const ttlSeconds = Math.ceil((DEFAULT_BREAKER_RESET_TIMEOUT_MS * 2) / 1000);
+  cacheSet(CACHE_KEYS.circuitBreaker(provider), snap, { ttlSeconds }).catch(() => {});
+}
+
+/** Load circuit breaker states from Redis into the in-memory Map. Called once at startup. */
+export async function loadBreakersFromRedis(): Promise<number> {
+  try {
+    if (!(await isRedisConnected())) {
+      return 0;
+    }
+    const { getRedis, getRedisConfig } = await import("../infra/cache/redis.js");
+    const redis = getRedis();
+    const config = getRedisConfig();
+    const prefix = config.keyPrefix ?? "openclaw:";
+    const pattern = `${prefix}circuit:breaker:*`;
+    const keys = await redis.keys(pattern);
+    if (keys.length === 0) {
+      return 0;
+    }
+    let restored = 0;
+    for (const fullKey of keys) {
+      const unprefixed = fullKey.startsWith(prefix) ? fullKey.slice(prefix.length) : fullKey;
+      const provider = unprefixed.replace(/^circuit:breaker:/, "");
+      const snap = await cacheGet<CircuitBreakerSnapshot>(unprefixed);
+      if (snap) {
+        const breaker = getProviderBreaker(provider);
+        breaker.restore(snap);
+        restored++;
+      }
+    }
+    return restored;
+  } catch {
+    return 0;
+  }
+}
+
 export function getModelCooldownSnapshot(now = Date.now()): ModelCooldownSnapshotEntry[] {
   const out: ModelCooldownSnapshotEntry[] = [];
   for (const [key, state] of modelCooldowns.entries()) {
@@ -88,7 +185,7 @@ function getProviderBreaker(provider: string): CircuitBreaker {
   if (!breaker) {
     breaker = createCircuitBreaker(provider, {
       failureThreshold: 5,
-      resetTimeoutMs: 60_000,
+      resetTimeoutMs: DEFAULT_BREAKER_RESET_TIMEOUT_MS,
       shouldTrip: (err) => {
         const normalized = coerceToFailoverError(err);
         if (!normalized) {
@@ -216,7 +313,9 @@ function recordModelFailure(params: {
   const retryAfterHintMs = params.errorMessage ? parseRetryAfterMs(params.errorMessage) : 0;
   const cooldownMs = computeModelCooldownMs({ reason: params.reason, failures, retryAfterHintMs });
   const until = Math.max(existing?.until ?? 0, now + cooldownMs);
-  modelCooldowns.set(key, { until, failures, lastReason: params.reason });
+  const cooldownState = { until, failures, lastReason: params.reason };
+  modelCooldowns.set(key, cooldownState);
+  persistCooldown(key, cooldownState);
 
   if (retryAfterHintMs > 0) {
     console.warn(
@@ -230,7 +329,9 @@ function recordModelFailure(params: {
 }
 
 function recordModelSuccess(provider: string, model: string): void {
-  modelCooldowns.delete(modelKey(provider, model));
+  const key = modelKey(provider, model);
+  modelCooldowns.delete(key);
+  removeCooldownFromRedis(key);
 }
 
 type ModelCandidate = {
@@ -877,6 +978,7 @@ async function runWithCandidates<T>(params: {
 
     try {
       const result = await breaker.execute(() => params.run(candidate.provider, candidate.model));
+      persistBreakerState(candidate.provider, breaker.snapshot());
       recordModelSuccess(candidate.provider, candidate.model);
       return {
         result,
@@ -885,6 +987,8 @@ async function runWithCandidates<T>(params: {
         attempts,
       };
     } catch (err) {
+      // Persist breaker state after failure (may have transitioned to open)
+      persistBreakerState(candidate.provider, breaker.snapshot());
       if (err instanceof CircuitBreakerOpenError) {
         attempts.push({
           provider: candidate.provider,

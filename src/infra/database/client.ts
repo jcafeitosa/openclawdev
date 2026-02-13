@@ -197,6 +197,53 @@ export async function runMigrations(): Promise<void> {
         END $$;
       `,
     },
+    {
+      name: "003_create_security_events",
+      up: `
+        CREATE TABLE IF NOT EXISTS security_events (
+          time TIMESTAMPTZ NOT NULL,
+          event_id TEXT NOT NULL,
+          category TEXT NOT NULL,
+          severity TEXT NOT NULL,
+          action TEXT NOT NULL,
+          description TEXT,
+          source TEXT,
+          session_key TEXT,
+          agent_id TEXT,
+          user_id TEXT,
+          ip_address TEXT,
+          channel TEXT,
+          blocked BOOLEAN DEFAULT FALSE,
+          metadata JSONB,
+          PRIMARY KEY (time, event_id)
+        );
+
+        -- TimescaleDB hypertable if available
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+            PERFORM create_hypertable('security_events', 'time', if_not_exists => TRUE);
+          END IF;
+        END $$;
+
+        CREATE INDEX IF NOT EXISTS idx_security_category ON security_events (category, time DESC);
+        CREATE INDEX IF NOT EXISTS idx_security_severity ON security_events (severity, time DESC);
+        CREATE INDEX IF NOT EXISTS idx_security_session ON security_events (session_key, time DESC) WHERE session_key IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_security_ip ON security_events (ip_address, time DESC) WHERE ip_address IS NOT NULL;
+
+        -- Compression policy for TimescaleDB (compress after 7 days)
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+            ALTER TABLE security_events SET (
+              timescaledb.compress,
+              timescaledb.compress_segmentby = 'category,severity'
+            );
+            SELECT add_compression_policy('security_events', INTERVAL '7 days', if_not_exists => TRUE);
+          END IF;
+        END $$;
+      `,
+    },
   ];
 
   // Apply pending migrations

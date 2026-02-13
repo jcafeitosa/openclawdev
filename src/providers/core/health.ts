@@ -1,15 +1,62 @@
 /**
  * Provider health tracking and monitoring.
- * Basic implementation - to be extended in Phase 3.
+ * Persists health state to Redis for cross-restart continuity.
  */
 
 import type { ProviderHealthMetrics, ProviderId, ProviderStatus } from "./types.js";
+import { cacheGet, cacheSet, CACHE_KEYS, CACHE_TTL } from "../../infra/cache/cache.js";
+import { isRedisConnected } from "../../infra/cache/redis.js";
 
 /**
- * In-memory health metrics store.
- * TODO: Persist to database in Phase 3.
+ * In-memory health metrics store, backed by Redis for cross-restart persistence.
  */
 const healthMetrics = new Map<ProviderId, ProviderHealthMetrics>();
+
+// ---------------------------------------------------------------------------
+// Redis persistence helpers (fire-and-forget, best-effort)
+// ---------------------------------------------------------------------------
+
+/** Persist provider health metrics to Redis. */
+function persistHealth(providerId: ProviderId): void {
+  const metrics = healthMetrics.get(providerId);
+  if (!metrics) {
+    return;
+  }
+  cacheSet(CACHE_KEYS.providerHealth(providerId), metrics, {
+    ttlSeconds: CACHE_TTL.providerHealth,
+  }).catch(() => {});
+}
+
+/** Load all provider health metrics from Redis into the in-memory Map. Called once at startup. */
+export async function loadHealthFromRedis(): Promise<number> {
+  try {
+    if (!(await isRedisConnected())) {
+      return 0;
+    }
+    const { getRedis, getRedisConfig } = await import("../../infra/cache/redis.js");
+    const redis = getRedis();
+    const config = getRedisConfig();
+    const prefix = config.keyPrefix ?? "openclaw:";
+    const pattern = `${prefix}provider:health:*`;
+    const keys = await redis.keys(pattern);
+    if (keys.length === 0) {
+      return 0;
+    }
+    let restored = 0;
+    for (const fullKey of keys) {
+      const unprefixed = fullKey.startsWith(prefix) ? fullKey.slice(prefix.length) : fullKey;
+      const providerId = unprefixed.replace(/^provider:health:/, "") as ProviderId;
+      const metrics = await cacheGet<ProviderHealthMetrics>(unprefixed);
+      if (metrics) {
+        healthMetrics.set(providerId, metrics);
+        restored++;
+      }
+    }
+    return restored;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * Health thresholds and configuration.
@@ -71,6 +118,7 @@ export function recordSuccess(providerId: ProviderId, responseTimeMs: number): v
       : metrics.avgResponseTime * (1 - alpha) + responseTimeMs * alpha;
 
   updateProviderStatus(metrics);
+  persistHealth(providerId);
 }
 
 /**
@@ -85,6 +133,7 @@ export function recordFailure(providerId: ProviderId, error: string | Error): vo
   metrics.successRate = metrics.successfulCalls / metrics.totalCalls;
 
   updateProviderStatus(metrics);
+  persistHealth(providerId);
 }
 
 /**

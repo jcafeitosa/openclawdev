@@ -1,8 +1,8 @@
 /**
  * Security Events Store for OpenClaw.
  *
- * Persists security events to JSONL files for later analysis
- * and provides query capabilities for the cybersecurity agent.
+ * Dual-writes security events to JSONL files (fast, non-blocking primary)
+ * and PostgreSQL (async best-effort) for efficient querying.
  */
 
 import { createReadStream } from "node:fs";
@@ -10,6 +10,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { resolveStateDir } from "../config/paths.js";
+import { isDatabaseConnected, getDatabase } from "../infra/database/client.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import {
   type SecurityEvent,
@@ -30,6 +31,7 @@ const MAX_ROTATED_FILES = 30; // Keep 30 rotated files
 let storeInitialized = false;
 let currentLogPath: string | null = null;
 let unsubscribe: (() => void) | null = null;
+let pgAvailable = false;
 
 /**
  * Get the security events directory path.
@@ -65,6 +67,12 @@ export async function initializeSecurityEventsStore(): Promise<void> {
     // Check if rotation is needed
     await rotateIfNeeded();
 
+    // Probe PG availability (non-blocking)
+    pgAvailable = await isDatabaseConnected().catch(() => false);
+    if (pgAvailable) {
+      log.info("PostgreSQL available for security events");
+    }
+
     // Subscribe to security events
     unsubscribe = onSecurityEvent(async (event) => {
       await persistEvent(event);
@@ -93,7 +101,7 @@ export function shutdownSecurityEventsStore(): void {
 }
 
 /**
- * Persist a security event to the log file.
+ * Persist a security event to the JSONL log file and (async best-effort) PostgreSQL.
  */
 async function persistEvent(event: SecurityEvent): Promise<void> {
   if (!currentLogPath) {
@@ -111,6 +119,48 @@ async function persistEvent(event: SecurityEvent): Promise<void> {
       `failed to persist security event: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+
+  // Async PG write (fire-and-forget, best-effort)
+  if (pgAvailable) {
+    persistEventToPg(event).catch((err) => {
+      log.debug(
+        `failed to write security event to PG: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
+}
+
+/** Insert a security event into the PostgreSQL security_events table. */
+async function persistEventToPg(event: SecurityEvent): Promise<void> {
+  const db = getDatabase();
+  const metadata: Record<string, unknown> = {};
+  if (event.context) {
+    Object.assign(metadata, event.context);
+  }
+  if (event.relatedEvents) {
+    metadata.relatedEvents = event.relatedEvents;
+  }
+  await db`
+    INSERT INTO security_events (
+      time, event_id, category, severity, action, description, source,
+      session_key, agent_id, user_id, ip_address, channel, blocked, metadata
+    ) VALUES (
+      ${new Date(event.timestamp).toISOString()},
+      ${event.id},
+      ${event.category},
+      ${event.severity},
+      ${event.action},
+      ${event.description},
+      ${event.source},
+      ${event.sessionKey ?? null},
+      ${event.agentId ?? null},
+      ${event.userId ?? null},
+      ${event.ipAddress ?? null},
+      ${event.channel ?? null},
+      ${event.blocked ?? false},
+      ${JSON.stringify(metadata)}::jsonb
+    )
+  `;
 }
 
 /**
@@ -209,9 +259,122 @@ export interface SecurityEventQueryOptions {
 
 /**
  * Query security events from the store.
+ * Uses PostgreSQL when available, falling back to JSONL file scan.
  */
 export async function querySecurityEvents(
   options: SecurityEventQueryOptions = {},
+): Promise<SecurityEvent[]> {
+  // Try PG-backed query first
+  if (pgAvailable) {
+    try {
+      return await querySecurityEventsFromPg(options);
+    } catch (err) {
+      log.debug(
+        `PG security events query failed, falling back to JSONL: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // JSONL fallback
+  return querySecurityEventsFromJsonl(options);
+}
+
+/** Query security events from PostgreSQL. */
+async function querySecurityEventsFromPg(
+  options: SecurityEventQueryOptions,
+): Promise<SecurityEvent[]> {
+  const db = getDatabase();
+  const limit = options.limit ?? 1000;
+  const offset = options.offset ?? 0;
+  const order = options.sortOrder === "asc" ? db`ASC` : db`DESC`;
+
+  // Build dynamic WHERE conditions
+  const conditions = [];
+  if (options.startTime) {
+    conditions.push(db`time >= ${new Date(options.startTime).toISOString()}::timestamptz`);
+  }
+  if (options.endTime) {
+    conditions.push(db`time <= ${new Date(options.endTime).toISOString()}::timestamptz`);
+  }
+  if (options.categories && options.categories.length > 0) {
+    conditions.push(db`category = ANY(${options.categories})`);
+  }
+  if (options.severities && options.severities.length > 0) {
+    conditions.push(db`severity = ANY(${options.severities})`);
+  }
+  if (options.sessionKey) {
+    conditions.push(db`session_key = ${options.sessionKey}`);
+  }
+  if (options.userId) {
+    conditions.push(db`user_id = ${options.userId}`);
+  }
+  if (options.agentId) {
+    conditions.push(db`agent_id = ${options.agentId}`);
+  }
+  if (options.ipAddress) {
+    conditions.push(db`ip_address = ${options.ipAddress}`);
+  }
+  if (options.channel) {
+    conditions.push(db`channel = ${options.channel}`);
+  }
+  if (options.source) {
+    conditions.push(db`source = ${options.source}`);
+  }
+  if (options.action) {
+    if (options.action.endsWith("*")) {
+      const prefix = options.action.slice(0, -1);
+      conditions.push(db`action LIKE ${prefix + "%"}`);
+    } else {
+      conditions.push(db`action = ${options.action}`);
+    }
+  }
+  if (options.blockedOnly) {
+    conditions.push(db`blocked = TRUE`);
+  }
+
+  const where =
+    conditions.length > 0 ? db`WHERE ${conditions.reduce((a, b) => db`${a} AND ${b}`)}` : db``;
+
+  const rows = await db`
+    SELECT time, event_id, category, severity, action, description, source,
+           session_key, agent_id, user_id, ip_address, channel, blocked, metadata
+    FROM security_events
+    ${where}
+    ORDER BY time ${order}
+    LIMIT ${limit} OFFSET ${offset}
+  `;
+
+  return rows.map((row) => pgRowToSecurityEvent(row));
+}
+
+/** Convert a PG row back to a SecurityEvent. */
+function pgRowToSecurityEvent(row: Record<string, unknown>): SecurityEvent {
+  const metadata = (row.metadata ?? {}) as Record<string, unknown>;
+  const relatedEvents = metadata.relatedEvents as string[] | undefined;
+  const context = { ...metadata };
+  delete context.relatedEvents;
+  return {
+    id: row.event_id as string,
+    timestamp: new Date(row.time as string).getTime(),
+    category: row.category as SecurityEventCategory,
+    severity: row.severity as SecurityEventSeverity,
+    action: row.action as string,
+    description: row.description as string,
+    source: row.source as string,
+    sessionKey: (row.session_key as string) || undefined,
+    agentId: (row.agent_id as string) || undefined,
+    userId: (row.user_id as string) || undefined,
+    ipAddress: (row.ip_address as string) || undefined,
+    channel: (row.channel as string) || undefined,
+    blocked: row.blocked as boolean,
+    context: Object.keys(context).length > 0 ? context : undefined,
+    relatedEvents,
+  };
+}
+
+/** JSONL-based query fallback. */
+async function querySecurityEventsFromJsonl(
+  options: SecurityEventQueryOptions,
 ): Promise<SecurityEvent[]> {
   const events: SecurityEvent[] = [];
   const eventsDir = getSecurityEventsDir();

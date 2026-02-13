@@ -8,6 +8,12 @@ import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent
 import { initCapabilitiesRegistry } from "../agents/capabilities-registry.js";
 import { loadModelPatternsFromConfig } from "../agents/capability-patterns-loader.js";
 import { initDelegationRegistry } from "../agents/delegation-registry.js";
+import { loadCooldownsFromRedis, loadBreakersFromRedis } from "../agents/model-fallback.js";
+import {
+  getProviderMetrics,
+  loadMetricsFromRedis,
+  startMetricsSnapshotTimer,
+} from "../agents/provider-metrics.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { ensureTeamChatAutoJoin } from "../agents/team-chat.js";
@@ -47,6 +53,7 @@ import {
 import { scheduleGatewayUpdateCheck } from "../infra/update-startup.js";
 import { startDiagnosticHeartbeat, stopDiagnosticHeartbeat } from "../logging/diagnostic.js";
 import { createSubsystemLogger, runtimeForLogger } from "../logging/subsystem.js";
+import { loadHealthFromRedis } from "../providers/core/health.js";
 import { initializeSecurityEventsStore } from "../security/events-store.js";
 import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
@@ -260,6 +267,40 @@ export async function startGatewayServer(
   });
   // Fire-and-forget: don't block gateway startup
   Promise.all([storageReady, cacheReady, securityEventsReady, delegationReady]).catch(() => {});
+
+  // Restore persisted state from Redis after cache is ready (non-blocking)
+  cacheReady
+    .then(async () => {
+      const results = await Promise.allSettled([
+        loadCooldownsFromRedis().then((n) => {
+          if (n > 0) {
+            log.info(`restored ${n} model cooldown(s) from Redis`);
+          }
+        }),
+        loadHealthFromRedis().then((n) => {
+          if (n > 0) {
+            log.info(`restored ${n} provider health metric(s) from Redis`);
+          }
+        }),
+        loadBreakersFromRedis().then((n) => {
+          if (n > 0) {
+            log.info(`restored ${n} circuit breaker(s) from Redis`);
+          }
+        }),
+        loadMetricsFromRedis(getProviderMetrics()).then((ok) => {
+          if (ok) {
+            log.info("restored provider metrics snapshot from Redis");
+          }
+        }),
+      ]);
+      // Start periodic metrics snapshot after restore
+      startMetricsSnapshotTimer(getProviderMetrics());
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        log.debug(`${failures.length} persisted state restore(s) failed (non-critical)`);
+      }
+    })
+    .catch(() => {});
 
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);

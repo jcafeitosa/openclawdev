@@ -1,5 +1,12 @@
 export type CircuitBreakerState = "closed" | "open" | "half-open";
 
+/** Serializable circuit breaker state for persistence (e.g. Redis). */
+export type CircuitBreakerSnapshot = {
+  state: CircuitBreakerState;
+  failureCount: number;
+  lastFailureTime: number;
+};
+
 export type CircuitBreakerConfig = {
   /** Number of consecutive failures before tripping to open state (default: 5) */
   failureThreshold?: number;
@@ -15,6 +22,10 @@ export type CircuitBreaker = {
   execute: <T>(fn: () => Promise<T>) => Promise<T>;
   state: () => CircuitBreakerState;
   reset: () => void;
+  /** Capture a serializable snapshot for persistence. */
+  snapshot: () => CircuitBreakerSnapshot;
+  /** Restore state from a persisted snapshot. */
+  restore: (snap: CircuitBreakerSnapshot) => void;
 };
 
 export class CircuitBreakerOpenError extends Error {
@@ -103,5 +114,16 @@ export function createCircuitBreaker(key: string, config?: CircuitBreakerConfig)
     }
   }
 
-  return { execute, state, reset };
+  function snapshot(): CircuitBreakerSnapshot {
+    return { state: currentState, failureCount, lastFailureTime };
+  }
+
+  function restore(snap: CircuitBreakerSnapshot): void {
+    currentState = snap.state;
+    failureCount = snap.failureCount;
+    lastFailureTime = snap.lastFailureTime;
+    successCount = 0;
+  }
+
+  return { execute, state, reset, snapshot, restore };
 }

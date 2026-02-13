@@ -90,6 +90,17 @@ export const CACHE_KEYS = {
   usageToday: (providerId: string) => `usage:today:${providerId}`,
   usageWeek: (providerId: string) => `usage:week:${providerId}`,
   usageMonth: (providerId: string) => `usage:month:${providerId}`,
+  // Model cooldown state (per provider/model pair)
+  modelCooldown: (key: string) => `model:cooldown:${key}`,
+  modelCooldownPattern: "model:cooldown:*",
+  // Provider health metrics
+  providerHealth: (providerId: string) => `provider:health:${providerId}`,
+  providerHealthPattern: "provider:health:*",
+  // Circuit breaker state
+  circuitBreaker: (provider: string) => `circuit:breaker:${provider}`,
+  circuitBreakerPattern: "circuit:breaker:*",
+  // Provider metrics snapshot
+  metricsSnapshot: "metrics:snapshot:latest",
 } as const;
 
 // TTL values in seconds
@@ -97,4 +108,6 @@ export const CACHE_TTL = {
   providerDetection: 300, // 5 minutes
   providerStatus: 60, // 1 minute
   usageStats: 60, // 1 minute
+  providerHealth: 3600, // 1 hour — stale health auto-expires
+  metricsSnapshot: 3600, // 1 hour
 } as const;

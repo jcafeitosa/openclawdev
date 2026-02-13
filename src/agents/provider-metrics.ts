@@ -1,7 +1,11 @@
 /**
  * Comprehensive metrics system for AI provider observability.
  * Tracks latency, success/error rates, token usage, and costs per provider+model.
+ * Counter state is periodically snapshotted to Redis for cross-restart continuity.
  */
+
+import { cacheGet, cacheSet, CACHE_KEYS, CACHE_TTL } from "../infra/cache/cache.js";
+import { isRedisConnected } from "../infra/cache/redis.js";
 
 // ============================================================================
 // Metric Types
@@ -527,6 +531,144 @@ export function createNoopProviderMetrics(): ProviderMetrics {
     reset: () => {},
     resetProvider: () => {},
   };
+}
+
+// ============================================================================
+// Persistence (Redis snapshots)
+// ============================================================================
+
+/** Serializable counter state (latency samples are NOT persisted). */
+export interface MetricsCounterSnapshot {
+  providers: Record<
+    string,
+    Record<
+      string,
+      {
+        requests: { started: number; success: number; error: number };
+        tokens: { input: number; output: number; total: number };
+        cost: { estimated: number };
+        errors: Record<string, number>;
+        fallbacks: { triggered: number; targets: Record<string, number> };
+        rateLimits: number;
+        lastRequestAt: number;
+      }
+    >
+  >;
+  snapshotAt: number;
+}
+
+/** Persist a counter-only snapshot of the current metrics to Redis. */
+export async function persistMetricsSnapshot(metrics: ProviderMetrics): Promise<boolean> {
+  try {
+    const snap = metrics.getSnapshot();
+    const counters: MetricsCounterSnapshot = { providers: {}, snapshotAt: snap.snapshotAt };
+    for (const [provider, pData] of Object.entries(snap.providers)) {
+      counters.providers[provider] = {};
+      for (const [model, mData] of Object.entries(pData.models)) {
+        counters.providers[provider][model] = {
+          requests: {
+            started: mData.requests.started,
+            success: mData.requests.success,
+            error: mData.requests.error,
+          },
+          tokens: { ...mData.tokens },
+          cost: { ...mData.cost },
+          errors: { ...mData.errors },
+          fallbacks: {
+            triggered: mData.fallbacks.triggered,
+            targets: { ...mData.fallbacks.targets },
+          },
+          rateLimits: mData.rateLimits,
+          lastRequestAt: mData.lastRequestAt,
+        };
+      }
+    }
+    return await cacheSet(CACHE_KEYS.metricsSnapshot, counters, {
+      ttlSeconds: CACHE_TTL.metricsSnapshot,
+    });
+  } catch {
+    return false;
+  }
+}
+
+/** Restore counters from the last Redis snapshot into a metrics instance. */
+export async function loadMetricsFromRedis(metrics: ProviderMetrics): Promise<boolean> {
+  try {
+    if (!(await isRedisConnected())) {
+      return false;
+    }
+    const snap = await cacheGet<MetricsCounterSnapshot>(CACHE_KEYS.metricsSnapshot);
+    if (!snap) {
+      return false;
+    }
+    for (const [provider, models] of Object.entries(snap.providers)) {
+      for (const [model, data] of Object.entries(models)) {
+        const labels = { provider, model };
+        // Replay counters into the metrics instance
+        if (data.requests.started > 0) {
+          metrics.emit("request.started", data.requests.started, labels);
+        }
+        if (data.requests.success > 0) {
+          metrics.emit("request.success", data.requests.success, labels);
+        }
+        if (data.requests.error > 0) {
+          for (const [errorType, count] of Object.entries(data.errors)) {
+            metrics.emit("request.error", count, { ...labels, error_type: errorType });
+          }
+          // Remaining error count not categorized
+          const categorizedErrors = Object.values(data.errors).reduce((a, b) => a + b, 0);
+          const uncategorized = data.requests.error - categorizedErrors;
+          if (uncategorized > 0) {
+            metrics.emit("request.error", uncategorized, labels);
+          }
+        }
+        if (data.tokens.input > 0) {
+          metrics.emit("tokens.input", data.tokens.input, labels);
+        }
+        if (data.tokens.output > 0) {
+          metrics.emit("tokens.output", data.tokens.output, labels);
+        }
+        if (data.cost.estimated > 0) {
+          metrics.emit("cost.estimated", data.cost.estimated, labels);
+        }
+        if (data.fallbacks.triggered > 0) {
+          for (const [target, count] of Object.entries(data.fallbacks.targets)) {
+            metrics.emit("fallback.triggered", count, { ...labels, fallback_to: target });
+          }
+        }
+        if (data.rateLimits > 0) {
+          metrics.emit("rate_limit.hit", data.rateLimits, labels);
+        }
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Periodic snapshot interval handle
+let snapshotInterval: ReturnType<typeof setInterval> | null = null;
+const SNAPSHOT_INTERVAL_MS = 60_000; // 1 minute
+
+/** Start periodic snapshot persistence. Call after metrics are initialized. */
+export function startMetricsSnapshotTimer(metrics: ProviderMetrics): void {
+  stopMetricsSnapshotTimer();
+  snapshotInterval = setInterval(() => {
+    persistMetricsSnapshot(metrics).catch(() => {});
+  }, SNAPSHOT_INTERVAL_MS);
+  // Don't keep the process alive just for metrics snapshots
+  if (snapshotInterval && typeof snapshotInterval === "object" && "unref" in snapshotInterval) {
+    snapshotInterval.unref();
+  }
+}
+
+/** Stop the periodic snapshot timer. */
+export function stopMetricsSnapshotTimer(): void {
+  if (snapshotInterval) {
+    clearInterval(snapshotInterval);
+    snapshotInterval = null;
+  }
 }
 
 // ============================================================================
