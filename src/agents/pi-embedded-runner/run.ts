@@ -189,10 +189,6 @@ export async function runEmbeddedPiAgent(
         preferredProfile: preferredProfileId,
         accountTag,
       });
-      // DEBUG: trace profile resolution in run.ts
-      console.error(
-        `[DEBUG run.ts] provider="${provider}" modelProvider="${model.provider}" profileOrder=${JSON.stringify(profileOrder)} storeProfiles=${JSON.stringify(Object.keys(authStore.profiles))} cfgAuthProfiles=${JSON.stringify(Object.keys(params.config?.auth?.profiles ?? {}))} cfgAuthOrder=${JSON.stringify(params.config?.auth?.order)}`,
-      );
       if (lockedProfileId && !profileOrder.includes(lockedProfileId)) {
         throw new Error(`Auth profile "${lockedProfileId}" is not configured for ${provider}.`);
       }

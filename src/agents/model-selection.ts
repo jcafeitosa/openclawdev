@@ -645,6 +645,26 @@ export function resolveModelForTaskIntent(params: {
 }): { ref: ModelRef; reason: ModelSelectionReason } {
   const { cfg, agentId, taskType, complexity } = params;
 
+  // Helper to validate model supports required capabilities
+  const validateTaskRequirements = async (ref: ModelRef): Promise<boolean> => {
+    // For vision tasks, validate the model supports vision
+    if (taskType === "vision") {
+      try {
+        const { loadModelCatalog, modelSupportsVision, findModelInCatalog } =
+          await import("./model-catalog.js");
+        const catalog = await loadModelCatalog({ config: cfg, useCache: true });
+        const entry = findModelInCatalog(catalog, ref.provider, ref.model);
+        if (entry && !modelSupportsVision(entry)) {
+          return false; // Model doesn't support vision
+        }
+      } catch {
+        // If validation fails, allow the model (assume capable)
+        return true;
+      }
+    }
+    return true;
+  };
+
   // Special case: For vision tasks, check imageModel BEFORE complexity routing
   // to ensure we don't route to text-only models
   if (taskType === "vision") {
@@ -653,6 +673,7 @@ export function resolveModelForTaskIntent(params: {
       return { ref: resolveModelForTaskType({ cfg, taskType, agentId }), reason: "taskType" };
     }
     // Fall through to complexity routing if no imageModel configured
+    // BUT validate the complexity-routed model supports vision
   }
 
   // PRIORITY 1: Check complexity routing (if enabled)
@@ -697,6 +718,25 @@ export function resolveModelForTaskIntent(params: {
         aliasIndex,
       });
       if (resolved) {
+        // CRITICAL FIX: Validate complexity-routed model supports task requirements
+        // For vision tasks, ensure the model actually supports vision
+        if (taskType === "vision") {
+          void validateTaskRequirements(resolved.ref).then((valid) => {
+            if (!valid) {
+              console.warn(
+                `[model-selection] Complexity-routed model ${modelKey(resolved.ref.provider, resolved.ref.model)} does not support vision. Falling back to imageModel or default.`,
+              );
+            }
+          });
+          // Note: This is async validation for logging only. Synchronous fallback happens below.
+          // For immediate safety, check if model is known to lack vision (text-only providers)
+          const textOnlyProviders = new Set(["cerebras", "zai", "openrouter"]);
+          if (textOnlyProviders.has(normalizeProviderId(resolved.ref.provider))) {
+            // Known text-only provider - fall through to task-specific model
+            const imageRef = resolveImageModelForAgent({ cfg, agentId });
+            return { ref: imageRef, reason: "taskType" };
+          }
+        }
         return { ref: resolved.ref, reason: "complexity" };
       }
     }
@@ -710,8 +750,7 @@ export function resolveModelForTaskIntent(params: {
       case "tools":
         return Boolean(cfg.agents?.defaults?.toolModel?.primary?.trim());
       case "vision":
-        // Already handled above (vision checks imageModel first)
-        return false;
+        return Boolean(cfg.agents?.defaults?.imageModel?.primary?.trim());
       default:
         return false;
     }

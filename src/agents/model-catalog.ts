@@ -1,5 +1,6 @@
 import { getDetectedProviderIds } from "../commands/providers/detection.js";
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
+import { normalizeProviderId } from "../providers/core/normalization.js";
 import { resolveOpenClawAgentDir } from "./agent-paths.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
 import { discoverSupplementalModels } from "./supplemental-models.js";
@@ -39,9 +40,17 @@ export function resetModelCatalogCacheForTest() {
  * Invalidate the cached model catalog so the next call to
  * `loadModelCatalog()` re-reads `models.json` from disk.
  * Safe to call in production (e.g. after auth login refreshes models.json).
+ *
+ * IMPORTANT: This should be called automatically when:
+ * - User completes auth login (new provider becomes available)
+ * - Auth profile is added/removed
+ * - Provider configuration changes
+ *
+ * TODO: Add auth event listener to auto-invalidate cache on auth changes
  */
 export function invalidateModelCatalogCache(): void {
   modelCatalogPromise = null;
+  hasLoggedModelCatalogError = false;
 }
 
 // Test-only escape hatch: allow mocking the dynamic import to simulate transient failures.
@@ -92,10 +101,12 @@ export async function loadModelCatalog(params?: {
         if (!id) {
           continue;
         }
-        const provider = String(entry?.provider ?? "").trim();
-        if (!provider) {
+        const providerRaw = String(entry?.provider ?? "").trim();
+        if (!providerRaw) {
           continue;
         }
+        // Normalize provider ID to canonical form
+        const provider = normalizeProviderId(providerRaw);
         const name = String(entry?.name ?? id).trim() || id;
         const contextWindow =
           typeof entry?.contextWindow === "number" && entry.contextWindow > 0
@@ -107,15 +118,17 @@ export async function loadModelCatalog(params?: {
       }
 
       // Discover supplemental models from provider APIs (Anthropic, OpenAI).
-      // These fill gaps in pi-ai's static catalog. Dedup by id ensures no
-      // conflicts when pi-ai already includes a model.
-      const seen = new Set(models.map((m) => m.id));
+      // These fill gaps in pi-ai's static catalog. Dedup by canonical key (provider/model)
+      // ensures no conflicts when pi-ai already includes a model or when multiple
+      // supplemental sources return the same model.
+      const seen = new Set(models.map((m) => `${m.provider}/${m.id}`));
       try {
         const supplemental = await discoverSupplementalModels({ agentDir });
         for (const sup of supplemental) {
-          if (!seen.has(sup.id)) {
+          const canonicalKey = `${sup.provider}/${sup.id}`;
+          if (!seen.has(canonicalKey)) {
             models.push(sup);
-            seen.add(sup.id);
+            seen.add(canonicalKey);
           }
         }
       } catch {

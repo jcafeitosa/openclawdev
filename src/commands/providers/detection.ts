@@ -239,6 +239,7 @@ export function detectProvider(
   const providerConfig = config?.models?.providers?.[providerId];
   if (providerConfig?.baseUrl) {
     // For local providers like Ollama, having a base URL is enough
+    // CRITICAL FIX: Also detect local providers even without auth
     if (definition.isLocal) {
       return {
         id: definition.id,
@@ -247,9 +248,22 @@ export function detectProvider(
         authSource: "config",
         authDetail: "models.providers." + providerId + ".baseUrl",
         baseUrl: providerConfig.baseUrl,
-        authMode: definition.authModes[0] ?? "api-key",
+        authMode: "none",
       };
     }
+  }
+
+  // ADDITIONAL FIX: Detect local providers by default even without explicit config
+  // if the provider definition marks them as isLocal and they don't require auth
+  if (definition.isLocal && definition.requiresAuth === false) {
+    return {
+      id: definition.id,
+      name: definition.name,
+      detected: true,
+      authSource: "default",
+      authDetail: "local provider (no auth required)",
+      authMode: "none",
+    };
   }
 
   // Not detected

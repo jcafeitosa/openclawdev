@@ -450,10 +450,10 @@ export async function runSubagentAnnounceFlow(params: {
   outcome?: SubagentRunOutcome;
 }): Promise<boolean> {
   let didAnnounce = false;
+  let outcome: SubagentRunOutcome | undefined = params.outcome;
   try {
     const requesterOrigin = normalizeDeliveryContext(params.requesterOrigin);
     let reply = params.roundOneReply;
-    let outcome: SubagentRunOutcome | undefined = params.outcome;
     if (!reply && params.waitForCompletion !== false) {
       const waitMs = Math.min(params.timeoutMs, 60_000);
       const wait = await callGateway<{
@@ -689,7 +689,7 @@ export async function runSubagentAnnounceFlow(params: {
       const fallback = [
         `[announce-fallback] ${identity?.name ?? childAgentId} could not publish a full announce.`,
         `Task: ${params.label || params.task || "background task"}`,
-        `Status: ${outcome.status}`,
+        `Status: ${outcome?.status ?? "unknown"}`,
         `Reason: ${err instanceof Error ? err.message : String(err)}`,
         "Action: continue with the next highest-priority task and report blockers explicitly.",
       ].join("\n");

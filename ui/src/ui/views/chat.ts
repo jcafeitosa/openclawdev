@@ -327,13 +327,13 @@ function collectAvailableModels(params: {
   }
   // Sort: powerful first, then by cost (cheaper first), then alphabetical
   result.sort((a, b) => {
-    const perfA = perfTierScore(a.row.performanceTier);
-    const perfB = perfTierScore(b.row.performanceTier);
+    const perfA = perfTierScore(a.row.capabilities?.performanceTier);
+    const perfB = perfTierScore(b.row.capabilities?.performanceTier);
     if (perfB !== perfA) {
       return perfB - perfA;
     }
-    const costA = costTierScore(a.row.costTier);
-    const costB = costTierScore(b.row.costTier);
+    const costA = costTierScore(a.row.capabilities?.costTier);
+    const costB = costTierScore(b.row.capabilities?.costTier);
     if (costA !== costB) {
       return costA - costB;
     }
@@ -347,8 +347,8 @@ function pickBestModelEntry(entries: AvailableModelEntry[]): AvailableModelEntry
   let bestPerf = -Infinity;
   let bestCost = Infinity;
   for (const entry of entries) {
-    const perf = perfTierScore(entry.row.performanceTier);
-    const cost = costTierScore(entry.row.costTier);
+    const perf = perfTierScore(entry.row.capabilities?.performanceTier);
+    const cost = costTierScore(entry.row.capabilities?.costTier);
     if (
       best === null ||
       perf > bestPerf ||
@@ -607,8 +607,8 @@ function pickAutoProviderForCapability(args: {
 
   for (const entry of args.availableModels) {
     const { key, row } = entry;
-    const perf = perfTierScore(row.performanceTier);
-    const cost = costTierScore(row.costTier);
+    const perf = perfTierScore(row.capabilities?.performanceTier);
+    const cost = costTierScore(row.capabilities?.costTier);
     if (!best) {
       best = { key, perf, cost };
       continue;

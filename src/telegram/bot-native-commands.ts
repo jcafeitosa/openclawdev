@@ -376,11 +376,15 @@ export const registerTelegramNativeCommands = ({
 
   if (allCommands.length > 0) {
     // Clear stale commands from previous registrations before setting new ones
-    withTelegramApiErrorLogging({
-      operation: "deleteMyCommands",
-      runtime,
-      fn: () => bot.api.deleteMyCommands(),
-    })
+    const deleteFirst =
+      typeof bot.api.deleteMyCommands === "function"
+        ? withTelegramApiErrorLogging({
+            operation: "deleteMyCommands",
+            runtime,
+            fn: () => bot.api.deleteMyCommands(),
+          })
+        : Promise.resolve();
+    deleteFirst
       .then(() =>
         withTelegramApiErrorLogging({
           operation: "setMyCommands",

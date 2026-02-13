@@ -5,12 +5,12 @@
 /**
  * Authentication source for a provider.
  */
-export type AuthSource = "env" | "auth-profile" | "aws-sdk" | "config" | "oauth" | null;
+export type AuthSource = "env" | "auth-profile" | "aws-sdk" | "config" | "oauth" | "default" | null;
 
 /**
  * Authentication mode for a provider.
  */
-export type AuthMode = "api-key" | "oauth" | "token" | "aws-sdk" | "mixed" | "unknown";
+export type AuthMode = "api-key" | "oauth" | "token" | "aws-sdk" | "mixed" | "unknown" | "none";
 
 /**
  * Token validity status.
@@ -152,6 +152,8 @@ export type ProviderDefinition = {
   defaultBaseUrl?: string;
   /** Whether this is a local provider (e.g., Ollama) */
   isLocal?: boolean;
+  /** Whether this provider requires explicit authentication */
+  requiresAuth?: boolean;
 };
 
 /**

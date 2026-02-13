@@ -4,9 +4,9 @@
  */
 
 import { Router } from "express";
-import { getProviderMetrics } from "./provider-metrics.js";
+import { getProviderMetrics, type ProviderMetricsSnapshot } from "./provider-metrics.js";
 
-export const metricsRoutes = Router();
+export const metricsRoutes: import("express").Router = Router();
 
 /**
  * GET /api/models/metrics
@@ -201,9 +201,7 @@ metricsRoutes.get("/metrics/summary", (req, res) => {
 // Prometheus Format Converter
 // ============================================================================
 
-function convertToPrometheus(
-  snapshot: ReturnType<typeof getProviderMetrics>["getSnapshot"],
-): string {
+function convertToPrometheus(snapshot: ProviderMetricsSnapshot): string {
   const lines: string[] = [];
 
   // Helper to escape label values

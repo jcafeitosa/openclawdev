@@ -39,6 +39,66 @@ const ModelCapabilitiesPartialSchema = z
   })
   .strict();
 
+// Model pools schemas
+const poolSelectionModeSchema = z.enum(["ordered", "best-fit", "agent-choice"]);
+const poolFallbackBehaviorSchema = z.enum(["next-in-pool", "next-pool", "error"]);
+const capabilityLevelSchema = z.enum(["required", "preferred", "optional"]);
+
+const modelPoolConfigSchema = z
+  .object({
+    models: z.array(z.string()),
+    selectionMode: poolSelectionModeSchema.optional(),
+    fallbackBehavior: poolFallbackBehaviorSchema.optional(),
+    fallbackPool: z.string().optional(),
+    capabilities: z
+      .object({
+        vision: capabilityLevelSchema.optional(),
+        tools: capabilityLevelSchema.optional(),
+        reasoning: capabilityLevelSchema.optional(),
+        extendedThinking: capabilityLevelSchema.optional(),
+        streaming: capabilityLevelSchema.optional(),
+        contextWindow: z.number().optional(),
+      })
+      .optional(),
+  })
+  .strict();
+
+const modelPoolsConfigSchema = z
+  .object({
+    default: modelPoolConfigSchema,
+    coding: modelPoolConfigSchema.optional(),
+    thinking: modelPoolConfigSchema.optional(),
+    vision: modelPoolConfigSchema.optional(),
+    tools: modelPoolConfigSchema.optional(),
+  })
+  .catchall(modelPoolConfigSchema);
+
+const complexityMappingSchema = z
+  .object({
+    trivial: z
+      .object({
+        pool: z.string(),
+        preferIndex: z.number().optional(),
+      })
+      .strict()
+      .optional(),
+    moderate: z
+      .object({
+        pool: z.string(),
+        preferIndex: z.number().optional(),
+      })
+      .strict()
+      .optional(),
+    complex: z
+      .object({
+        pool: z.string(),
+        preferIndex: z.number().optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 export const AgentDefaultsSchema = z
   .object({
     delegation: z
@@ -251,6 +311,8 @@ export const AgentDefaultsSchema = z
       })
       .strict()
       .optional(),
+    modelPools: modelPoolsConfigSchema.optional(),
+    complexityMapping: complexityMappingSchema.optional(),
   })
   .strict()
   .optional();

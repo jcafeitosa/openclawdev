@@ -87,6 +87,8 @@ const READ_METHODS = new Set([
   "providers.list",
   "providers.usage",
   "providers.health",
+  "providers.health.check",
+  "providers.health.ranked",
   // Collaboration read endpoints
   "collab.session.get",
   "collab.thread.get",

@@ -334,14 +334,14 @@ function handleDeleteMetrics(_req: IncomingMessage, res: ServerResponse, url: UR
 
       if (model?.trim()) {
         const modelKey = model.trim().toLowerCase();
-        metrics.reset(providerKey, modelKey);
+        metrics.resetProvider(providerKey, modelKey);
         return sendJson(res, 200, {
           ok: true,
           message: `Metrics reset for ${providerKey}/${modelKey}`,
         });
       }
 
-      metrics.reset(providerKey);
+      metrics.resetProvider(providerKey);
       return sendJson(res, 200, {
         ok: true,
         message: `Metrics reset for provider ${providerKey}`,

@@ -2,7 +2,7 @@
  * Loads custom model capability patterns from config at boot time.
  */
 
-import type { Config } from "../config/types.js";
+import type { OpenClawConfig } from "../config/config.js";
 import type { ModelCapabilities } from "./model-capabilities.js";
 import { registerModelPattern } from "./capability-inference.js";
 
@@ -12,7 +12,7 @@ import { registerModelPattern } from "./capability-inference.js";
  *
  * @param config - OpenClaw configuration object
  */
-export function loadModelPatternsFromConfig(config: Config): void {
+export function loadModelPatternsFromConfig(config: OpenClawConfig): void {
   const patterns = config.agents?.defaults?.modelPatterns;
 
   if (!patterns || typeof patterns !== "object") {

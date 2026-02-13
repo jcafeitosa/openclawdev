@@ -14,6 +14,7 @@ import {
   resolveAgentRole,
 } from "./agent-scope.js";
 import { resolveAgentIdentity } from "./identity.js";
+import { getModelPools } from "./model-pools.js";
 import { DECISION_TREES, DEVELOPMENT_WORKFLOWS } from "./workflow-playbook.js";
 
 /**
@@ -361,6 +362,101 @@ function buildVoiceSection(params: { isMinimal: boolean; ttsHint?: string }) {
     return [];
   }
   return ["## Voice (TTS)", hint, ""];
+}
+
+function buildModelPoolsSection(params: {
+  cfg?: OpenClawConfig;
+  agentId?: string;
+  isMinimal: boolean;
+}) {
+  if (params.isMinimal || !params.cfg) {
+    return [];
+  }
+
+  try {
+    const pools = getModelPools(params.cfg, params.agentId);
+    if (!pools || Object.keys(pools).length === 0) {
+      return [];
+    }
+
+    const lines: string[] = ["## Available Model Pools", ""];
+
+    // Show pools with agent-choice mode (agent can freely select)
+    const agentChoicePools = Object.entries(pools).filter(
+      ([_, config]) => config?.selectionMode === "agent-choice",
+    );
+
+    if (agentChoicePools.length > 0) {
+      lines.push(
+        "You have access to these model pools with flexible selection (agent-choice mode):",
+        "",
+      );
+      for (const [poolName, poolConfig] of agentChoicePools) {
+        const models = (poolConfig?.models ?? []).map((m) => {
+          const parts = m.split("/");
+          return parts[parts.length - 1]; // Show just model name
+        });
+        const description = getPoolDescription(poolName);
+        lines.push(
+          `- **${poolName}**: [${models.join(", ")}]${description ? ` - ${description}` : ""}`,
+        );
+      }
+      lines.push("");
+      lines.push(
+        "When working on tasks, consider which model pool best matches your current needs:",
+      );
+      lines.push("- **coding**: Programming, refactoring, code review, debugging");
+      lines.push("- **thinking**: Deep reasoning, complex analysis, multi-step problem solving");
+      lines.push("- **vision**: Image analysis, visual understanding, diagram interpretation");
+      lines.push("- **tools**: System operations, infrastructure work");
+      lines.push("- **default**: General conversation, simple tasks");
+      lines.push("");
+    }
+
+    // Show complexity mapping if configured
+    const complexityMapping = (params.cfg.agents?.defaults as Record<string, unknown> | undefined)
+      ?.complexityMapping as
+      | {
+          trivial?: { pool: string; preferIndex?: number };
+          moderate?: { pool: string; preferIndex?: number };
+          complex?: { pool: string; preferIndex?: number };
+        }
+      | undefined;
+    if (complexityMapping) {
+      lines.push("**Task Complexity Routing**:");
+      if (complexityMapping.trivial) {
+        lines.push(
+          `- Trivial tasks → ${complexityMapping.trivial.pool} pool${complexityMapping.trivial.preferIndex !== undefined ? ` (model #${complexityMapping.trivial.preferIndex + 1})` : ""}`,
+        );
+      }
+      if (complexityMapping.moderate) {
+        lines.push(
+          `- Moderate tasks → ${complexityMapping.moderate.pool} pool${complexityMapping.moderate.preferIndex !== undefined ? ` (model #${complexityMapping.moderate.preferIndex + 1})` : ""}`,
+        );
+      }
+      if (complexityMapping.complex) {
+        lines.push(
+          `- Complex tasks → ${complexityMapping.complex.pool} pool${complexityMapping.complex.preferIndex !== undefined ? ` (model #${complexityMapping.complex.preferIndex + 1})` : ""}`,
+        );
+      }
+      lines.push("");
+    }
+
+    return lines.length > 2 ? lines : []; // Only return if we have content beyond header
+  } catch {
+    return []; // Fail silently if pools config is invalid
+  }
+}
+
+function getPoolDescription(poolName: string): string {
+  const descriptions: Record<string, string> = {
+    coding: "Programming and development tasks",
+    thinking: "Deep reasoning and analysis",
+    vision: "Image and visual understanding",
+    tools: "System operations and infrastructure",
+    default: "General purpose tasks",
+  };
+  return descriptions[poolName] || "";
 }
 
 function buildProjectsSection(params: {
@@ -1332,6 +1428,11 @@ export function buildAgentSystemPrompt(params: {
       ? params.modelAliasLines.join("\n")
       : "",
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal ? "" : "",
+    ...buildModelPoolsSection({
+      cfg: loadConfig(),
+      agentId: params.runtimeInfo?.agentId,
+      isMinimal,
+    }),
     userTimezone
       ? "If you need the current date, time, or day of week, run session_status (📊 session_status)."
       : "",

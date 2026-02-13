@@ -372,6 +372,38 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     });
   }
 
+  // Always include lead/orchestrator agents as permanent roots
+  const allConfiguredAgents = listAgentIds(cfg);
+  for (const agentId of allConfiguredAgents) {
+    if (agentId === defaultAgentId) {
+      continue; // already added above
+    }
+    const agentRole = resolveAgentRole(cfg, agentId);
+    if (agentRole !== "lead" && agentRole !== "orchestrator") {
+      continue; // only include lead/orchestrator agents permanently
+    }
+    const sessionKey = `agent:${agentId}:main`;
+    if (rootSessionKeysUsed.has(sessionKey)) {
+      continue; // already exists (from active runs/delegations)
+    }
+    const delegMetrics = getAgentDelegationMetrics(agentId);
+    const pendingDelegations =
+      (delegMetrics && "pending" in delegMetrics && typeof delegMetrics.pending === "number"
+        ? delegMetrics.pending
+        : 0) > 0;
+    roots.push({
+      sessionKey,
+      agentId,
+      agentRole,
+      label: computeAgentDisplayLabel(cfg, agentId),
+      model: resolveAgentModelLabel(cfg, agentId),
+      status: pendingDelegations ? "running" : "idle",
+      children: [],
+      delegations: delegMetrics,
+    });
+    rootSessionKeysUsed.add(sessionKey);
+  }
+
   // Extract collaboration edges from active sessions
   const collaborationEdges: CollaborationEdge[] = [];
   try {

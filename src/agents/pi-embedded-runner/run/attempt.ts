@@ -11,6 +11,7 @@ import { resolveChannelCapabilities } from "../../../config/channel-capabilities
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
+import { recordSuccess, recordFailure } from "../../../providers/core/health.js";
 import { isSubagentSessionKey } from "../../../routing/session-key.js";
 import { resolveSignalReactionLevel } from "../../../signal/reaction-level.js";
 import { resolveTelegramInlineButtonsScope } from "../../../telegram/inline-buttons.js";
@@ -829,7 +830,6 @@ export async function runEmbeddedAttempt(
                 model: params.model,
                 cfg: params.config,
                 agentDir,
-                authStorage: params.authStorage,
               });
               if (auth.apiKey) {
                 promptOptions.headers = {
@@ -845,10 +845,25 @@ export async function runEmbeddedAttempt(
           await abortable(activeSession.prompt(effectivePrompt, promptOptions));
         } catch (err) {
           promptError = err;
+          // Record provider failure for health tracking
+          try {
+            recordFailure(params.provider as any, err as Error);
+          } catch {
+            // Ignore health tracking errors
+          }
         } finally {
+          const durationMs = Date.now() - promptStartedAt;
           log.debug(
-            `embedded run prompt end: runId=${params.runId} sessionId=${params.sessionId} durationMs=${Date.now() - promptStartedAt}`,
+            `embedded run prompt end: runId=${params.runId} sessionId=${params.sessionId} durationMs=${durationMs}`,
           );
+          // Record provider success for health tracking (only if no error)
+          if (!promptError) {
+            try {
+              recordSuccess(params.provider as any, durationMs);
+            } catch {
+              // Ignore health tracking errors
+            }
+          }
         }
 
         try {
