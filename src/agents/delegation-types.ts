@@ -25,8 +25,8 @@ export type DelegationPriority = "critical" | "high" | "normal" | "low";
 export type DelegationReview = {
   reviewerId: string;
   decision: "approve" | "reject" | "redirect";
-  reasoning: string;
-  evaluations: {
+  reasoning: string; // or comment
+  evaluations?: {
     withinScope: boolean;
     requiresEscalation: boolean;
     canDelegateToOther: boolean;
@@ -42,7 +42,9 @@ export type DelegationInteraction = {
 
 export type DelegationResult = {
   status: "success" | "failure" | "partial";
-  summary: string;
+  summary?: string;
+  artifact?: string;
+  error?: string;
 };
 
 export type DelegationRecord = {

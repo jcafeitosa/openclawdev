@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { GatewayRequestHandlers } from "./types.js";
 import {
+  getAllPerformanceRecords,
+  getAgentPerformanceStats,
+} from "../../agents/agent-performance-tracker.js";
+import {
   listAgentIds,
   resolveAgentModelPrimary,
   resolveAgentWorkspaceDir,
@@ -456,6 +460,20 @@ export const agentsHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
+  },
+  "agents.performance": ({ params, respond }) => {
+    const agentId =
+      params && typeof params === "object" && "agentId" in params
+        ? String((params as { agentId?: unknown }).agentId ?? "").trim()
+        : "";
+
+    if (agentId) {
+      const stats = getAgentPerformanceStats(agentId);
+      respond(true, { agentId, records: stats }, undefined);
+    } else {
+      const records = getAllPerformanceRecords();
+      respond(true, { records }, undefined);
+    }
   },
   "agents.resources": async ({ respond }) => {
     const now = Date.now();

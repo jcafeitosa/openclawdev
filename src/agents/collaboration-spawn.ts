@@ -5,7 +5,9 @@
  * so they know about shared decisions and team context.
  */
 
+import { loadConfig } from "../config/config.js";
 import { getCollaborationContext } from "../gateway/server-methods/collaboration.js";
+import { listAgentIds, resolveAgentConfig } from "./agent-scope.js";
 import { getCollaborationSystemPrompt, getRoleSpecificGuidance } from "./collaboration-prompts.js";
 import { loadCollaborationSession } from "./collaboration-storage.js";
 import { listDelegationsForAgent } from "./delegation-registry.js";
@@ -89,6 +91,29 @@ DISCUSSION THREAD:
     phase: "finalization", // After debate, we're in implementation phase
   });
 
+  // Build Expert Directory
+  let expertDirectory = "";
+  try {
+    const cfg = await loadConfig();
+    const agentIds = listAgentIds(cfg);
+    if (agentIds.length > 0) {
+      expertDirectory = "EXPERT DIRECTORY (CONSULT THESE AGENTS FOR HELP):\n";
+      for (const id of agentIds) {
+        // Skip self
+        if (id === params.agentId) continue;
+
+        const conf = resolveAgentConfig(cfg, id);
+        if (conf) {
+          const expertise = conf.expertise?.join(", ") || "General";
+          const role = conf.role || "Worker";
+          expertDirectory += `- ${id} (${role}): ${expertise}\n`;
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore config load errors, directory just won't be available
+  }
+
   // Inject delegation context if the agent has active delegations
   let delegationContext = "";
   try {
@@ -119,6 +144,8 @@ ${sharedContext}
 
 ${delegationContext}
 
+${expertDirectory}
+
 YOUR TASK:
 You are now implementing decisions that were made by the full team.
 - Reference team decisions in your work
@@ -126,6 +153,7 @@ You are now implementing decisions that were made by the full team.
 - Work within the constraints defined by the team
 - Update the team if you encounter issues with the design
 - Use the delegation tool to delegate subtasks or request help from superiors
+- If you lack specific expertise, CONSULT THE EXPERT DIRECTORY and message the appropriate agent.
 `;
 
   return {

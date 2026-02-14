@@ -8,6 +8,7 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { AgentRole } from "../config/types.agents.js";
 import { normalizeAgentId } from "../routing/session-key.js";
+import { getPerformanceMultiplier } from "./agent-performance-tracker.js";
 import { listDelegationsForAgent } from "./delegation-registry.js";
 import { listSubagentRunsForRequester } from "./subagent-registry.js";
 import { classifyTaskWithScores, type TaskType } from "./task-classifier.js";
@@ -230,6 +231,11 @@ function scoreAgentForTask(
   const taskTypeScore = taskScores[taskType];
   score *= 1 + taskTypeScore * 0.2;
 
+  // Apply performance multiplier (historical success rate).
+  // New agents get exploration bonus (1.1x), proven agents get 0.6-1.0x.
+  const perfMultiplier = getPerformanceMultiplier(profile.agentId, taskType);
+  score *= perfMultiplier;
+
   return score;
 }
 
@@ -310,6 +316,65 @@ export function findBestAgentForTask(task: string): BestAgentMatch | null {
     reason,
     workload: best.workload,
   };
+}
+
+/**
+ * Find the top-N best agents for a task, for multi-assignment or fallback.
+ */
+export function findTopAgentsForTask(task: string, topN = 3): BestAgentMatch[] {
+  if (!task?.trim()) {
+    return [];
+  }
+
+  const classification = classifyTaskWithScores(task);
+  const taskType = classification.type;
+
+  const candidates: Array<{
+    profile: AgentCapabilityProfile;
+    capabilityScore: number;
+    workload: AgentWorkload;
+    finalScore: number;
+  }> = [];
+
+  for (const profile of capabilitiesRegistry.values()) {
+    if (profile.availability === "manual") {
+      continue;
+    }
+
+    const capabilityScore = scoreAgentForTask(profile, task, taskType, classification.scores);
+    if (capabilityScore <= 0) {
+      continue;
+    }
+
+    const workload = getAgentWorkload(profile.agentId);
+    const workloadPenalty = Math.min(1, workload.totalLoad * 0.1);
+    const finalScore = capabilityScore * (1 - workloadPenalty);
+
+    candidates.push({ profile, capabilityScore, workload, finalScore });
+  }
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const sorted = candidates.toSorted((a, b) => b.finalScore - a.finalScore);
+
+  return sorted.slice(0, topN).map((c) => {
+    const matchedCaps = c.profile.capabilities
+      .filter((cap) => {
+        const capLower = cap.toLowerCase();
+        const relevantCaps = TASK_TYPE_CAPABILITIES[taskType] || [];
+        return relevantCaps.some((rc) => capLower.includes(rc) || rc.includes(capLower));
+      })
+      .slice(0, 3);
+
+    return {
+      agentId: c.profile.agentId,
+      confidence: Math.min(100, c.finalScore * 10) / 100,
+      reason: `Match for ${taskType} task. Capabilities: ${matchedCaps.join(", ")}. Workload: ${c.workload.totalLoad.toFixed(1)}`,
+      workload: c.workload,
+    };
+  });
 }
 
 /**

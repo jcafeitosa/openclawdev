@@ -3,6 +3,7 @@ import { resolveAgentIdFromSessionKey } from "../config/sessions.js";
 import { callGateway } from "../gateway/call.js";
 import { emitAgentEvent, onAgentEvent } from "../infra/agent-events.js";
 import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
+import { recordAgentOutcome } from "./agent-performance-tracker.js";
 import { resolveAgentIdentity } from "./identity.js";
 import { runSubagentAnnounceFlow, type SubagentRunOutcome } from "./subagent-announce.js";
 import {
@@ -347,6 +348,25 @@ function ensureListener() {
       entry.outcome = { status: "ok" };
     }
     persistSubagentRuns();
+
+    // Record outcome for agent performance tracking.
+    try {
+      const agentId = resolveAgentIdFromSessionKey(entry.childSessionKey);
+      if (agentId) {
+        const latencyMs =
+          typeof entry.startedAt === "number" ? endedAt - entry.startedAt : undefined;
+        const tokens = entry.usage ? entry.usage.inputTokens + entry.usage.outputTokens : undefined;
+        recordAgentOutcome({
+          agentId,
+          taskType: "general", // default; enhanced by task classifier at spawn time
+          success: phase === "end",
+          latencyMs,
+          tokens,
+        });
+      }
+    } catch {
+      // Non-critical: don't block cleanup flow
+    }
 
     if (!beginSubagentCleanup(evt.runId)) {
       return;

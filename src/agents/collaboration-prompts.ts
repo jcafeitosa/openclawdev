@@ -202,7 +202,31 @@ As a specialist:
 `,
   };
 
-  return guides[role] || guides.default;
+  const delegationProtocol = `
+TASK DELEGATION PROTOCOL:
+If you receive a complex task that requires multiple steps or specialized skills:
+1. Break the task down into smaller sub-tasks (MAXIMUM 6 sub-tasks).
+2. For each sub-task, identify the best agent role to handle it.
+3. Use your delegation tool to assign these sub-tasks.
+4. Do not attempt to do everything yourself if others are better suited.
+`;
+
+  let guidance = guides[role] || guides.default;
+
+  // Add delegation protocol for leadership roles
+  const isLeader =
+    role.toLowerCase().includes("lead") ||
+    role.toLowerCase().includes("architect") ||
+    role.toLowerCase().includes("manager") ||
+    role.toLowerCase() === "cto" ||
+    role.toLowerCase() === "ciso" ||
+    role.toLowerCase() === "orchestrator";
+
+  if (isLeader) {
+    guidance += delegationProtocol;
+  }
+
+  return guidance;
 }
 
 /**
