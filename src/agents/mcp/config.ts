@@ -59,7 +59,12 @@ function parseServerConfig(raw: unknown): McpServerConfig | null {
     }
   }
 
-  return { command, args, env };
+  const typeRaw = isRecord(raw) && typeof raw.type === "string" ? raw.type : "stdio";
+  const type = ["stdio", "sse", "http", "websocket"].includes(typeRaw)
+    ? (typeRaw as "stdio" | "sse" | "http" | "websocket")
+    : "stdio";
+
+  return { command, args, env, type };
 }
 
 /**

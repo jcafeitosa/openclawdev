@@ -9,6 +9,7 @@ import { createCanvasTool } from "./tools/canvas-tool.js";
 import { createCollaborationTool } from "./tools/collaboration-tool.js";
 import { createCronTool } from "./tools/cron-tool.js";
 import { createDelegationTool } from "./tools/delegation-tool.js";
+import { createFeatureDevTools } from "./tools/feature-dev-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
@@ -24,6 +25,7 @@ import {
 } from "./tools/sessions-progress-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
+import { createSkillTools } from "./tools/skill-tool.js";
 import { createTeamWorkspaceTool } from "./tools/team-workspace-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
@@ -62,6 +64,8 @@ export function createOpenClawTools(options?: {
   modelHasVision?: boolean;
   /** Explicit agent ID override for cron/hook sessions. */
   requesterAgentIdOverride?: string;
+  /** Pre-loaded MCP tools. */
+  mcpTools?: AnyAgentTool[];
 }): AnyAgentTool[] {
   const imageTool = options?.agentDir?.trim()
     ? createImageTool({
@@ -174,6 +178,9 @@ export function createOpenClawTools(options?: {
     createTeamWorkspaceTool({
       agentSessionKey: options?.agentSessionKey,
     }),
+    ...createFeatureDevTools(),
+    ...createSkillTools(),
+    ...(options?.mcpTools || []),
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),

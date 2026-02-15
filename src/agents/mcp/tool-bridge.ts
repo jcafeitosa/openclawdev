@@ -5,8 +5,7 @@
  * bridging the two tool systems.
  */
 
-import type { AgentTool, AgentToolResult } from "@mariozechner/pi-agent-core";
-import { Type } from "@sinclair/typebox";
+import type { AgentToolResult } from "@mariozechner/pi-agent-core";
 import type { AnyAgentTool } from "../tools/common.js";
 import type { McpToolDefinition, McpToolCallResult } from "./types.js";
 
@@ -15,18 +14,6 @@ type McpToolCallFn = (
   toolName: string,
   params: Record<string, unknown>,
 ) => Promise<McpToolCallResult>;
-
-/**
- * Convert a JSON Schema object to a TypeBox schema.
- *
- * Uses Type.Unsafe for pass-through since MCP schemas are already
- * JSON Schema and TypeBox just wraps them for the Pi-AI runtime.
- */
-function jsonSchemaToTypeBox(schema: Record<string, unknown>) {
-  // TypeBox Unsafe wraps a raw JSON Schema — the Pi-AI runtime
-  // serializes it as-is for the LLM provider.
-  return Type.Unsafe(schema);
-}
 
 /**
  * Format MCP tool call result into AgentToolResult text content.
@@ -66,9 +53,11 @@ export function mcpToolToAgentTool(
   const namespacedName = `mcp_${serverName}_${tool.name}`;
   const description = tool.description || `MCP tool: ${tool.name} (${serverName})`;
 
-  const parameters = jsonSchemaToTypeBox(tool.inputSchema || { type: "object", properties: {} });
+  // MCP schemas are already JSON Schema; the Pi-AI runtime serializes
+  // `parameters` as-is to the LLM provider.
+  const parameters = tool.inputSchema || { type: "object", properties: {} };
 
-  const agentTool: AgentTool<typeof parameters, unknown> = {
+  const agentTool: AnyAgentTool = {
     name: namespacedName,
     description,
     parameters,
@@ -79,7 +68,7 @@ export function mcpToolToAgentTool(
     },
   };
 
-  return agentTool as AnyAgentTool;
+  return agentTool;
 }
 
 /**

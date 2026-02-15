@@ -63,6 +63,10 @@ export class McpClient {
       }
     }
 
+    if (!this.config.command) {
+      throw new Error(`MCP server ${this.serverName} config missing command`);
+    }
+
     this.process = spawn(this.config.command, this.config.args ?? [], {
       stdio: ["pipe", "pipe", "pipe"],
       env,
@@ -261,7 +265,7 @@ export class McpClient {
       return;
     }
     const json = JSON.stringify(data);
-    this.process.stdin.write(json + "\n");
+    this.process.stdin?.write(json + "\n");
   }
 
   private handleLine(line: string): void {

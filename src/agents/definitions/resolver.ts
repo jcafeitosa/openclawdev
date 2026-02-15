@@ -6,12 +6,13 @@
  */
 
 import os from "node:os";
+import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { AgentConfig } from "../../config/types.agents.js";
 import type { AgentDefinition } from "./types.js";
 import { resolveStateDir } from "../../config/paths.js";
 import { resolveAgentDir } from "../agent-scope.js";
-import { loadAgentDefinitions } from "./loader.js";
+import { loadAgentDefinitions, loadAgentDefinitionsFromDir } from "./loader.js";
 
 /** Cache for loaded definitions keyed by agentDir. */
 const definitionCache = new Map<string, AgentDefinition[]>();
@@ -36,6 +37,19 @@ export function resolveAgentDefinitions(cfg: OpenClawConfig, agentId: string): A
   }
 
   definitionCache.set(agentDir, result.definitions);
+  return result.definitions;
+}
+
+/**
+ * List all globally available agent definitions (from ~/.openclaw/definitions).
+ * Used for discovery of agents that are not explicitly configured in openclaw.json.
+ */
+export function listGlobalAgentDefinitions(): AgentDefinition[] {
+  const stateDir = resolveStateDir(process.env, os.homedir);
+  const globalDir = path.join(stateDir, "definitions");
+  // We don't cache global-only lookups strictly, or we rely on fs speed.
+  // Since this is for discovery/listing, freshness > cache.
+  const result = loadAgentDefinitionsFromDir(globalDir);
   return result.definitions;
 }
 

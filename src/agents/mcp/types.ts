@@ -8,21 +8,29 @@
 /**
  * Configuration for a single MCP server.
  */
-export type McpServerConfig = {
-  /** Executable command (e.g., "npx", "python"). */
-  command: string;
-  /** Arguments to pass to the command. */
-  args?: string[];
-  /** Environment variables for the server process. Supports ${VAR} references. */
-  env?: Record<string, string>;
-};
+import { z } from "zod";
+
+export type McpTransportType = "stdio" | "sse" | "http" | "websocket";
+
+export const McpServerConfigSchema = z.object({
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  url: z.string().optional(),
+  type: z.enum(["stdio", "sse", "http", "websocket"]).optional().default("stdio"),
+  disabled: z.boolean().optional(),
+});
+
+export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
 /**
  * MCP configuration file (mcp.json).
  */
-export type McpConfig = {
-  servers: Record<string, McpServerConfig>;
-};
+export const McpConfigSchema = z.object({
+  servers: z.record(z.string(), McpServerConfigSchema),
+});
+
+export type McpConfig = z.infer<typeof McpConfigSchema>;
 
 /**
  * Represents an MCP tool definition as received from a server.

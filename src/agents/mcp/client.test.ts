@@ -116,6 +116,44 @@ describe("loadMcpConfig", () => {
     const result = loadMcpConfig(tmpDir);
     expect(result?.servers.test.env?.TOKEN).toBe("");
   });
+
+  it("should parse transport type from config", () => {
+    const config = {
+      servers: {
+        stdio: { command: "echo", type: "stdio" },
+        sse: { command: "echo", type: "sse" },
+      },
+    };
+    fs.writeFileSync(path.join(tmpDir, "mcp.json"), JSON.stringify(config));
+
+    const result = loadMcpConfig(tmpDir);
+    expect(result?.servers.stdio.type).toBe("stdio");
+    expect(result?.servers.sse.type).toBe("sse");
+  });
+
+  it("should default transport type to stdio", () => {
+    const config = {
+      servers: {
+        test: { command: "echo" },
+      },
+    };
+    fs.writeFileSync(path.join(tmpDir, "mcp.json"), JSON.stringify(config));
+
+    const result = loadMcpConfig(tmpDir);
+    expect(result?.servers.test.type).toBe("stdio");
+  });
+
+  it("should fall back to stdio for unknown transport type", () => {
+    const config = {
+      servers: {
+        test: { command: "echo", type: "unknown-transport" },
+      },
+    };
+    fs.writeFileSync(path.join(tmpDir, "mcp.json"), JSON.stringify(config));
+
+    const result = loadMcpConfig(tmpDir);
+    expect(result?.servers.test.type).toBe("stdio");
+  });
 });
 
 describe("hasMcpConfig", () => {
