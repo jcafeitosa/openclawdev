@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import type { AppViewState } from "./app-view-state.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
@@ -7,28 +7,43 @@ import type { SessionsListResult } from "./types.ts";
 import { refreshChat } from "./app-chat.ts";
 import { syncUrlWithSessionKey } from "./app-settings.ts";
 import { OpenClawApp } from "./app.ts";
-import { loadChatComposerState, saveChatComposerState } from "./chat-drafts.ts";
 import { ChatState, loadChatHistory } from "./controllers/chat.ts";
 import { icons } from "./icons.ts";
 import { iconForTab, pathForTab, titleForTab, type Tab } from "./navigation.ts";
 
-function notifyComposerRestored(
-  state: AppViewState,
-  restored: { draft: string; attachments: import("./ui-types.ts").ChatAttachment[] },
-) {
-  const draftChars = restored.draft.trim().length;
-  const attachmentCount = restored.attachments.length;
-  if (draftChars === 0 && attachmentCount === 0) {
-    return;
+type SessionDefaultsSnapshot = {
+  mainSessionKey?: string;
+  mainKey?: string;
+};
+
+function resolveSidebarChatSessionKey(state: AppViewState): string {
+  const snapshot = state.hello?.snapshot as
+    | { sessionDefaults?: SessionDefaultsSnapshot }
+    | undefined;
+  const mainSessionKey = snapshot?.sessionDefaults?.mainSessionKey?.trim();
+  if (mainSessionKey) {
+    return mainSessionKey;
   }
-  const parts: string[] = [];
-  if (draftChars > 0) {
-    parts.push(`${draftChars} chars`);
+  const mainKey = snapshot?.sessionDefaults?.mainKey?.trim();
+  if (mainKey) {
+    return mainKey;
   }
-  if (attachmentCount > 0) {
-    parts.push(`${attachmentCount} image${attachmentCount === 1 ? "" : "s"}`);
-  }
-  (state as unknown as OpenClawApp).showToast("info", `Draft restored (${parts.join(", ")})`);
+  return "main";
+}
+
+function resetChatStateForSessionSwitch(state: AppViewState, sessionKey: string) {
+  state.sessionKey = sessionKey;
+  state.chatMessage = "";
+  state.chatStream = null;
+  (state as unknown as OpenClawApp).chatStreamStartedAt = null;
+  state.chatRunId = null;
+  (state as unknown as OpenClawApp).resetToolStream();
+  (state as unknown as OpenClawApp).resetChatScroll();
+  state.applySettings({
+    ...state.settings,
+    sessionKey,
+    lastActiveSessionKey: sessionKey,
+  });
 }
 
 export function renderTab(state: AppViewState, tab: Tab) {
@@ -37,7 +52,6 @@ export function renderTab(state: AppViewState, tab: Tab) {
     <a
       href=${href}
       class="nav-item ${state.tab === tab ? "active" : ""}"
-      aria-current=${state.tab === tab ? "page" : "false"}
       @click=${(event: MouseEvent) => {
         if (
           event.defaultPrevented ||
@@ -50,6 +64,13 @@ export function renderTab(state: AppViewState, tab: Tab) {
           return;
         }
         event.preventDefault();
+        if (tab === "chat") {
+          const mainSessionKey = resolveSidebarChatSessionKey(state);
+          if (state.sessionKey !== mainSessionKey) {
+            resetChatStateForSessionSwitch(state, mainSessionKey);
+            void state.loadAssistantIdentity();
+          }
+        }
         state.setTab(tab);
       }}
       title=${titleForTab(tab)}
@@ -113,15 +134,8 @@ export function renderChatControls(state: AppViewState) {
           ?disabled=${!state.connected}
           @change=${(e: Event) => {
             const next = (e.target as HTMLSelectElement).value;
-            saveChatComposerState(state.sessionKey, {
-              draft: state.chatMessage,
-              attachments: state.chatAttachments,
-            });
             state.sessionKey = next;
-            const nextComposer = loadChatComposerState(next);
-            state.chatMessage = nextComposer.draft;
-            state.chatAttachments = nextComposer.attachments;
-            notifyComposerRestored(state, nextComposer);
+            state.chatMessage = "";
             state.chatStream = null;
             (state as unknown as OpenClawApp).chatStreamStartedAt = null;
             state.chatRunId = null;
@@ -133,7 +147,11 @@ export function renderChatControls(state: AppViewState) {
               lastActiveSessionKey: next,
             });
             void state.loadAssistantIdentity();
-            syncUrlWithSessionKey(next, true);
+            syncUrlWithSessionKey(
+              state as unknown as Parameters<typeof syncUrlWithSessionKey>[0],
+              next,
+              true,
+            );
             void loadChatHistory(state as unknown as ChatState);
           }}
         >
@@ -141,7 +159,7 @@ export function renderChatControls(state: AppViewState) {
             sessionOptions,
             (entry) => entry.key,
             (entry) =>
-              html`<option value=${entry.key}>
+              html`<option value=${entry.key} title=${entry.key}>
                 ${entry.displayName ?? entry.key}
               </option>`,
           )}
@@ -150,9 +168,23 @@ export function renderChatControls(state: AppViewState) {
       <button
         class="btn btn--sm btn--icon"
         ?disabled=${state.chatLoading || !state.connected}
-        @click=${() => {
-          (state as unknown as OpenClawApp).resetToolStream();
-          void refreshChat(state as unknown as Parameters<typeof refreshChat>[0]);
+        @click=${async () => {
+          const app = state as unknown as OpenClawApp;
+          app.chatManualRefreshInFlight = true;
+          app.chatNewMessagesBelow = false;
+          await app.updateComplete;
+          app.resetToolStream();
+          try {
+            await refreshChat(state as unknown as Parameters<typeof refreshChat>[0], {
+              scheduleScroll: false,
+            });
+            app.scrollToBottom({ smooth: true });
+          } finally {
+            requestAnimationFrame(() => {
+              app.chatManualRefreshInFlight = false;
+              app.chatNewMessagesBelow = false;
+            });
+          }
         }}
         title="Refresh chat data"
       >
@@ -205,11 +237,6 @@ export function renderChatControls(state: AppViewState) {
   `;
 }
 
-type SessionDefaultsSnapshot = {
-  mainSessionKey?: string;
-  mainKey?: string;
-};
-
 function resolveMainSessionKey(
   hello: AppViewState["hello"],
   sessions: SessionsListResult | null,
@@ -229,16 +256,96 @@ function resolveMainSessionKey(
   return null;
 }
 
-function resolveSessionDisplayName(key: string, row?: SessionsListResult["sessions"][number]) {
-  const label = row?.label?.trim();
-  if (label) {
-    return `${label} (${key})`;
+/* ── Channel display labels ────────────────────────────── */
+const CHANNEL_LABELS: Record<string, string> = {
+  bluebubbles: "iMessage",
+  telegram: "Telegram",
+  discord: "Discord",
+  signal: "Signal",
+  slack: "Slack",
+  whatsapp: "WhatsApp",
+  matrix: "Matrix",
+  email: "Email",
+  sms: "SMS",
+};
+
+const KNOWN_CHANNEL_KEYS = Object.keys(CHANNEL_LABELS);
+
+/** Parsed type / context extracted from a session key. */
+export type SessionKeyInfo = {
+  /** Prefix for typed sessions (Subagent:/Cron:). Empty for others. */
+  prefix: string;
+  /** Human-readable fallback when no label / displayName is available. */
+  fallbackName: string;
+};
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Parse a session key to extract type information and a human-readable
+ * fallback display name.  Exported for testing.
+ */
+export function parseSessionKey(key: string): SessionKeyInfo {
+  // ── Main session ─────────────────────────────────
+  if (key === "main" || key === "agent:main:main") {
+    return { prefix: "", fallbackName: "Main Session" };
   }
-  const displayName = row?.displayName?.trim();
-  if (displayName) {
-    return displayName;
+
+  // ── Subagent ─────────────────────────────────────
+  if (key.includes(":subagent:")) {
+    return { prefix: "Subagent:", fallbackName: "Subagent:" };
   }
-  return key;
+
+  // ── Cron job ─────────────────────────────────────
+  if (key.includes(":cron:")) {
+    return { prefix: "Cron:", fallbackName: "Cron Job:" };
+  }
+
+  // ── Direct chat  (agent:<x>:<channel>:direct:<id>) ──
+  const directMatch = key.match(/^agent:[^:]+:([^:]+):direct:(.+)$/);
+  if (directMatch) {
+    const channel = directMatch[1];
+    const identifier = directMatch[2];
+    const channelLabel = CHANNEL_LABELS[channel] ?? capitalize(channel);
+    return { prefix: "", fallbackName: `${channelLabel} · ${identifier}` };
+  }
+
+  // ── Group chat  (agent:<x>:<channel>:group:<id>) ────
+  const groupMatch = key.match(/^agent:[^:]+:([^:]+):group:(.+)$/);
+  if (groupMatch) {
+    const channel = groupMatch[1];
+    const channelLabel = CHANNEL_LABELS[channel] ?? capitalize(channel);
+    return { prefix: "", fallbackName: `${channelLabel} Group` };
+  }
+
+  // ── Channel-prefixed legacy keys (e.g. "bluebubbles:g-…") ──
+  for (const ch of KNOWN_CHANNEL_KEYS) {
+    if (key === ch || key.startsWith(`${ch}:`)) {
+      return { prefix: "", fallbackName: `${CHANNEL_LABELS[ch]} Session` };
+    }
+  }
+
+  // ── Unknown — return key as-is ───────────────────
+  return { prefix: "", fallbackName: key };
+}
+
+export function resolveSessionDisplayName(
+  key: string,
+  row?: SessionsListResult["sessions"][number],
+): string {
+  const label = row?.label?.trim() || "";
+  const displayName = row?.displayName?.trim() || "";
+  const { prefix, fallbackName } = parseSessionKey(key);
+
+  if (label && label !== key) {
+    return prefix ? `${prefix} ${label}` : label;
+  }
+  if (displayName && displayName !== key) {
+    return prefix ? `${prefix} ${displayName}` : displayName;
+  }
+  return fallbackName;
 }
 
 function resolveSessionOptions(
@@ -369,42 +476,5 @@ function renderMonitorIcon() {
       <line x1="8" x2="16" y1="21" y2="21"></line>
       <line x1="12" x2="12" y1="17" y2="21"></line>
     </svg>
-  `;
-}
-
-export function renderDismissibleError(error: string | null, onDismiss?: () => void) {
-  if (!error) {
-    return nothing;
-  }
-  return html`
-    <div class="callout danger" style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
-      <span>${error}</span>
-      ${onDismiss ? html`<button class="btn btn--sm" @click=${onDismiss} aria-label="Dismiss error">&times;</button>` : nothing}
-    </div>
-  `;
-}
-
-export function renderSpinner(label = "Loading...") {
-  return html`
-    <div class="spinner-container" role="status" aria-label=${label}>
-      <div class="spinner"></div>
-      <span class="muted">${label}</span>
-    </div>
-  `;
-}
-
-export function renderEmptyState(opts: {
-  icon?: unknown;
-  title: string;
-  subtitle?: string;
-  action?: unknown;
-}) {
-  return html`
-    <div class="empty-state" role="status">
-      ${opts.icon ? html`<div class="empty-state__icon" aria-hidden="true">${opts.icon}</div>` : nothing}
-      <div class="empty-state__title">${opts.title}</div>
-      ${opts.subtitle ? html`<div class="empty-state__subtitle">${opts.subtitle}</div>` : nothing}
-      ${opts.action ? html`<div class="empty-state__action">${opts.action}</div>` : nothing}
-    </div>
   `;
 }

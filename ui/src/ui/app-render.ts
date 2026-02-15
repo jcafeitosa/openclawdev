@@ -1,31 +1,17 @@
 import { html, nothing } from "lit";
-import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import type { AppViewState } from "./app-view-state.ts";
 import { parseAgentSessionKey } from "../../../src/routing/session-key.js";
-import { ChatHost, refreshChatAvatar } from "./app-chat.ts";
+import { refreshChatAvatar } from "./app-chat.ts";
+import { renderUsageTab } from "./app-render-usage-tab.ts";
 import { renderChatControls, renderTab, renderThemeToggle } from "./app-render.helpers.ts";
-import { OpenClawApp } from "./app.ts";
-import { loadChatComposerState, saveChatComposerState } from "./chat-drafts.ts";
 import { loadAgentFileContent, loadAgentFiles, saveAgentFile } from "./controllers/agent-files.ts";
-import { loadAgentHierarchy, type AgentHierarchyState } from "./controllers/agent-hierarchy.ts";
 import { loadAgentIdentities, loadAgentIdentity } from "./controllers/agent-identity.ts";
-import { loadAgentResources } from "./controllers/agent-resources.ts";
 import { loadAgentSkills } from "./controllers/agent-skills.ts";
 import { loadAgents } from "./controllers/agents.ts";
-import {
-  cancelOAuthFlow,
-  loadProvidersList,
-  removeProviderCredential,
-  setProviderCredential,
-  startOAuthFlow,
-  submitOAuthCode,
-  type AuthHost,
-} from "./controllers/auth.ts";
 import { loadChannels } from "./controllers/channels.ts";
-import { ChatState, loadChatHistory } from "./controllers/chat.ts";
+import { loadChatHistory } from "./controllers/chat.ts";
 import {
   applyConfig,
-  ConfigState,
   loadConfig,
   runUpdate,
   saveConfig,
@@ -53,25 +39,10 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
-import { loadHealth, loadHealthChannels, type HealthState } from "./controllers/health.ts";
-import { loadLogs, LogsState } from "./controllers/logs.ts";
+import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
-import { loadProjects } from "./controllers/projects.ts";
-import {
-  loadProvidersHealth,
-  saveComposerTaskModelPreferences,
-  saveModelSelection,
-} from "./controllers/providers-health.ts";
-import { loadSecurityData, runSecurityAudit, type SecurityState } from "./controllers/security.ts";
-import {
-  compactSession,
-  deleteSession,
-  loadSessions,
-  patchSession,
-  previewSession,
-  resetSession,
-} from "./controllers/sessions.ts";
+import { deleteSession, loadSessions, patchSession } from "./controllers/sessions.ts";
 import {
   installSkill,
   loadSkills,
@@ -79,42 +50,22 @@ import {
   updateSkillEdit,
   updateSkillEnabled,
 } from "./controllers/skills.ts";
-import { loadUsage, type UsageState } from "./controllers/usage.ts";
-import {
-  loadVoiceStatus,
-  toggleTts,
-  setTtsProvider,
-  setWakeWord,
-  toggleTalkMode,
-  type VoiceState,
-} from "./controllers/voice.ts";
 import { icons } from "./icons.ts";
-import { TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
-import { saveSessionWorkspace } from "./storage.ts";
-import { ConfigUiHints } from "./types.ts";
-import { renderAgentsHierarchy } from "./views/agents-hierarchy.ts";
+import { normalizeBasePath, TAB_GROUPS, subtitleForTab, titleForTab } from "./navigation.ts";
 import { renderAgents } from "./views/agents.ts";
 import { renderChannels } from "./views/channels.ts";
 import { renderChat } from "./views/chat.ts";
 import { renderConfig } from "./views/config.ts";
-import { renderConfirmDialog } from "./views/confirm-dialog.ts";
 import { renderCron } from "./views/cron.ts";
 import { renderDebug } from "./views/debug.ts";
 import { renderExecApprovalPrompt } from "./views/exec-approval.ts";
 import { renderGatewayUrlConfirmation } from "./views/gateway-url-confirmation.ts";
-import { renderHealth } from "./views/health.ts";
 import { renderInstances } from "./views/instances.ts";
 import { renderLogs } from "./views/logs.ts";
 import { renderNodes } from "./views/nodes.ts";
 import { renderOverview } from "./views/overview.ts";
-import { renderProviders } from "./views/providers.ts";
-import { renderResources } from "./views/resources.ts";
-import { renderSecurity } from "./views/security.ts";
 import { renderSessions } from "./views/sessions.ts";
 import { renderSkills } from "./views/skills.ts";
-import { renderToastContainer } from "./views/toast.ts";
-import { renderUsage } from "./views/usage.ts";
-import { renderVoice } from "./views/voice.ts";
 
 const AVATAR_DATA_RE = /^data:/i;
 const AVATAR_HTTP_RE = /^https?:\/\//i;
@@ -135,25 +86,6 @@ function resolveAssistantAvatarUrl(state: AppViewState): string | undefined {
   return identity?.avatarUrl;
 }
 
-function notifyComposerRestored(
-  state: AppViewState,
-  restored: { draft: string; attachments: import("./ui-types.ts").ChatAttachment[] },
-) {
-  const draftChars = restored.draft.trim().length;
-  const attachmentCount = restored.attachments.length;
-  if (draftChars === 0 && attachmentCount === 0) {
-    return;
-  }
-  const parts: string[] = [];
-  if (draftChars > 0) {
-    parts.push(`${draftChars} chars`);
-  }
-  if (attachmentCount > 0) {
-    parts.push(`${attachmentCount} image${attachmentCount === 1 ? "" : "s"}`);
-  }
-  (state as unknown as OpenClawApp).showToast("info", `Draft restored (${parts.join(", ")})`);
-}
-
 export function renderApp(state: AppViewState) {
   const presenceCount = state.presenceEntries.length;
   const sessionsCount = state.sessionsResult?.count ?? null;
@@ -166,33 +98,15 @@ export function renderApp(state: AppViewState) {
   const chatAvatarUrl = state.chatAvatarUrl ?? assistantAvatarUrl ?? null;
   const configValue =
     state.configForm ?? (state.configSnapshot?.config as Record<string, unknown> | null);
+  const basePath = normalizeBasePath(state.basePath ?? "");
   const resolvedAgentId =
     state.agentsSelectedId ??
     state.agentsList?.defaultId ??
     state.agentsList?.agents?.[0]?.id ??
     null;
-  const activeSession =
-    state.sessionsResult?.sessions?.find((row) => row.key === state.sessionKey) ?? null;
-  const sessionThinkingModelKey =
-    typeof activeSession?.thinkingModelOverride === "string" &&
-    activeSession.thinkingModelOverride.trim()
-      ? activeSession.thinkingModelOverride.trim()
-      : null;
-  const sessionCodingModelKey =
-    typeof activeSession?.codingModelOverride === "string" &&
-    activeSession.codingModelOverride.trim()
-      ? activeSession.codingModelOverride.trim()
-      : null;
-  const effectiveThinkingModelKey =
-    sessionThinkingModelKey ??
-    (state.providersModelAutoPickFromPool ? null : state.providersPrimaryModel);
-  const effectiveCodingModelKey = sessionCodingModelKey ?? state.providersCodingModelPrimary;
-  const thinkingHeaderLabel = effectiveThinkingModelKey?.split("/").pop() ?? "Auto";
-  const codingHeaderLabel = effectiveCodingModelKey?.split("/").pop() ?? "Auto";
 
   return html`
     <div class="shell ${isChat ? "shell--chat" : ""} ${chatFocus ? "shell--chat-focus" : ""} ${state.settings.navCollapsed ? "shell--nav-collapsed" : ""} ${state.onboarding ? "shell--onboarding" : ""}">
-      <a class="skip-link" href="#main-content">Skip to content</a>
       <header class="topbar">
         <div class="topbar-left">
           <button
@@ -209,7 +123,7 @@ export function renderApp(state: AppViewState) {
           </button>
           <div class="brand">
             <div class="brand-logo">
-              <img src="/favicon.svg" alt="OpenClaw" />
+              <img src=${basePath ? `${basePath}/favicon.svg` : "/favicon.svg"} alt="OpenClaw" />
             </div>
             <div class="brand-text">
               <div class="brand-title">OPENCLAW</div>
@@ -223,51 +137,6 @@ export function renderApp(state: AppViewState) {
             <span>Health</span>
             <span class="mono">${state.connected ? "OK" : "Offline"}</span>
           </div>
-          ${
-            state.providersModelAutoPickFromPool ||
-            state.providersPrimaryModel ||
-            sessionThinkingModelKey
-              ? html`
-                  <div
-                    class="pill"
-                    title=${
-                      effectiveThinkingModelKey
-                        ? `Thinking model: ${effectiveThinkingModelKey}`
-                        : state.providersModelAutoPickFromPool
-                          ? "Thinking model: Auto (picked from pool by complexity)"
-                          : "Thinking model: Auto"
-                    }
-                  >
-                    <span>${icons.brain}</span>
-                    <span>Thinking</span>
-                    <span
-                      class="mono"
-                      style="max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-                    >
-                      ${thinkingHeaderLabel}
-                    </span>
-                  </div>
-                `
-              : nothing
-          }
-          <div
-            class="pill"
-            title=${
-              effectiveCodingModelKey
-                ? `Coding model: ${effectiveCodingModelKey}`
-                : "Coding model: Auto (picked from pool for coding/tools tasks)"
-            }
-          >
-            <span>${icons.code}</span>
-            <span>Coding</span>
-            <span
-              class="mono"
-              style="max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"
-            >
-              ${codingHeaderLabel}
-            </span>
-          </div>
-          ${state.clockDisplay ? html`<div class="pill"><span class="mono">${state.clockDisplay}</span></div>` : nothing}
           ${renderThemeToggle(state)}
         </div>
       </header>
@@ -316,14 +185,14 @@ export function renderApp(state: AppViewState) {
           </div>
         </div>
       </aside>
-      <main id="main-content" class="content ${isChat ? "content--chat" : ""}">
+      <main class="content ${isChat ? "content--chat" : ""}">
         <section class="content-header">
           <div>
-            <div class="page-title">${titleForTab(state.tab)}</div>
-            <div class="page-sub">${subtitleForTab(state.tab)}</div>
+            ${state.tab === "usage" ? nothing : html`<div class="page-title">${titleForTab(state.tab)}</div>`}
+            ${state.tab === "usage" ? nothing : html`<div class="page-sub">${subtitleForTab(state.tab)}</div>`}
           </div>
           <div class="page-meta">
-            ${state.lastError ? html`<div class="callout danger" style="padding: 8px 14px;">${state.lastError}</div>` : nothing}
+            ${state.lastError ? html`<div class="pill danger">${state.lastError}</div>` : nothing}
             ${isChat ? renderChatControls(state) : nothing}
           </div>
         </section>
@@ -341,20 +210,12 @@ export function renderApp(state: AppViewState) {
                 cronEnabled: state.cronStatus?.enabled ?? null,
                 cronNext,
                 lastChannelsRefresh: state.channelsLastSuccess,
-                systemInfo: state.systemInfo,
                 onSettingsChange: (next) => state.applySettings(next),
                 onPasswordChange: (next) => (state.password = next),
                 onSessionKeyChange: (next) => {
-                  saveChatComposerState(state.sessionKey, {
-                    draft: state.chatMessage,
-                    attachments: state.chatAttachments,
-                  });
                   state.sessionKey = next;
-                  const nextComposer = loadChatComposerState(next);
-                  state.chatMessage = nextComposer.draft;
-                  state.chatAttachments = nextComposer.attachments;
-                  notifyComposerRestored(state, nextComposer);
-                  (state as unknown as OpenClawApp).resetToolStream();
+                  state.chatMessage = "";
+                  state.resetToolStream();
                   state.applySettings({
                     ...state.settings,
                     sessionKey: next,
@@ -383,7 +244,7 @@ export function renderApp(state: AppViewState) {
                 configSchema: state.configSchema,
                 configSchemaLoading: state.configSchemaLoading,
                 configForm: state.configForm,
-                configUiHints: state.configUiHints as ConfigUiHints,
+                configUiHints: state.configUiHints,
                 configSaving: state.configSaving,
                 configFormDirty: state.configFormDirty,
                 nostrProfileFormState: state.nostrProfileFormState,
@@ -392,8 +253,7 @@ export function renderApp(state: AppViewState) {
                 onWhatsAppStart: (force) => state.handleWhatsAppStart(force),
                 onWhatsAppWait: () => state.handleWhatsAppWait(),
                 onWhatsAppLogout: () => state.handleWhatsAppLogout(),
-                onConfigPatch: (path, value) =>
-                  updateConfigFormValue(state as unknown as ConfigState, path, value),
+                onConfigPatch: (path, value) => updateConfigFormValue(state, path, value),
                 onConfigSave: () => state.handleChannelConfigSave(),
                 onConfigReload: () => state.handleChannelConfigReload(),
                 onNostrProfileEdit: (accountId, profile) =>
@@ -440,43 +300,16 @@ export function renderApp(state: AppViewState) {
                 onRefresh: () => loadSessions(state),
                 onPatch: (key, patch) => patchSession(state, key, patch),
                 onDelete: (key) => deleteSession(state, key),
-                onPreview: (key) => {
-                  void (async () => {
-                    const preview = await previewSession(state, key);
-                    if (preview) {
-                      (state as unknown as OpenClawApp).handleOpenSidebar(preview);
-                    }
-                  })();
-                },
-                onReset: (key) => {
-                  (state as unknown as OpenClawApp).showConfirm({
-                    title: "Reset session",
-                    message: `Reset session "${key}"? This clears the session history.`,
-                    confirmLabel: "Reset",
-                    onConfirm: () => {
-                      (state as unknown as OpenClawApp).confirmDialog = null;
-                      void resetSession(state, key);
-                    },
-                  });
-                },
-                onCompact: (key) => {
-                  (state as unknown as OpenClawApp).showConfirm({
-                    title: "Compact session",
-                    message: `Compact session "${key}"? This compresses the session context.`,
-                    confirmLabel: "Compact",
-                    onConfirm: () => {
-                      (state as unknown as OpenClawApp).confirmDialog = null;
-                      void compactSession(state, key);
-                    },
-                  });
-                },
               })
             : nothing
         }
 
+        ${renderUsageTab(state)}
+
         ${
           state.tab === "cron"
             ? renderCron({
+                basePath: state.basePath,
                 loading: state.cronLoading,
                 status: state.cronStatus,
                 jobs: state.cronJobs,
@@ -497,94 +330,6 @@ export function renderApp(state: AppViewState) {
                 onRun: (job) => runCronJob(state, job),
                 onRemove: (job) => removeCronJob(state, job),
                 onLoadRuns: (jobId) => loadCronRuns(state, jobId),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "providers"
-            ? renderProviders({
-                loading: state.providersHealthLoading,
-                error: state.providersHealthError,
-                entries: state.providersHealthEntries,
-                updatedAt: state.providersHealthUpdatedAt,
-                showAll: state.providersHealthShowAll,
-                expandedId: state.providersHealthExpanded,
-                instanceCount: state.presenceEntries.length,
-                sessionCount: state.sessionsResult?.count ?? null,
-                agentRunning: Boolean(state.chatRunId || state.chatSending),
-                modelAllowlist: state.providersModelAllowlist,
-                primaryModel: state.providersPrimaryModel,
-                modelFallbacks: state.providersModelFallbacks,
-                modelsSaving: state.providersModelsSaving,
-                modelsCostFilter: state.providersModelsCostFilter,
-                authConfigProvider: state.authConfigProvider,
-                authConfigSaving: state.authConfigSaving,
-                authProvidersList: state.authProvidersList,
-                oauthFlow: state.oauthFlow,
-                removingProvider: state.removingProvider,
-                onRefresh: () => {
-                  void loadProvidersHealth(state);
-                  void loadProvidersList(state as unknown as AuthHost);
-                },
-                onToggleShowAll: () => {
-                  state.providersHealthShowAll = !state.providersHealthShowAll;
-                  void loadProvidersHealth(state);
-                },
-                onToggleExpand: (id) => {
-                  state.providersHealthExpanded = state.providersHealthExpanded === id ? null : id;
-                },
-                onToggleModel: (key) => {
-                  const next = new Set(state.providersModelAllowlist);
-                  if (next.has(key)) {
-                    next.delete(key);
-                  } else {
-                    next.add(key);
-                  }
-                  state.providersModelAllowlist = next;
-                  state.providersModelsDirty = true;
-                },
-                onSetPrimary: (key) => {
-                  state.providersPrimaryModel = key;
-                  if (!state.providersModelAllowlist.has(key)) {
-                    const next = new Set(state.providersModelAllowlist);
-                    next.add(key);
-                    state.providersModelAllowlist = next;
-                  }
-                  state.providersModelsDirty = true;
-                },
-                onSaveModels: () => void saveModelSelection(state),
-                onCostFilterChange: (filter) => {
-                  state.providersModelsCostFilter = filter;
-                },
-                onConfigureProvider: (id) => {
-                  state.authConfigProvider = id;
-                },
-                onSaveCredential: (provider, credential, credentialType) => {
-                  void setProviderCredential(
-                    state as unknown as AuthHost,
-                    provider,
-                    credential,
-                    credentialType,
-                  );
-                },
-                onStartOAuth: (provider) => {
-                  void startOAuthFlow(state as unknown as AuthHost, provider);
-                },
-                onCancelOAuth: () => {
-                  cancelOAuthFlow(state as unknown as AuthHost);
-                },
-                onSubmitOAuthCode: (code) => {
-                  void submitOAuthCode(state as unknown as AuthHost, code);
-                },
-                onRemoveCredential: (provider) => {
-                  state.removingProvider = provider;
-                  void removeProviderCredential(state as unknown as AuthHost, provider).finally(
-                    () => {
-                      state.removingProvider = null;
-                    },
-                  );
-                },
               })
             : nothing
         }
@@ -623,11 +368,6 @@ export function renderApp(state: AppViewState) {
                 agentSkillsReport: state.agentSkillsReport,
                 agentSkillsError: state.agentSkillsError,
                 agentSkillsAgentId: state.agentSkillsAgentId,
-                agentResourcesData: state.agentResourcesData,
-                agentResourcesLoading: state.agentResourcesLoading,
-                agentHierarchyLoading: state.agentHierarchyLoading,
-                agentHierarchyError: state.agentHierarchyError,
-                agentHierarchyData: state.agentHierarchyData,
                 skillsFilter: state.skillsFilter,
                 onRefresh: async () => {
                   await loadAgents(state);
@@ -635,7 +375,6 @@ export function renderApp(state: AppViewState) {
                   if (agentIds.length > 0) {
                     void loadAgentIdentities(state, agentIds);
                   }
-                  void loadAgentResources(state);
                 },
                 onSelectAgent: (agentId) => {
                   if (state.agentsSelectedId === agentId) {
@@ -682,21 +421,8 @@ export function renderApp(state: AppViewState) {
                   if (panel === "cron") {
                     void state.loadCron();
                   }
-                  if (panel === "hierarchy") {
-                    void loadAgentHierarchy(state as unknown as AgentHierarchyState);
-                  }
                 },
-                onLoadFiles: (agentId) => {
-                  void (async () => {
-                    await loadAgentFiles(state, agentId);
-                    if (state.agentFileActive) {
-                      await loadAgentFileContent(state, agentId, state.agentFileActive, {
-                        force: true,
-                        preserveDraft: true,
-                      });
-                    }
-                  })();
-                },
+                onLoadFiles: (agentId) => loadAgentFiles(state, agentId),
                 onSelectFile: (name) => {
                   state.agentFileActive = name;
                   if (!resolvedAgentId) {
@@ -739,19 +465,12 @@ export function renderApp(state: AppViewState) {
                   }
                   const basePath = ["agents", "list", index, "tools"];
                   if (profile) {
-                    updateConfigFormValue(
-                      state as unknown as ConfigState,
-                      [...basePath, "profile"],
-                      profile,
-                    );
+                    updateConfigFormValue(state, [...basePath, "profile"], profile);
                   } else {
-                    removeConfigFormValue(state as unknown as ConfigState, [
-                      ...basePath,
-                      "profile",
-                    ]);
+                    removeConfigFormValue(state, [...basePath, "profile"]);
                   }
                   if (clearAllow) {
-                    removeConfigFormValue(state as unknown as ConfigState, [...basePath, "allow"]);
+                    removeConfigFormValue(state, [...basePath, "allow"]);
                   }
                 },
                 onToolsOverridesChange: (agentId, alsoAllow, deny) => {
@@ -774,29 +493,18 @@ export function renderApp(state: AppViewState) {
                   }
                   const basePath = ["agents", "list", index, "tools"];
                   if (alsoAllow.length > 0) {
-                    updateConfigFormValue(
-                      state as unknown as ConfigState,
-                      [...basePath, "alsoAllow"],
-                      alsoAllow,
-                    );
+                    updateConfigFormValue(state, [...basePath, "alsoAllow"], alsoAllow);
                   } else {
-                    removeConfigFormValue(state as unknown as ConfigState, [
-                      ...basePath,
-                      "alsoAllow",
-                    ]);
+                    removeConfigFormValue(state, [...basePath, "alsoAllow"]);
                   }
                   if (deny.length > 0) {
-                    updateConfigFormValue(
-                      state as unknown as ConfigState,
-                      [...basePath, "deny"],
-                      deny,
-                    );
+                    updateConfigFormValue(state, [...basePath, "deny"], deny);
                   } else {
-                    removeConfigFormValue(state as unknown as ConfigState, [...basePath, "deny"]);
+                    removeConfigFormValue(state, [...basePath, "deny"]);
                   }
                 },
-                onConfigReload: () => loadConfig(state as unknown as ConfigState),
-                onConfigSave: () => saveConfig(state as unknown as ConfigState),
+                onConfigReload: () => loadConfig(state),
+                onConfigSave: () => saveConfig(state),
                 onChannelsRefresh: () => loadChannels(state, false),
                 onCronRefresh: () => state.loadCron(),
                 onSkillsFilterChange: (next) => (state.skillsFilter = next),
@@ -841,11 +549,7 @@ export function renderApp(state: AppViewState) {
                   } else {
                     next.delete(normalizedSkill);
                   }
-                  updateConfigFormValue(
-                    state as unknown as ConfigState,
-                    ["agents", "list", index, "skills"],
-                    [...next],
-                  );
+                  updateConfigFormValue(state, ["agents", "list", index, "skills"], [...next]);
                 },
                 onAgentSkillsClear: (agentId) => {
                   if (!configValue) {
@@ -865,12 +569,7 @@ export function renderApp(state: AppViewState) {
                   if (index < 0) {
                     return;
                   }
-                  removeConfigFormValue(state as unknown as ConfigState, [
-                    "agents",
-                    "list",
-                    index,
-                    "skills",
-                  ]);
+                  removeConfigFormValue(state, ["agents", "list", index, "skills"]);
                 },
                 onAgentSkillsDisableAll: (agentId) => {
                   if (!configValue) {
@@ -890,36 +589,17 @@ export function renderApp(state: AppViewState) {
                   if (index < 0) {
                     return;
                   }
-                  updateConfigFormValue(
-                    state as unknown as ConfigState,
-                    ["agents", "list", index, "skills"],
-                    [],
-                  );
+                  updateConfigFormValue(state, ["agents", "list", index, "skills"], []);
                 },
                 onModelChange: (agentId, modelId) => {
-                  const configState = state as unknown as ConfigState;
-                  // Helper to get fresh config reference
-                  type ConfigShape = {
-                    agents?: {
-                      list?: unknown[];
-                      defaults?: { models?: Record<string, unknown> };
-                    };
-                  };
-                  const getConfig = () => configState.configForm as ConfigShape | null;
-                  const getList = () => getConfig()?.agents?.list;
-                  const getAllowlist = () => getConfig()?.agents?.defaults?.models;
-
-                  // Ensure agents.list exists
-                  if (!Array.isArray(getList())) {
-                    updateConfigFormValue(configState, ["agents", "list"], []);
+                  if (!configValue) {
+                    return;
                   }
-                  const list = getList();
+                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
                   if (!Array.isArray(list)) {
                     return;
                   }
-
-                  // Find or create agent entry
-                  let index = list.findIndex(
+                  const index = list.findIndex(
                     (entry) =>
                       entry &&
                       typeof entry === "object" &&
@@ -927,54 +607,35 @@ export function renderApp(state: AppViewState) {
                       (entry as { id?: string }).id === agentId,
                   );
                   if (index < 0) {
-                    updateConfigFormValue(configState, ["agents", "list", list.length], {
-                      id: agentId,
-                    });
-                    index = list.length;
+                    return;
                   }
-
                   const basePath = ["agents", "list", index, "model"];
                   if (!modelId) {
-                    removeConfigFormValue(configState, basePath);
+                    removeConfigFormValue(state, basePath);
                     return;
                   }
-
-                  // Auto-populate fallbacks from allowlist (all models except primary)
-                  const allowlist = getAllowlist();
-                  const fallbacks: string[] = [];
-                  if (allowlist && typeof allowlist === "object") {
-                    for (const key of Object.keys(allowlist)) {
-                      if (key !== modelId) {
-                        fallbacks.push(key);
-                      }
-                    }
+                  const entry = list[index] as { model?: unknown };
+                  const existing = entry?.model;
+                  if (existing && typeof existing === "object" && !Array.isArray(existing)) {
+                    const fallbacks = (existing as { fallbacks?: unknown }).fallbacks;
+                    const next = {
+                      primary: modelId,
+                      ...(Array.isArray(fallbacks) ? { fallbacks } : {}),
+                    };
+                    updateConfigFormValue(state, basePath, next);
+                  } else {
+                    updateConfigFormValue(state, basePath, modelId);
                   }
-
-                  // Set primary with auto-populated fallbacks
-                  const next = {
-                    primary: modelId,
-                    ...(fallbacks.length > 0 ? { fallbacks } : {}),
-                  };
-                  updateConfigFormValue(configState, basePath, next);
                 },
                 onModelFallbacksChange: (agentId, fallbacks) => {
-                  const configState = state as unknown as ConfigState;
-                  // Helper to get fresh config reference
-                  const getConfig = () =>
-                    configState.configForm as { agents?: { list?: unknown[] } } | null;
-                  const getList = () => getConfig()?.agents?.list;
-
-                  // Ensure agents.list exists
-                  if (!Array.isArray(getList())) {
-                    updateConfigFormValue(configState, ["agents", "list"], []);
+                  if (!configValue) {
+                    return;
                   }
-                  const list = getList();
+                  const list = (configValue as { agents?: { list?: unknown[] } }).agents?.list;
                   if (!Array.isArray(list)) {
                     return;
                   }
-
-                  // Find or create agent entry
-                  let index = list.findIndex(
+                  const index = list.findIndex(
                     (entry) =>
                       entry &&
                       typeof entry === "object" &&
@@ -982,20 +643,12 @@ export function renderApp(state: AppViewState) {
                       (entry as { id?: string }).id === agentId,
                   );
                   if (index < 0) {
-                    updateConfigFormValue(configState, ["agents", "list", list.length], {
-                      id: agentId,
-                    });
-                    index = list.length;
+                    return;
                   }
-
                   const basePath = ["agents", "list", index, "model"];
-                  const normalized = fallbacks.filter(Boolean);
-
-                  // Get fresh entry after potential creation
-                  const freshList = getList();
-                  const entry = freshList?.[index] as { model?: unknown } | undefined;
-                  const existing = entry?.model;
-
+                  const entry = list[index] as { model?: unknown };
+                  const normalized = fallbacks.map((name) => name.trim()).filter(Boolean);
+                  const existing = entry.model;
                   const resolvePrimary = () => {
                     if (typeof existing === "string") {
                       return existing.trim() || null;
@@ -1010,42 +663,18 @@ export function renderApp(state: AppViewState) {
                     return null;
                   };
                   const primary = resolvePrimary();
-
                   if (normalized.length === 0) {
                     if (primary) {
-                      updateConfigFormValue(configState, basePath, primary);
+                      updateConfigFormValue(state, basePath, primary);
                     } else {
-                      removeConfigFormValue(configState, basePath);
+                      removeConfigFormValue(state, basePath);
                     }
                     return;
                   }
                   const next = primary
                     ? { primary, fallbacks: normalized }
                     : { fallbacks: normalized };
-                  updateConfigFormValue(configState, basePath, next);
-                },
-                onHierarchyRefresh: () => {
-                  void loadAgentHierarchy(state as unknown as AgentHierarchyState);
-                },
-                onHierarchyNodeClick: (sessionKey) => {
-                  // Could navigate to session or show details
-                  console.log("Hierarchy node clicked:", sessionKey);
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "hierarchy"
-            ? renderAgentsHierarchy({
-                loading: state.agentHierarchyLoading,
-                error: state.agentHierarchyError,
-                data: state.agentHierarchyData,
-                onRefresh: () => {
-                  void loadAgentHierarchy(state as unknown as AgentHierarchyState);
-                },
-                onNodeClick: (sessionKey) => {
-                  console.log("Hierarchy node clicked:", sessionKey);
+                  updateConfigFormValue(state, basePath, next);
                 },
               })
             : nothing
@@ -1102,7 +731,7 @@ export function renderApp(state: AppViewState) {
                 onDeviceRotate: (deviceId, role, scopes) =>
                   rotateDeviceToken(state, { deviceId, role, scopes }),
                 onDeviceRevoke: (deviceId, role) => revokeDeviceToken(state, { deviceId, role }),
-                onLoadConfig: () => loadConfig(state as unknown as ConfigState),
+                onLoadConfig: () => loadConfig(state),
                 onLoadExecApprovals: () => {
                   const target =
                     state.execApprovalsTarget === "node" && state.execApprovalsTargetNodeId
@@ -1112,28 +741,20 @@ export function renderApp(state: AppViewState) {
                 },
                 onBindDefault: (nodeId) => {
                   if (nodeId) {
-                    updateConfigFormValue(
-                      state as unknown as ConfigState,
-                      ["tools", "exec", "node"],
-                      nodeId,
-                    );
+                    updateConfigFormValue(state, ["tools", "exec", "node"], nodeId);
                   } else {
-                    removeConfigFormValue(state as unknown as ConfigState, [
-                      "tools",
-                      "exec",
-                      "node",
-                    ]);
+                    removeConfigFormValue(state, ["tools", "exec", "node"]);
                   }
                 },
                 onBindAgent: (agentIndex, nodeId) => {
                   const basePath = ["agents", "list", agentIndex, "tools", "exec", "node"];
                   if (nodeId) {
-                    updateConfigFormValue(state as unknown as ConfigState, basePath, nodeId);
+                    updateConfigFormValue(state, basePath, nodeId);
                   } else {
-                    removeConfigFormValue(state as unknown as ConfigState, basePath);
+                    removeConfigFormValue(state, basePath);
                   }
                 },
-                onSaveBindings: () => saveConfig(state as unknown as ConfigState),
+                onSaveBindings: () => saveConfig(state),
                 onExecApprovalsTargetChange: (kind, nodeId) => {
                   state.execApprovalsTarget = kind;
                   state.execApprovalsTargetNodeId = nodeId;
@@ -1160,67 +781,38 @@ export function renderApp(state: AppViewState) {
         }
 
         ${
-          state.tab === "resources"
-            ? renderResources({
-                loading: state.agentResourcesLoading,
-                error: state.agentResourcesError,
-                data: state.agentResourcesData,
-                onRefresh: () => {
-                  void loadAgentResources(state);
-                },
-              })
-            : nothing
-        }
-
-        ${
           state.tab === "chat"
             ? renderChat({
                 sessionKey: state.sessionKey,
                 onSessionKeyChange: (next) => {
-                  saveChatComposerState(state.sessionKey, {
-                    draft: state.chatMessage,
-                    attachments: state.chatAttachments,
-                  });
                   state.sessionKey = next;
-                  const nextComposer = loadChatComposerState(next);
-                  state.chatMessage = nextComposer.draft;
-                  state.chatAttachments = nextComposer.attachments;
-                  notifyComposerRestored(state, nextComposer);
+                  state.chatMessage = "";
+                  state.chatAttachments = [];
                   state.chatStream = null;
+                  state.chatStreamStartedAt = null;
                   state.chatRunId = null;
-                  (state as unknown as OpenClawApp).chatStreamStartedAt = null;
                   state.chatQueue = [];
-                  (state as unknown as OpenClawApp).resetToolStream();
-                  (state as unknown as OpenClawApp).resetChatScroll();
+                  state.resetToolStream();
+                  state.resetChatScroll();
                   state.applySettings({
                     ...state.settings,
                     sessionKey: next,
                     lastActiveSessionKey: next,
                   });
                   void state.loadAssistantIdentity();
-                  void loadChatHistory(state as unknown as ChatState);
-                  void refreshChatAvatar(state as unknown as ChatHost);
+                  void loadChatHistory(state);
+                  void refreshChatAvatar(state);
                 },
                 thinkingLevel: state.chatThinkingLevel,
                 showThinking,
                 loading: state.chatLoading,
                 sending: state.chatSending,
-                modelsCatalog: state.modelsCatalog,
-                detectedProviders: state.detectedProviders,
-                unavailableProviders: state.unavailableProviders,
-                cooldownModels: state.cooldownModels,
-                closestUsageByProvider: state.closestUsageByProvider,
-                defaultThinkingModelKey: state.providersPrimaryModel,
-                defaultThinkingAutoPickFromPool: state.providersModelAutoPickFromPool,
-                defaultCodingModelKey: state.providersCodingModelPrimary,
-                projects: state.projects,
-                projectsRootDir: state.projectsRootDir,
-                projectsIncludeHidden: state.projectsIncludeHidden,
+                compactionStatus: state.compactionStatus,
                 assistantAvatarUrl: chatAvatarUrl,
                 messages: state.chatMessages,
                 toolMessages: state.chatToolMessages,
                 stream: state.chatStream,
-                streamStartedAt: null,
+                streamStartedAt: state.chatStreamStartedAt,
                 draft: state.chatMessage,
                 queue: state.chatQueue,
                 connected: state.connected,
@@ -1230,10 +822,8 @@ export function renderApp(state: AppViewState) {
                 sessions: state.sessionsResult,
                 focusMode: chatFocus,
                 onRefresh: () => {
-                  return Promise.all([
-                    loadChatHistory(state as unknown as ChatState),
-                    refreshChatAvatar(state as unknown as ChatHost),
-                  ]);
+                  state.resetToolStream();
+                  return Promise.all([loadChatHistory(state), refreshChatAvatar(state)]);
                 },
                 onToggleFocusMode: () => {
                   if (state.onboarding) {
@@ -1244,196 +834,25 @@ export function renderApp(state: AppViewState) {
                     chatFocusMode: !state.settings.chatFocusMode,
                   });
                 },
-                onChatScroll: (event) => (state as unknown as OpenClawApp).handleChatScroll(event),
-                onDraftChange: (next) => {
-                  state.chatMessage = next;
-                  saveChatComposerState(state.sessionKey, {
-                    draft: next,
-                    attachments: state.chatAttachments,
-                  });
-                },
+                onChatScroll: (event) => state.handleChatScroll(event),
+                onDraftChange: (next) => (state.chatMessage = next),
                 attachments: state.chatAttachments,
-                onAttachmentsChange: (next) => {
-                  state.chatAttachments = next;
-                  saveChatComposerState(state.sessionKey, {
-                    draft: state.chatMessage,
-                    attachments: next,
-                  });
-                },
-                onSend: () => {
-                  void (async () => {
-                    await (state as unknown as OpenClawApp).handleSendChat();
-                    saveChatComposerState(state.sessionKey, {
-                      draft: state.chatMessage,
-                      attachments: state.chatAttachments,
-                    });
-                  })();
-                },
-                onSessionModelChange: (modelKey) => {
-                  void (async () => {
-                    await patchSession(state, state.sessionKey, { model: modelKey });
-                    await loadChatHistory(state as unknown as ChatState);
-                  })();
-                },
-                onSessionThinkingModelChange: (modelKey) => {
-                  void (async () => {
-                    try {
-                      if (!state.connected) {
-                        return;
-                      }
-                      if (modelKey) {
-                        await saveComposerTaskModelPreferences(state, {
-                          thinkingModel: modelKey,
-                        });
-                      }
-                      // Keep selectors session-scoped for immediate current-chat behavior.
-                      // Clear explicit session model override so per-task overrides apply.
-                      await patchSession(state, state.sessionKey, {
-                        model: null,
-                        thinkingModel: modelKey ?? null,
-                      });
-                      const label = modelKey ? modelKey : "Auto";
-                      (state as unknown as OpenClawApp).showToast(
-                        "success",
-                        `Thinking model applied: ${label}`,
-                      );
-                    } catch (err) {
-                      (state as unknown as OpenClawApp).showToast(
-                        "error",
-                        `Failed to update thinking model: ${String(err)}`,
-                      );
-                    }
-                  })();
-                },
-                onSessionCodingModelChange: (modelKey) => {
-                  void (async () => {
-                    try {
-                      if (!state.connected) {
-                        return;
-                      }
-                      if (modelKey) {
-                        await saveComposerTaskModelPreferences(state, {
-                          codingModel: modelKey,
-                        });
-                      }
-                      // Keep selectors session-scoped for immediate current-chat behavior.
-                      // Clear explicit session model override so per-task overrides apply.
-                      await patchSession(state, state.sessionKey, {
-                        model: null,
-                        codingModel: modelKey ?? null,
-                      });
-                      const label = modelKey ? modelKey : "Auto";
-                      (state as unknown as OpenClawApp).showToast(
-                        "success",
-                        `Coding model applied: ${label}`,
-                      );
-                    } catch (err) {
-                      (state as unknown as OpenClawApp).showToast(
-                        "error",
-                        `Failed to update coding model: ${String(err)}`,
-                      );
-                    }
-                  })();
-                },
-                onSessionProjectChange: (projectDir) => {
-                  void (async () => {
-                    try {
-                      // Cache in localStorage for immediate restoration on page reload.
-                      saveSessionWorkspace(state.sessionKey, projectDir);
-                      // Persist workspace directory selection on the current session.
-                      await patchSession(state, state.sessionKey, { workspaceDir: projectDir });
-                      if (state.client && state.connected) {
-                        await state.client.request("chat.inject", {
-                          sessionKey: state.sessionKey,
-                          role: "system",
-                          label: "Workspace",
-                          message: `Workspace set: ${projectDir ?? "Default"}.`,
-                        });
-                      }
-                      // Reset agent run state and reload chat to pick up new runtime context.
-                      state.chatStream = null;
-                      state.chatRunId = null;
-                      await loadChatHistory(state as unknown as ChatState);
-                      (state as unknown as OpenClawApp).showToast(
-                        "success",
-                        `Workspace set: ${projectDir ?? "Default"}`,
-                      );
-                    } catch (err) {
-                      (state as unknown as OpenClawApp).showToast(
-                        "error",
-                        `Failed to set workspace dir: ${String(err)}`,
-                      );
-                    }
-                  })();
-                },
-                onProjectsBrowseChange: (dir) => {
-                  state.projectsBrowseRootDir = dir;
-                  void loadProjects(state as unknown as Parameters<typeof loadProjects>[0]);
-                },
-                onToggleHiddenProjects: (next) => {
-                  state.projectsIncludeHidden = next;
-                  void loadProjects(state as unknown as Parameters<typeof loadProjects>[0]);
-                },
-                onPickWorkspaceDir: () => {
-                  void (async () => {
-                    try {
-                      if (!state.client || !state.connected) {
-                        return;
-                      }
-                      const res = await state.client.request<{ dir?: unknown }>(
-                        "fs.pickDirectory",
-                        {
-                          prompt: "Select a workspace folder",
-                          defaultDir: state.projectsRootDir ?? undefined,
-                        },
-                      );
-                      const dir = typeof res?.dir === "string" ? res.dir : null;
-                      if (!dir) {
-                        return;
-                      }
-                      state.projectsBrowseRootDir = dir;
-                      state.projectsIncludeHidden = true;
-                      await loadProjects(state as unknown as Parameters<typeof loadProjects>[0]);
-                      saveSessionWorkspace(state.sessionKey, dir);
-                      await patchSession(state, state.sessionKey, { workspaceDir: dir });
-                      await state.client.request("chat.inject", {
-                        sessionKey: state.sessionKey,
-                        role: "system",
-                        label: "Workspace",
-                        message: `Workspace set: ${dir}.`,
-                      });
-                      state.chatStream = null;
-                      state.chatRunId = null;
-                      await loadChatHistory(state as unknown as ChatState);
-                      (state as unknown as OpenClawApp).showToast(
-                        "success",
-                        `Workspace set: ${dir}`,
-                      );
-                    } catch (err) {
-                      (state as unknown as OpenClawApp).showToast(
-                        "error",
-                        `Failed to pick workspace dir: ${String(err)}`,
-                      );
-                    }
-                  })();
-                },
+                onAttachmentsChange: (next) => (state.chatAttachments = next),
+                onSend: () => state.handleSendChat(),
                 canAbort: Boolean(state.chatRunId),
-                onAbort: () => void (state as unknown as OpenClawApp).handleAbortChat(),
-                onQueueRemove: (id) => (state as unknown as OpenClawApp).removeQueuedMessage(id),
-                onNewSession: () =>
-                  (state as unknown as OpenClawApp).handleSendChat("/new", { restoreDraft: true }),
-                showNewMessages: state.chatNewMessagesBelow,
+                onAbort: () => void state.handleAbortChat(),
+                onQueueRemove: (id) => state.removeQueuedMessage(id),
+                onNewSession: () => state.handleSendChat("/new", { restoreDraft: true }),
+                showNewMessages: state.chatNewMessagesBelow && !state.chatManualRefreshInFlight,
                 onScrollToBottom: () => state.scrollToBottom(),
                 // Sidebar props for tool output viewing
-                sidebarOpen: (state as unknown as OpenClawApp).sidebarOpen,
-                sidebarContent: (state as unknown as OpenClawApp).sidebarContent,
-                sidebarError: (state as unknown as OpenClawApp).sidebarError,
-                splitRatio: (state as unknown as OpenClawApp).splitRatio,
-                onOpenSidebar: (content: string) =>
-                  (state as unknown as OpenClawApp).handleOpenSidebar(content),
-                onCloseSidebar: () => (state as unknown as OpenClawApp).handleCloseSidebar(),
-                onSplitRatioChange: (ratio: number) =>
-                  (state as unknown as OpenClawApp).handleSplitRatioChange(ratio),
+                sidebarOpen: state.sidebarOpen,
+                sidebarContent: state.sidebarContent,
+                sidebarError: state.sidebarError,
+                splitRatio: state.splitRatio,
+                onOpenSidebar: (content: string) => state.handleOpenSidebar(content),
+                onCloseSidebar: () => state.handleCloseSidebar(),
+                onSplitRatioChange: (ratio: number) => state.handleSplitRatioChange(ratio),
                 assistantName: state.assistantName,
                 assistantAvatar: state.assistantAvatar,
               })
@@ -1454,31 +873,28 @@ export function renderApp(state: AppViewState) {
                 connected: state.connected,
                 schema: state.configSchema,
                 schemaLoading: state.configSchemaLoading,
-                uiHints: state.configUiHints as ConfigUiHints,
+                uiHints: state.configUiHints,
                 formMode: state.configFormMode,
                 formValue: state.configForm,
                 originalValue: state.configFormOriginal,
-                searchQuery: (state as unknown as OpenClawApp).configSearchQuery,
-                activeSection: (state as unknown as OpenClawApp).configActiveSection,
-                activeSubsection: (state as unknown as OpenClawApp).configActiveSubsection,
+                searchQuery: state.configSearchQuery,
+                activeSection: state.configActiveSection,
+                activeSubsection: state.configActiveSubsection,
                 onRawChange: (next) => {
                   state.configRaw = next;
                 },
                 onFormModeChange: (mode) => (state.configFormMode = mode),
-                onFormPatch: (path, value) =>
-                  updateConfigFormValue(state as unknown as OpenClawApp, path, value),
-                onSearchChange: (query) =>
-                  ((state as unknown as OpenClawApp).configSearchQuery = query),
+                onFormPatch: (path, value) => updateConfigFormValue(state, path, value),
+                onSearchChange: (query) => (state.configSearchQuery = query),
                 onSectionChange: (section) => {
-                  (state as unknown as OpenClawApp).configActiveSection = section;
-                  (state as unknown as OpenClawApp).configActiveSubsection = null;
+                  state.configActiveSection = section;
+                  state.configActiveSubsection = null;
                 },
-                onSubsectionChange: (section) =>
-                  ((state as unknown as OpenClawApp).configActiveSubsection = section),
-                onReload: () => loadConfig(state as unknown as OpenClawApp),
-                onSave: () => saveConfig(state as unknown as OpenClawApp),
-                onApply: () => applyConfig(state as unknown as OpenClawApp),
-                onUpdate: () => runUpdate(state as unknown as OpenClawApp),
+                onSubsectionChange: (section) => (state.configActiveSubsection = section),
+                onReload: () => loadConfig(state),
+                onSave: () => saveConfig(state),
+                onApply: () => applyConfig(state),
+                onUpdate: () => runUpdate(state),
               })
             : nothing
         }
@@ -1520,128 +936,15 @@ export function renderApp(state: AppViewState) {
                   state.logsLevelFilters = { ...state.logsLevelFilters, [level]: enabled };
                 },
                 onToggleAutoFollow: (next) => (state.logsAutoFollow = next),
-                onRefresh: () => loadLogs(state as unknown as LogsState, { reset: true }),
-                onExport: (lines, label) =>
-                  (state as unknown as OpenClawApp).exportLogs(lines, label),
-                onScroll: (event) => (state as unknown as OpenClawApp).handleLogsScroll(event),
+                onRefresh: () => loadLogs(state, { reset: true }),
+                onExport: (lines, label) => state.exportLogs(lines, label),
+                onScroll: (event) => state.handleLogsScroll(event),
               })
-            : nothing
-        }
-        ${
-          state.tab === "usage"
-            ? renderUsage({
-                loading: state.usageLoading,
-                error: state.usageError,
-                status: state.usageStatus,
-                cost: state.usageCost,
-                period: state.usagePeriod,
-                onPeriodChange: (period) => {
-                  state.usagePeriod = period;
-                  void loadUsage(state as unknown as UsageState);
-                },
-                onRefresh: () => void loadUsage(state as unknown as UsageState),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "health"
-            ? renderHealth({
-                loading: state.healthLoading,
-                error: state.healthError,
-                data: state.healthData,
-                channels: state.healthChannels,
-                connected: state.connected,
-                debugHealth: state.debugHealth,
-                onRefresh: () => {
-                  void loadHealth(state as unknown as HealthState);
-                  void loadHealthChannels(state as unknown as HealthState);
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "security"
-            ? renderSecurity({
-                loading: state.securityLoading,
-                error: state.securityError,
-                summary: state.securitySummary,
-                stats: state.securityStats,
-                events: state.securityEvents,
-                alerts: state.securityAlerts,
-                blocked: state.securityBlocked,
-                audit: state.securityAudit,
-                auditLoading: state.securityAuditLoading,
-                filterCategory: state.securityFilterCategory,
-                filterSeverity: state.securityFilterSeverity,
-                filterTimeRange: state.securityFilterTimeRange,
-                activeTab: state.securityActiveTab,
-                eventsPage: state.securityEventsPage,
-                eventsPerPage: state.securityEventsPerPage,
-                onRefresh: () => void loadSecurityData(state as unknown as SecurityState),
-                onTabChange: (tab) => {
-                  state.securityActiveTab = tab;
-                  void loadSecurityData(state as unknown as SecurityState);
-                },
-                onFilterCategoryChange: (category) => {
-                  state.securityFilterCategory = category;
-                  state.securityEventsPage = 0;
-                  void loadSecurityData(state as unknown as SecurityState);
-                },
-                onFilterSeverityChange: (severity) => {
-                  state.securityFilterSeverity = severity;
-                  state.securityEventsPage = 0;
-                  void loadSecurityData(state as unknown as SecurityState);
-                },
-                onFilterTimeRangeChange: (range) => {
-                  state.securityFilterTimeRange = range;
-                  state.securityEventsPage = 0;
-                  void loadSecurityData(state as unknown as SecurityState);
-                },
-                onRunAudit: (deep) =>
-                  void runSecurityAudit(state as unknown as SecurityState, deep),
-                onPageChange: (page) => {
-                  state.securityEventsPage = page;
-                  void loadSecurityData(state as unknown as SecurityState);
-                },
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "voice"
-            ? renderVoice({
-                loading: state.voiceLoading,
-                error: state.voiceError,
-                ttsEnabled: state.voiceTtsEnabled,
-                ttsProvider: state.voiceTtsProvider,
-                ttsProviders: state.voiceTtsProviders,
-                wakeWord: state.voiceWakeWord,
-                talkMode: state.voiceTalkMode,
-                onRefresh: () => void loadVoiceStatus(state as unknown as VoiceState),
-                onTtsToggle: () => void toggleTts(state as unknown as VoiceState),
-                onTtsProviderChange: (provider) =>
-                  void setTtsProvider(state as unknown as VoiceState, provider),
-                onWakeWordChange: (word) => void setWakeWord(state as unknown as VoiceState, word),
-                onTalkModeToggle: () => void toggleTalkMode(state as unknown as VoiceState),
-              })
-            : nothing
-        }
-
-        ${
-          state.tab === "twitter"
-            ? html`<div class="view-content">${unsafeHTML(
-                (window as { __twitter_view_html__?: string }).__twitter_view_html__ ||
-                  '<div class="loading">Loading Twitter...</div>',
-              )}</div>`
             : nothing
         }
       </main>
       ${renderExecApprovalPrompt(state)}
       ${renderGatewayUrlConfirmation(state)}
-      ${renderConfirmDialog(state.confirmDialog)}
-      ${renderToastContainer(state.toasts, (id) => state.dismissToast(id))}
     </div>
   `;
 }

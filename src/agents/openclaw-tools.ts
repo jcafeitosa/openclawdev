@@ -1,34 +1,26 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { GatewayMessageChannel } from "../utils/message-channel.js";
+import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import type { AnyAgentTool } from "./tools/common.js";
 import { resolvePluginTools } from "../plugins/tools.js";
 import { resolveSessionAgentId } from "./agent-scope.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
-import { createCollaborationTool } from "./tools/collaboration-tool.js";
 import { createCronTool } from "./tools/cron-tool.js";
-import { createDelegationTool } from "./tools/delegation-tool.js";
-import { createFeatureDevTools } from "./tools/feature-dev-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
-import { createSessionsBatchSpawnTool } from "./tools/sessions-batch-spawn-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
-import { createSessionsInboxTool } from "./tools/sessions-inbox-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
-import {
-  createSessionsProgressTool,
-  createSessionsAbortTool,
-} from "./tools/sessions-progress-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
-import { createSkillTools } from "./tools/skill-tool.js";
-import { createTeamWorkspaceTool } from "./tools/team-workspace-tool.js";
+import { createSubagentsTool } from "./tools/subagents-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
+import { resolveWorkspaceRoot } from "./workspace-dir.js";
 
 export function createOpenClawTools(options?: {
   sandboxBrowserBridgeUrl?: string;
@@ -48,6 +40,7 @@ export function createOpenClawTools(options?: {
   agentGroupSpace?: string | null;
   agentDir?: string;
   sandboxRoot?: string;
+  sandboxFsBridge?: SandboxFsBridge;
   workspaceDir?: string;
   sandboxed?: boolean;
   config?: OpenClawConfig;
@@ -64,14 +57,21 @@ export function createOpenClawTools(options?: {
   modelHasVision?: boolean;
   /** Explicit agent ID override for cron/hook sessions. */
   requesterAgentIdOverride?: string;
-  /** Pre-loaded MCP tools. */
-  mcpTools?: AnyAgentTool[];
+  /** Require explicit message targets (no implicit last-route sends). */
+  requireExplicitMessageTarget?: boolean;
+  /** If true, omit the message tool from the tool list. */
+  disableMessageTool?: boolean;
 }): AnyAgentTool[] {
+  const workspaceDir = resolveWorkspaceRoot(options?.workspaceDir);
   const imageTool = options?.agentDir?.trim()
     ? createImageTool({
         config: options?.config,
         agentDir: options.agentDir,
-        sandboxRoot: options?.sandboxRoot,
+        workspaceDir,
+        sandbox:
+          options?.sandboxRoot && options?.sandboxFsBridge
+            ? { root: options.sandboxRoot, bridge: options.sandboxFsBridge }
+            : undefined,
         modelHasVision: options?.modelHasVision,
       })
     : null;
@@ -83,6 +83,20 @@ export function createOpenClawTools(options?: {
     config: options?.config,
     sandboxed: options?.sandboxed,
   });
+  const messageTool = options?.disableMessageTool
+    ? null
+    : createMessageTool({
+        agentAccountId: options?.agentAccountId,
+        agentSessionKey: options?.agentSessionKey,
+        config: options?.config,
+        currentChannelId: options?.currentChannelId,
+        currentChannelProvider: options?.agentChannel,
+        currentThreadTs: options?.currentThreadTs,
+        replyToMode: options?.replyToMode,
+        hasRepliedRef: options?.hasRepliedRef,
+        sandboxRoot: options?.sandboxRoot,
+        requireExplicitTarget: options?.requireExplicitMessageTarget,
+      });
   const tools: AnyAgentTool[] = [
     createBrowserTool({
       sandboxBridgeUrl: options?.sandboxBrowserBridgeUrl,
@@ -96,17 +110,7 @@ export function createOpenClawTools(options?: {
     createCronTool({
       agentSessionKey: options?.agentSessionKey,
     }),
-    createMessageTool({
-      agentAccountId: options?.agentAccountId,
-      agentSessionKey: options?.agentSessionKey,
-      config: options?.config,
-      currentChannelId: options?.currentChannelId,
-      currentChannelProvider: options?.agentChannel,
-      currentThreadTs: options?.currentThreadTs,
-      replyToMode: options?.replyToMode,
-      hasRepliedRef: options?.hasRepliedRef,
-      sandboxRoot: options?.sandboxRoot,
-    }),
+    ...(messageTool ? [messageTool] : []),
     createTtsTool({
       agentChannel: options?.agentChannel,
       config: options?.config,
@@ -132,9 +136,6 @@ export function createOpenClawTools(options?: {
       agentChannel: options?.agentChannel,
       sandboxed: options?.sandboxed,
     }),
-    createSessionsInboxTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
     createSessionsSpawnTool({
       agentSessionKey: options?.agentSessionKey,
       agentChannel: options?.agentChannel,
@@ -147,40 +148,13 @@ export function createOpenClawTools(options?: {
       sandboxed: options?.sandboxed,
       requesterAgentIdOverride: options?.requesterAgentIdOverride,
     }),
+    createSubagentsTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
     createSessionStatusTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),
-    createCollaborationTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    createDelegationTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    createSessionsProgressTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    createSessionsAbortTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    createSessionsBatchSpawnTool({
-      agentSessionKey: options?.agentSessionKey,
-      agentChannel: options?.agentChannel,
-      agentAccountId: options?.agentAccountId,
-      agentTo: options?.agentTo,
-      agentThreadId: options?.agentThreadId,
-      agentGroupId: options?.agentGroupId ?? null,
-      agentGroupChannel: options?.agentGroupChannel ?? null,
-      agentGroupSpace: options?.agentGroupSpace ?? null,
-      sandboxed: options?.sandboxed,
-      requesterAgentIdOverride: options?.requesterAgentIdOverride,
-    }),
-    createTeamWorkspaceTool({
-      agentSessionKey: options?.agentSessionKey,
-    }),
-    ...createFeatureDevTools(),
-    ...createSkillTools(),
-    ...(options?.mcpTools || []),
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
@@ -189,7 +163,7 @@ export function createOpenClawTools(options?: {
   const pluginTools = resolvePluginTools({
     context: {
       config: options?.config,
-      workspaceDir: options?.workspaceDir,
+      workspaceDir,
       agentDir: options?.agentDir,
       agentId: resolveSessionAgentId({
         sessionKey: options?.agentSessionKey,

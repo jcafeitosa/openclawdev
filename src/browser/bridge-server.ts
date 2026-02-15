@@ -1,15 +1,20 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { node } from "@elysiajs/node";
-import { Elysia } from "elysia";
+import express from "express";
 import type { ResolvedBrowserConfig } from "./config.js";
+import type { BrowserRouteRegistrar } from "./routes/types.js";
+import { isLoopbackHost } from "../gateway/net.js";
+import { deleteBridgeAuthForPort, setBridgeAuthForPort } from "./bridge-auth-registry.js";
 import { registerBrowserRoutes } from "./routes/index.js";
-import { createBrowserRouteAdapter } from "./routes/types.js";
 import {
   type BrowserServerState,
   createBrowserRouteContext,
   type ProfileContext,
 } from "./server-context.js";
+import {
+  installBrowserAuthMiddleware,
+  installBrowserCommonMiddleware,
+} from "./server-middleware.js";
 
 export type BrowserBridge = {
   server: Server;
@@ -23,25 +28,24 @@ export async function startBrowserBridgeServer(params: {
   host?: string;
   port?: number;
   authToken?: string;
+  authPassword?: string;
   onEnsureAttachTarget?: (profile: ProfileContext["profile"]) => Promise<void>;
 }): Promise<BrowserBridge> {
   const host = params.host ?? "127.0.0.1";
+  if (!isLoopbackHost(host)) {
+    throw new Error(`bridge server must bind to loopback host (got ${host})`);
+  }
   const port = params.port ?? 0;
 
-  const app = new Elysia({ adapter: node() });
+  const app = express();
+  installBrowserCommonMiddleware(app);
 
-  const authToken = params.authToken?.trim();
-  if (authToken) {
-    app.onBeforeHandle(({ request, set }) => {
-      const auth = request.headers.get("authorization")?.trim() ?? "";
-      if (auth !== `Bearer ${authToken}`) {
-        set.status = 401;
-        return "Unauthorized";
-      }
-    });
+  const authToken = params.authToken?.trim() || undefined;
+  const authPassword = params.authPassword?.trim() || undefined;
+  if (!authToken && !authPassword) {
+    throw new Error("bridge server requires auth (authToken/authPassword missing)");
   }
-
-  const registrar = createBrowserRouteAdapter(app);
+  installBrowserAuthMiddleware(app, { token: authToken, password: authPassword });
 
   const state: BrowserServerState = {
     server: null as unknown as Server,
@@ -54,24 +58,11 @@ export async function startBrowserBridgeServer(params: {
     getState: () => state,
     onEnsureAttachTarget: params.onEnsureAttachTarget,
   });
-  registerBrowserRoutes(registrar, ctx);
+  registerBrowserRoutes(app as unknown as BrowserRouteRegistrar, ctx);
 
   const server = await new Promise<Server>((resolve, reject) => {
-    app.listen({ port, hostname: host }, (serverInfo) => {
-      const nodeServer = (serverInfo as { raw?: { node?: { server?: Server } } }).raw?.node?.server;
-      if (nodeServer) {
-        // The node server may not have its address ready immediately.
-        // If it's already listening, resolve now; otherwise wait for the 'listening' event.
-        if (nodeServer.listening) {
-          resolve(nodeServer);
-        } else {
-          nodeServer.once("listening", () => resolve(nodeServer));
-          nodeServer.once("error", reject);
-        }
-      } else {
-        reject(new Error("Failed to create HTTP server"));
-      }
-    });
+    const s = app.listen(port, host, () => resolve(s));
+    s.once("error", reject);
   });
 
   const address = server.address() as AddressInfo | null;
@@ -80,11 +71,21 @@ export async function startBrowserBridgeServer(params: {
   state.port = resolvedPort;
   state.resolved.controlPort = resolvedPort;
 
+  setBridgeAuthForPort(resolvedPort, { token: authToken, password: authPassword });
+
   const baseUrl = `http://${host}:${resolvedPort}`;
   return { server, port: resolvedPort, baseUrl, state };
 }
 
 export async function stopBrowserBridgeServer(server: Server): Promise<void> {
+  try {
+    const address = server.address() as AddressInfo | null;
+    if (address?.port) {
+      deleteBridgeAuthForPort(address.port);
+    }
+  } catch {
+    // ignore
+  }
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });

@@ -1,4 +1,5 @@
-import type { AgentDefaultsConfig, ModelByComplexityConfig } from "./types.agent-defaults.js";
+import type { ChatType } from "../channels/chat-type.js";
+import type { AgentDefaultsConfig } from "./types.agent-defaults.js";
 import type { HumanDelayConfig, IdentityConfig } from "./types.base.js";
 import type { GroupChatConfig } from "./types.messages.js";
 import type {
@@ -17,40 +18,15 @@ export type AgentModelConfig =
       fallbacks?: string[];
     };
 
-export type AgentRole = "orchestrator" | "lead" | "specialist" | "worker";
-
 export type AgentConfig = {
   id: string;
   default?: boolean;
   name?: string;
-  /** Emoji icon for the agent (displayed in UI and CLI). */
-  icon?: string;
-  /** Emoji shorthand at agent level (alias for identity.emoji). */
-  emoji?: string;
-  /** Hierarchy role: orchestrator > lead > specialist > worker. Default: "specialist". */
-  role?: AgentRole;
-  /**
-   * Optional persona override.
-   *
-   * When set, OpenClaw will try to load a persona markdown file from the agent workspace
-   * (default: `personas/<persona>.md`) and inject it in place of `SOUL.md` for prompt context.
-   *
-   * This does not change tool availability or skill eligibility.
-   */
-  persona?: string;
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;
-  /** Optional per-agent complexity-based model routing overrides. */
-  modelByComplexity?: ModelByComplexityConfig;
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
-  /** Capability tags for smart agent routing (e.g., "api-design", "security", "react", "database"). */
-  capabilities?: string[];
-  /** Domain expertise descriptions for detailed capability matching. */
-  expertise?: string[];
-  /** Whether to auto-route based on workload. Default: "auto". */
-  availability?: "auto" | "manual";
   memorySearch?: MemorySearchConfig;
   /** Human-like delay between block replies for this agent. */
   humanDelay?: HumanDelayConfig;
@@ -99,8 +75,10 @@ export type AgentBinding = {
   match: {
     channel: string;
     accountId?: string;
-    peer?: { kind: "dm" | "group" | "channel"; id: string };
+    peer?: { kind: ChatType; id: string };
     guildId?: string;
     teamId?: string;
+    /** Discord role IDs used for role-based routing. */
+    roles?: string[];
   };
 };

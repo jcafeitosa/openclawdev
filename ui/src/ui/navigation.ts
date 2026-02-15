@@ -4,66 +4,41 @@ export const TAB_GROUPS = [
   { label: "Chat", tabs: ["chat"] },
   {
     label: "Control",
-    tabs: [
-      "overview",
-      "channels",
-      "instances",
-      "sessions",
-      "cron",
-      "providers",
-      "usage",
-      "health",
-      "voice",
-      "twitter",
-    ],
+    tabs: ["overview", "channels", "instances", "sessions", "usage", "cron"],
   },
-  { label: "Agent", tabs: ["agents", "hierarchy", "skills", "nodes", "resources"] },
-  { label: "Settings", tabs: ["config", "security", "debug", "logs"] },
+  { label: "Agent", tabs: ["agents", "skills", "nodes"] },
+  { label: "Settings", tabs: ["config", "debug", "logs"] },
 ] as const;
 
 export type Tab =
   | "agents"
-  | "hierarchy"
   | "overview"
   | "channels"
   | "instances"
   | "sessions"
+  | "usage"
   | "cron"
   | "skills"
   | "nodes"
-  | "resources"
   | "chat"
   | "config"
-  | "providers"
   | "debug"
-  | "logs"
-  | "usage"
-  | "health"
-  | "voice"
-  | "security"
-  | "twitter";
+  | "logs";
 
 const TAB_PATHS: Record<Tab, string> = {
   agents: "/agents",
-  hierarchy: "/hierarchy",
   overview: "/overview",
   channels: "/channels",
   instances: "/instances",
   sessions: "/sessions",
+  usage: "/usage",
   cron: "/cron",
   skills: "/skills",
   nodes: "/nodes",
-  resources: "/resources",
   chat: "/chat",
-  providers: "/providers",
   config: "/config",
-  security: "/security",
   debug: "/debug",
   logs: "/logs",
-  usage: "/usage",
-  health: "/health",
-  voice: "/voice",
-  twitter: "/twitter",
 };
 
 const PATH_TO_TAB = new Map(Object.entries(TAB_PATHS).map(([tab, path]) => [path, tab as Tab]));
@@ -151,8 +126,6 @@ export function iconForTab(tab: Tab): IconName {
   switch (tab) {
     case "agents":
       return "folder";
-    case "hierarchy":
-      return "gitBranch";
     case "chat":
       return "messageSquare";
     case "overview":
@@ -163,32 +136,20 @@ export function iconForTab(tab: Tab): IconName {
       return "radio";
     case "sessions":
       return "fileText";
+    case "usage":
+      return "barChart";
     case "cron":
       return "loader";
     case "skills":
       return "zap";
     case "nodes":
       return "monitor";
-    case "providers":
-      return "plug";
-    case "resources":
-      return "barChart";
     case "config":
       return "settings";
-    case "security":
-      return "shield";
     case "debug":
       return "bug";
     case "logs":
       return "scrollText";
-    case "usage":
-      return "barChart";
-    case "health":
-      return "radio";
-    case "voice":
-      return "radio";
-    case "twitter":
-      return "twitter";
     default:
       return "folder";
   }
@@ -198,8 +159,6 @@ export function titleForTab(tab: Tab) {
   switch (tab) {
     case "agents":
       return "Agents";
-    case "hierarchy":
-      return "Hierarchy";
     case "overview":
       return "Overview";
     case "channels":
@@ -208,34 +167,22 @@ export function titleForTab(tab: Tab) {
       return "Instances";
     case "sessions":
       return "Sessions";
+    case "usage":
+      return "Usage";
     case "cron":
       return "Cron Jobs";
     case "skills":
       return "Skills";
     case "nodes":
       return "Nodes";
-    case "resources":
-      return "Resources";
     case "chat":
       return "Chat";
-    case "providers":
-      return "Providers";
     case "config":
       return "Config";
-    case "security":
-      return "Security";
     case "debug":
       return "Debug";
     case "logs":
       return "Logs";
-    case "usage":
-      return "Usage";
-    case "health":
-      return "Health";
-    case "voice":
-      return "Voice";
-    case "twitter":
-      return "Twitter";
     default:
       return "Control";
   }
@@ -245,8 +192,6 @@ export function subtitleForTab(tab: Tab) {
   switch (tab) {
     case "agents":
       return "Manage agent workspaces, tools, and identities.";
-    case "hierarchy":
-      return "Visualize agent-subagent spawn relationships.";
     case "overview":
       return "Gateway status, entry points, and a fast health read.";
     case "channels":
@@ -255,34 +200,22 @@ export function subtitleForTab(tab: Tab) {
       return "Presence beacons from connected clients and nodes.";
     case "sessions":
       return "Inspect active sessions and adjust per-session defaults.";
+    case "usage":
+      return "";
     case "cron":
       return "Schedule wakeups and recurring agent runs.";
     case "skills":
       return "Manage skill availability and API key injection.";
     case "nodes":
       return "Paired devices, capabilities, and command exposure.";
-    case "resources":
-      return "Inspect per-agent sessions, tokens, cost, heartbeat cadence, and workspace footprint.";
     case "chat":
       return "Direct gateway chat session for quick interventions.";
-    case "providers":
-      return "Real-time LLM provider health, credentials, and usage.";
     case "config":
       return "Edit ~/.openclaw/openclaw.json safely.";
-    case "security":
-      return "Security events, alerts, blocked threats, and audit reports.";
     case "debug":
       return "Gateway snapshots, events, and manual RPC calls.";
     case "logs":
       return "Live tail of the gateway file logs.";
-    case "usage":
-      return "Token usage, cost estimates, and provider breakdown.";
-    case "health":
-      return "System uptime, error rates, and channel health matrix.";
-    case "voice":
-      return "TTS, voice wake, and talk mode configuration.";
-    case "twitter":
-      return "X/Twitter dashboard - followers, engagement, and recent tweets.";
     default:
       return "";
   }

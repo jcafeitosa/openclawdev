@@ -1,4 +1,4 @@
-import type { NormalizedChatType } from "../channels/chat-type.js";
+import type { ChatType } from "../channels/chat-type.js";
 import type { SessionEntry } from "../config/sessions.js";
 import type { DeliveryContext } from "../utils/delivery-context.js";
 
@@ -19,7 +19,7 @@ export type GatewaySessionRow = {
   subject?: string;
   groupChannel?: string;
   space?: string;
-  chatType?: NormalizedChatType;
+  chatType?: ChatType;
   origin?: SessionEntry["origin"];
   updatedAt: number | null;
   sessionId?: string;
@@ -35,6 +35,7 @@ export type GatewaySessionRow = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  totalTokensFresh?: boolean;
   responseUsage?: "on" | "off" | "tokens" | "full";
   modelProvider?: string;
   model?: string;
@@ -91,4 +92,8 @@ export type SessionsPatchResult = {
   path: string;
   key: string;
   entry: SessionEntry;
+  resolved?: {
+    modelProvider?: string;
+    model?: string;
+  };
 };

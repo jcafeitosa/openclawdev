@@ -1,21 +1,7 @@
 import type { Command } from "commander";
 import type { ProgramContext } from "./context.js";
-import { agentsListCommand } from "../../commands/agents.js";
-import { healthCommand } from "../../commands/health.js";
-import { sessionsCommand } from "../../commands/sessions.js";
-import { statusCommand } from "../../commands/status.js";
-import { defaultRuntime } from "../../runtime.js";
-import { getFlagValue, getPositiveIntFlagValue, getVerboseFlag, hasFlag } from "../argv.js";
-import { registerBrowserCli } from "../browser-cli.js";
-import { registerConfigCli } from "../config-cli.js";
-import { registerMemoryCli, runMemoryStatus } from "../memory-cli.js";
-import { registerAgentCommands } from "./register.agent.js";
-import { registerConfigureCommand } from "./register.configure.js";
-import { registerMaintenanceCommands } from "./register.maintenance.js";
-import { registerMessageCommands } from "./register.message.js";
-import { registerOnboardCommand } from "./register.onboard.js";
-import { registerSetupCommand } from "./register.setup.js";
-import { registerStatusHealthSessionsCommands } from "./register.status-health-sessions.js";
+import { getPrimaryCommand, hasHelpOrVersion } from "../argv.js";
+import { reparseProgramFromActionArgs } from "./action-reparse.js";
 import { registerSubCliCommands } from "./register.subclis.js";
 
 type CommandRegisterParams = {
@@ -24,211 +10,209 @@ type CommandRegisterParams = {
   argv: string[];
 };
 
-type RouteSpec = {
-  match: (path: string[]) => boolean;
-  loadPlugins?: boolean;
-  run: (argv: string[]) => Promise<boolean>;
-};
-
 export type CommandRegistration = {
   id: string;
   register: (params: CommandRegisterParams) => void;
-  routes?: RouteSpec[];
 };
 
-const routeHealth: RouteSpec = {
-  match: (path) => path[0] === "health",
-  loadPlugins: true,
-  run: async (argv) => {
-    const json = hasFlag(argv, "--json");
-    const verbose = getVerboseFlag(argv, { includeDebug: true });
-    const timeoutMs = getPositiveIntFlagValue(argv, "--timeout");
-    if (timeoutMs === null) {
-      return false;
-    }
-    await healthCommand({ json, timeoutMs, verbose }, defaultRuntime);
-    return true;
-  },
+type CoreCliEntry = {
+  commands: Array<{ name: string; description: string }>;
+  register: (params: CommandRegisterParams) => Promise<void> | void;
 };
 
-const routeStatus: RouteSpec = {
-  match: (path) => path[0] === "status",
-  loadPlugins: true,
-  run: async (argv) => {
-    const json = hasFlag(argv, "--json");
-    const deep = hasFlag(argv, "--deep");
-    const all = hasFlag(argv, "--all");
-    const usage = hasFlag(argv, "--usage");
-    const verbose = getVerboseFlag(argv, { includeDebug: true });
-    const timeoutMs = getPositiveIntFlagValue(argv, "--timeout");
-    if (timeoutMs === null) {
-      return false;
-    }
-    await statusCommand({ json, deep, all, usage, timeoutMs, verbose }, defaultRuntime);
-    return true;
-  },
+const shouldRegisterCorePrimaryOnly = (argv: string[]) => {
+  if (hasHelpOrVersion(argv)) {
+    return false;
+  }
+  return true;
 };
 
-const routeSessions: RouteSpec = {
-  match: (path) => path[0] === "sessions",
-  run: async (argv) => {
-    const json = hasFlag(argv, "--json");
-    const store = getFlagValue(argv, "--store");
-    if (store === null) {
-      return false;
-    }
-    const active = getFlagValue(argv, "--active");
-    if (active === null) {
-      return false;
-    }
-    await sessionsCommand({ json, store, active }, defaultRuntime);
-    return true;
-  },
-};
-
-const routeAgentsList: RouteSpec = {
-  match: (path) => path[0] === "agents" && path[1] === "list",
-  run: async (argv) => {
-    const json = hasFlag(argv, "--json");
-    const bindings = hasFlag(argv, "--bindings");
-    await agentsListCommand({ json, bindings }, defaultRuntime);
-    return true;
-  },
-};
-
-const routeMarkdownCommand: RouteSpec = {
-  match: (path) => path[0] === "command" && path.length >= 2,
-  run: async (argv) => {
-    // Extract the command name: first positional arg after "command"
-    const commandIdx = argv.indexOf("command");
-    if (commandIdx === -1) {
-      return false;
-    }
-    // Find the first non-flag positional arg after "command"
-    let commandName = "";
-    for (let i = commandIdx + 1; i < argv.length; i++) {
-      if (!argv[i].startsWith("-")) {
-        commandName = argv[i];
-        break;
-      }
-    }
-    if (!commandName) {
-      return false;
-    }
-
-    const { resolveMarkdownCommand } = await import("../../tui/markdown-commands.js");
-    const remainingArgs = argv
-      .slice(commandIdx + 1)
-      .filter((a) => a !== commandName && !a.startsWith("-"))
-      .join(" ");
-    const prompt = resolveMarkdownCommand(commandName, remainingArgs || undefined);
-    if (!prompt) {
-      console.error(`Unknown command: ${commandName}`);
-      return false;
-    }
-
-    const { agentCommand } = await import("../../commands/agent.js");
-    await agentCommand({ message: prompt, agentId: "default" });
-    return true;
-  },
-};
-
-const routeMemoryStatus: RouteSpec = {
-  match: (path) => path[0] === "memory" && path[1] === "status",
-  run: async (argv) => {
-    const agent = getFlagValue(argv, "--agent");
-    if (agent === null) {
-      return false;
-    }
-    const json = hasFlag(argv, "--json");
-    const deep = hasFlag(argv, "--deep");
-    const index = hasFlag(argv, "--index");
-    const verbose = hasFlag(argv, "--verbose");
-    await runMemoryStatus({ agent, json, deep, index, verbose });
-    return true;
-  },
-};
-
-export const commandRegistry: CommandRegistration[] = [
+const coreEntries: CoreCliEntry[] = [
   {
-    id: "setup",
-    register: ({ program }) => registerSetupCommand(program),
-  },
-  {
-    id: "onboard",
-    register: ({ program }) => registerOnboardCommand(program),
-  },
-  {
-    id: "configure",
-    register: ({ program }) => registerConfigureCommand(program),
-  },
-  {
-    id: "config",
-    register: ({ program }) => registerConfigCli(program),
-  },
-  {
-    id: "maintenance",
-    register: ({ program }) => registerMaintenanceCommands(program),
-  },
-  {
-    id: "message",
-    register: ({ program, ctx }) => registerMessageCommands(program, ctx),
-  },
-  {
-    id: "memory",
-    register: ({ program }) => registerMemoryCli(program),
-    routes: [routeMemoryStatus],
-  },
-  {
-    id: "agent",
-    register: ({ program, ctx }) =>
-      registerAgentCommands(program, { agentChannelOptions: ctx.agentChannelOptions }),
-    routes: [routeAgentsList],
-  },
-  {
-    id: "subclis",
-    register: ({ program, argv }) => registerSubCliCommands(program, argv),
-  },
-  {
-    id: "status-health-sessions",
-    register: ({ program }) => registerStatusHealthSessionsCommands(program),
-    routes: [routeHealth, routeStatus, routeSessions],
-  },
-  {
-    id: "browser",
-    register: ({ program }) => registerBrowserCli(program),
-  },
-  {
-    id: "markdown-commands",
-    register: () => {
-      // Markdown commands are registered dynamically at runtime
-      // via the TUI system (already integrated in tui/markdown-commands.ts).
-      // CLI routing handles "openclaw command <name>" via the route below.
+    commands: [{ name: "setup", description: "Setup helpers" }],
+    register: async ({ program }) => {
+      const mod = await import("./register.setup.js");
+      mod.registerSetupCommand(program);
     },
-    routes: [routeMarkdownCommand],
+  },
+  {
+    commands: [{ name: "onboard", description: "Onboarding helpers" }],
+    register: async ({ program }) => {
+      const mod = await import("./register.onboard.js");
+      mod.registerOnboardCommand(program);
+    },
+  },
+  {
+    commands: [{ name: "configure", description: "Configure wizard" }],
+    register: async ({ program }) => {
+      const mod = await import("./register.configure.js");
+      mod.registerConfigureCommand(program);
+    },
+  },
+  {
+    commands: [{ name: "config", description: "Config helpers" }],
+    register: async ({ program }) => {
+      const mod = await import("../config-cli.js");
+      mod.registerConfigCli(program);
+    },
+  },
+  {
+    commands: [
+      { name: "doctor", description: "Health checks + quick fixes for the gateway and channels" },
+      { name: "dashboard", description: "Open the Control UI with your current token" },
+      { name: "reset", description: "Reset local config/state (keeps the CLI installed)" },
+      {
+        name: "uninstall",
+        description: "Uninstall the gateway service + local data (CLI remains)",
+      },
+    ],
+    register: async ({ program }) => {
+      const mod = await import("./register.maintenance.js");
+      mod.registerMaintenanceCommands(program);
+    },
+  },
+  {
+    commands: [{ name: "message", description: "Send, read, and manage messages" }],
+    register: async ({ program, ctx }) => {
+      const mod = await import("./register.message.js");
+      mod.registerMessageCommands(program, ctx);
+    },
+  },
+  {
+    commands: [{ name: "memory", description: "Memory commands" }],
+    register: async ({ program }) => {
+      const mod = await import("../memory-cli.js");
+      mod.registerMemoryCli(program);
+    },
+  },
+  {
+    commands: [
+      { name: "agent", description: "Agent commands" },
+      { name: "agents", description: "Manage isolated agents" },
+    ],
+    register: async ({ program, ctx }) => {
+      const mod = await import("./register.agent.js");
+      mod.registerAgentCommands(program, { agentChannelOptions: ctx.agentChannelOptions });
+    },
+  },
+  {
+    commands: [
+      { name: "status", description: "Gateway status" },
+      { name: "health", description: "Gateway health" },
+      { name: "sessions", description: "Session management" },
+    ],
+    register: async ({ program }) => {
+      const mod = await import("./register.status-health-sessions.js");
+      mod.registerStatusHealthSessionsCommands(program);
+    },
+  },
+  {
+    commands: [{ name: "browser", description: "Browser tools" }],
+    register: async ({ program }) => {
+      const mod = await import("../browser-cli.js");
+      mod.registerBrowserCli(program);
+    },
   },
 ];
+
+export function getCoreCliCommandNames(): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const entry of coreEntries) {
+    for (const cmd of entry.commands) {
+      if (seen.has(cmd.name)) {
+        continue;
+      }
+      seen.add(cmd.name);
+      names.push(cmd.name);
+    }
+  }
+  return names;
+}
+
+function removeCommand(program: Command, command: Command) {
+  const commands = program.commands as Command[];
+  const index = commands.indexOf(command);
+  if (index >= 0) {
+    commands.splice(index, 1);
+  }
+}
+
+function registerLazyCoreCommand(
+  program: Command,
+  ctx: ProgramContext,
+  entry: CoreCliEntry,
+  command: { name: string; description: string },
+) {
+  const placeholder = program.command(command.name).description(command.description);
+  placeholder.allowUnknownOption(true);
+  placeholder.allowExcessArguments(true);
+  placeholder.action(async (...actionArgs) => {
+    // Some registrars install multiple top-level commands (e.g. status/health/sessions).
+    // Remove placeholders/old registrations for all names in the entry before re-registering.
+    for (const cmd of entry.commands) {
+      const existing = program.commands.find((c) => c.name() === cmd.name);
+      if (existing) {
+        removeCommand(program, existing);
+      }
+    }
+    await entry.register({ program, ctx, argv: process.argv });
+    await reparseProgramFromActionArgs(program, actionArgs);
+  });
+}
+
+export async function registerCoreCliByName(
+  program: Command,
+  ctx: ProgramContext,
+  name: string,
+  argv: string[] = process.argv,
+): Promise<boolean> {
+  const entry = coreEntries.find((candidate) =>
+    candidate.commands.some((cmd) => cmd.name === name),
+  );
+  if (!entry) {
+    return false;
+  }
+
+  // Some registrars install multiple top-level commands (e.g. status/health/sessions).
+  // Remove placeholders/old registrations for all names in the entry before re-registering.
+  for (const cmd of entry.commands) {
+    const existing = program.commands.find((c) => c.name() === cmd.name);
+    if (existing) {
+      removeCommand(program, existing);
+    }
+  }
+  await entry.register({ program, ctx, argv });
+  return true;
+}
+
+export function registerCoreCliCommands(program: Command, ctx: ProgramContext, argv: string[]) {
+  const primary = getPrimaryCommand(argv);
+  if (primary && shouldRegisterCorePrimaryOnly(argv)) {
+    const entry = coreEntries.find((candidate) =>
+      candidate.commands.some((cmd) => cmd.name === primary),
+    );
+    if (entry) {
+      const cmd = entry.commands.find((c) => c.name === primary);
+      if (cmd) {
+        registerLazyCoreCommand(program, ctx, entry, cmd);
+      }
+      return;
+    }
+  }
+
+  for (const entry of coreEntries) {
+    for (const cmd of entry.commands) {
+      registerLazyCoreCommand(program, ctx, entry, cmd);
+    }
+  }
+}
 
 export function registerProgramCommands(
   program: Command,
   ctx: ProgramContext,
   argv: string[] = process.argv,
 ) {
-  for (const entry of commandRegistry) {
-    entry.register({ program, ctx, argv });
-  }
-}
-
-export function findRoutedCommand(path: string[]): RouteSpec | null {
-  for (const entry of commandRegistry) {
-    if (!entry.routes) {
-      continue;
-    }
-    for (const route of entry.routes) {
-      if (route.match(path)) {
-        return route;
-      }
-    }
-  }
-  return null;
+  registerCoreCliCommands(program, ctx, argv);
+  registerSubCliCommands(program, argv);
 }

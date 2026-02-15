@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { TSchema } from "@sinclair/typebox";
 import {
   AgentEventSchema,
   AgentIdentityParamsSchema,
@@ -10,8 +10,11 @@ import {
   WakeParamsSchema,
 } from "./agent.js";
 import {
-  AgentModelInfoSchema,
   AgentSummarySchema,
+  AgentsCreateParamsSchema,
+  AgentsCreateResultSchema,
+  AgentsDeleteParamsSchema,
+  AgentsDeleteResultSchema,
   AgentsFileEntrySchema,
   AgentsFilesGetParamsSchema,
   AgentsFilesGetResultSchema,
@@ -21,12 +24,9 @@ import {
   AgentsFilesSetResultSchema,
   AgentsListParamsSchema,
   AgentsListResultSchema,
-  AgentsModelSetParamsSchema,
-  AgentsModelSetResultSchema,
+  AgentsUpdateParamsSchema,
+  AgentsUpdateResultSchema,
   ModelChoiceSchema,
-  ModelCooldownSchema,
-  ModelsCooldownsParamsSchema,
-  ModelsCooldownsResultSchema,
   ModelsListParamsSchema,
   ModelsListResultSchema,
   SkillsBinsParamsSchema,
@@ -37,6 +37,8 @@ import {
 } from "./agents-models-skills.js";
 import {
   ChannelsLogoutParamsSchema,
+  TalkConfigParamsSchema,
+  TalkConfigResultSchema,
   ChannelsStatusParamsSchema,
   ChannelsStatusResultSchema,
   TalkModeParamsSchema,
@@ -92,7 +94,6 @@ import {
   ShutdownEventSchema,
   TickEventSchema,
 } from "./frames.js";
-import { FsPickDirectoryParamsSchema } from "./fs.js";
 import {
   ChatAbortParamsSchema,
   ChatEventSchema,
@@ -116,7 +117,6 @@ import {
   NodePairVerifyParamsSchema,
   NodeRenameParamsSchema,
 } from "./nodes.js";
-import { ProjectsListParamsSchema } from "./projects.js";
 import {
   SessionsCompactParamsSchema,
   SessionsDeleteParamsSchema,
@@ -125,6 +125,7 @@ import {
   SessionsPreviewParamsSchema,
   SessionsResetParamsSchema,
   SessionsResolveParamsSchema,
+  SessionsUsageParamsSchema,
 } from "./sessions.js";
 import { PresenceEntrySchema, SnapshotSchema, StateVersionSchema } from "./snapshot.js";
 import {
@@ -138,7 +139,7 @@ import {
   WizardStepSchema,
 } from "./wizard.js";
 
-export const ProtocolSchemas: Record<string, z.ZodTypeAny> = {
+export const ProtocolSchemas: Record<string, TSchema> = {
   ConnectParams: ConnectParamsSchema,
   HelloOk: HelloOkSchema,
   RequestFrame: RequestFrameSchema,
@@ -176,7 +177,7 @@ export const ProtocolSchemas: Record<string, z.ZodTypeAny> = {
   SessionsResetParams: SessionsResetParamsSchema,
   SessionsDeleteParams: SessionsDeleteParamsSchema,
   SessionsCompactParams: SessionsCompactParamsSchema,
-  ProjectsListParams: ProjectsListParamsSchema,
+  SessionsUsageParams: SessionsUsageParamsSchema,
   ConfigGetParams: ConfigGetParamsSchema,
   ConfigSetParams: ConfigSetParamsSchema,
   ConfigApplyParams: ConfigApplyParamsSchema,
@@ -192,12 +193,20 @@ export const ProtocolSchemas: Record<string, z.ZodTypeAny> = {
   WizardStartResult: WizardStartResultSchema,
   WizardStatusResult: WizardStatusResultSchema,
   TalkModeParams: TalkModeParamsSchema,
+  TalkConfigParams: TalkConfigParamsSchema,
+  TalkConfigResult: TalkConfigResultSchema,
   ChannelsStatusParams: ChannelsStatusParamsSchema,
   ChannelsStatusResult: ChannelsStatusResultSchema,
   ChannelsLogoutParams: ChannelsLogoutParamsSchema,
   WebLoginStartParams: WebLoginStartParamsSchema,
   WebLoginWaitParams: WebLoginWaitParamsSchema,
   AgentSummary: AgentSummarySchema,
+  AgentsCreateParams: AgentsCreateParamsSchema,
+  AgentsCreateResult: AgentsCreateResultSchema,
+  AgentsUpdateParams: AgentsUpdateParamsSchema,
+  AgentsUpdateResult: AgentsUpdateResultSchema,
+  AgentsDeleteParams: AgentsDeleteParamsSchema,
+  AgentsDeleteResult: AgentsDeleteResultSchema,
   AgentsFileEntry: AgentsFileEntrySchema,
   AgentsFilesListParams: AgentsFilesListParamsSchema,
   AgentsFilesListResult: AgentsFilesListResultSchema,
@@ -207,15 +216,9 @@ export const ProtocolSchemas: Record<string, z.ZodTypeAny> = {
   AgentsFilesSetResult: AgentsFilesSetResultSchema,
   AgentsListParams: AgentsListParamsSchema,
   AgentsListResult: AgentsListResultSchema,
-  AgentModelInfo: AgentModelInfoSchema,
-  AgentsModelSetParams: AgentsModelSetParamsSchema,
-  AgentsModelSetResult: AgentsModelSetResultSchema,
   ModelChoice: ModelChoiceSchema,
   ModelsListParams: ModelsListParamsSchema,
   ModelsListResult: ModelsListResultSchema,
-  ModelCooldown: ModelCooldownSchema,
-  ModelsCooldownsParams: ModelsCooldownsParamsSchema,
-  ModelsCooldownsResult: ModelsCooldownsResultSchema,
   SkillsStatusParams: SkillsStatusParamsSchema,
   SkillsBinsParams: SkillsBinsParamsSchema,
   SkillsBinsResult: SkillsBinsResultSchema,
@@ -239,7 +242,6 @@ export const ProtocolSchemas: Record<string, z.ZodTypeAny> = {
   ExecApprovalsSnapshot: ExecApprovalsSnapshotSchema,
   ExecApprovalRequestParams: ExecApprovalRequestParamsSchema,
   ExecApprovalResolveParams: ExecApprovalResolveParamsSchema,
-  FsPickDirectoryParams: FsPickDirectoryParamsSchema,
   DevicePairListParams: DevicePairListParamsSchema,
   DevicePairApproveParams: DevicePairApproveParamsSchema,
   DevicePairRejectParams: DevicePairRejectParamsSchema,

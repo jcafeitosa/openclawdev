@@ -2,12 +2,9 @@ import { LitElement } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import type { EventLogEntry } from "./app-events.ts";
 import type { AppViewState } from "./app-view-state.ts";
-import type { AuthProviderEntry } from "./controllers/auth.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
-import type { HealthData } from "./controllers/health.ts";
-import type { ProviderHealthEntry } from "./controllers/providers-health.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
@@ -32,7 +29,6 @@ import type {
   NostrProfile,
 } from "./types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
-import type { ToastEntry, ToastType } from "./views/toast.ts";
 import {
   handleChannelConfigReload as handleChannelConfigReloadInternal,
   handleChannelConfigSave as handleChannelConfigSaveInternal,
@@ -78,12 +74,10 @@ import {
 import {
   resetToolStream as resetToolStreamInternal,
   type ToolStreamEntry,
+  type CompactionStatus,
 } from "./app-tool-stream.ts";
 import { resolveInjectedAssistantIdentity } from "./assistant-identity.ts";
-import { loadChatComposerState } from "./chat-drafts.ts";
 import { loadAssistantIdentity as loadAssistantIdentityInternal } from "./controllers/assistant-identity.ts";
-import { loadProvidersHealth as loadProvidersHealthInternal } from "./controllers/providers-health.ts";
-import { loadSecurityData } from "./controllers/security.ts";
 import { loadSettings, type UiSettings } from "./storage.ts";
 import { type ChatAttachment, type ChatQueueItem, type CronFormState } from "./ui-types.ts";
 
@@ -92,9 +86,6 @@ declare global {
     __OPENCLAW_CONTROL_UI_BASE_PATH__?: string;
   }
 }
-
-const bootSettings = loadSettings();
-const initialChatComposer = loadChatComposerState(bootSettings.sessionKey);
 
 const injectedAssistantIdentity = resolveInjectedAssistantIdentity();
 
@@ -113,7 +104,7 @@ function resolveOnboardingMode(): boolean {
 
 @customElement("openclaw-app")
 export class OpenClawApp extends LitElement {
-  @state() settings: UiSettings = bootSettings;
+  @state() settings: UiSettings = loadSettings();
   @state() password = "";
   @state() tab: Tab = "chat";
   @state() onboarding = resolveOnboardingMode();
@@ -134,17 +125,18 @@ export class OpenClawApp extends LitElement {
   @state() sessionKey = this.settings.sessionKey;
   @state() chatLoading = false;
   @state() chatSending = false;
-  @state() chatMessage = initialChatComposer.draft;
+  @state() chatMessage = "";
   @state() chatMessages: unknown[] = [];
   @state() chatToolMessages: unknown[] = [];
   @state() chatStream: string | null = null;
   @state() chatStreamStartedAt: number | null = null;
   @state() chatRunId: string | null = null;
-  @state() compactionStatus: import("./app-tool-stream.ts").CompactionStatus | null = null;
+  @state() compactionStatus: CompactionStatus | null = null;
   @state() chatAvatarUrl: string | null = null;
   @state() chatThinkingLevel: string | null = null;
   @state() chatQueue: ChatQueueItem[] = [];
-  @state() chatAttachments: ChatAttachment[] = initialChatComposer.attachments;
+  @state() chatAttachments: ChatAttachment[] = [];
+  @state() chatManualRefreshInFlight = false;
   // Sidebar state for tool output viewing
   @state() sidebarOpen = false;
   @state() sidebarContent: string | null = null;
@@ -211,14 +203,8 @@ export class OpenClawApp extends LitElement {
   @state() agentsList: AgentsListResult | null = null;
   @state() agentsError: string | null = null;
   @state() agentsSelectedId: string | null = null;
-  @state() agentsPanel:
-    | "overview"
-    | "files"
-    | "tools"
-    | "skills"
-    | "channels"
-    | "cron"
-    | "hierarchy" = "overview";
+  @state() agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron" =
+    "overview";
   @state() agentFilesLoading = false;
   @state() agentFilesError: string | null = null;
   @state() agentFilesList: AgentsFilesListResult | null = null;
@@ -234,16 +220,6 @@ export class OpenClawApp extends LitElement {
   @state() agentSkillsReport: SkillStatusReport | null = null;
   @state() agentSkillsAgentId: string | null = null;
 
-  @state() agentResourcesLoading = false;
-  @state() agentResourcesError: string | null = null;
-  @state() agentResourcesData:
-    | import("./controllers/agent-resources.ts").AgentResourcesResult
-    | null = null;
-
-  @state() agentHierarchyLoading = false;
-  @state() agentHierarchyError: string | null = null;
-  @state() agentHierarchyData: import("./types.ts").AgentHierarchyResult | null = null;
-
   @state() sessionsLoading = false;
   @state() sessionsResult: SessionsListResult | null = null;
   @state() sessionsError: string | null = null;
@@ -251,6 +227,59 @@ export class OpenClawApp extends LitElement {
   @state() sessionsFilterLimit = "120";
   @state() sessionsIncludeGlobal = true;
   @state() sessionsIncludeUnknown = false;
+
+  @state() usageLoading = false;
+  @state() usageResult: import("./types.js").SessionsUsageResult | null = null;
+  @state() usageCostSummary: import("./types.js").CostUsageSummary | null = null;
+  @state() usageError: string | null = null;
+  @state() usageStartDate = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  @state() usageEndDate = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  @state() usageSelectedSessions: string[] = [];
+  @state() usageSelectedDays: string[] = [];
+  @state() usageSelectedHours: number[] = [];
+  @state() usageChartMode: "tokens" | "cost" = "tokens";
+  @state() usageDailyChartMode: "total" | "by-type" = "by-type";
+  @state() usageTimeSeriesMode: "cumulative" | "per-turn" = "per-turn";
+  @state() usageTimeSeriesBreakdownMode: "total" | "by-type" = "by-type";
+  @state() usageTimeSeries: import("./types.js").SessionUsageTimeSeries | null = null;
+  @state() usageTimeSeriesLoading = false;
+  @state() usageSessionLogs: import("./views/usage.js").SessionLogEntry[] | null = null;
+  @state() usageSessionLogsLoading = false;
+  @state() usageSessionLogsExpanded = false;
+  // Applied query (used to filter the already-loaded sessions list client-side).
+  @state() usageQuery = "";
+  // Draft query text (updates immediately as the user types; applied via debounce or "Search").
+  @state() usageQueryDraft = "";
+  @state() usageSessionSort: "tokens" | "cost" | "recent" | "messages" | "errors" = "recent";
+  @state() usageSessionSortDir: "desc" | "asc" = "desc";
+  @state() usageRecentSessions: string[] = [];
+  @state() usageTimeZone: "local" | "utc" = "local";
+  @state() usageContextExpanded = false;
+  @state() usageHeaderPinned = false;
+  @state() usageSessionsTab: "all" | "recent" = "all";
+  @state() usageVisibleColumns: string[] = [
+    "channel",
+    "agent",
+    "provider",
+    "model",
+    "messages",
+    "tools",
+    "errors",
+    "duration",
+  ];
+  @state() usageLogFilterRoles: import("./views/usage.js").SessionLogRole[] = [];
+  @state() usageLogFilterTools: string[] = [];
+  @state() usageLogFilterHasTools = false;
+  @state() usageLogFilterQuery = "";
+
+  // Non-reactive (don’t trigger renders just for timer bookkeeping).
+  usageQueryDebounceTimer: number | null = null;
 
   @state() cronLoading = false;
   @state() cronJobs: CronJob[] = [];
@@ -269,91 +298,6 @@ export class OpenClawApp extends LitElement {
   @state() skillsBusyKey: string | null = null;
   @state() skillMessages: Record<string, SkillMessage> = {};
 
-  @state() providersHealthLoading = false;
-  @state() providersHealthError: string | null = null;
-  @state() providersHealthEntries: ProviderHealthEntry[] = [];
-  @state() providersHealthUpdatedAt: number | null = null;
-  @state() providersHealthShowAll = true;
-  @state() providersHealthExpanded: string | null = null;
-  @state() providersModelAllowlist: Set<string> = new Set();
-  @state() providersPrimaryModel: string | null = null;
-  @state() providersModelFallbacks: string[] = [];
-  @state() providersCodingModelPrimary: string | null = null;
-  @state() providersModelAutoPickFromPool = false;
-  @state() providersConfigHash: string | null = null;
-  @state() providersModelsSaving = false;
-  @state() providersModelsDirty = false;
-  @state() providersModelsCostFilter: "all" | "high" | "medium" | "low" | "free" = "all";
-  @state() authConfigProvider: string | null = null;
-  @state() authConfigSaving = false;
-  @state() authProvidersList: AuthProviderEntry[] | null = null;
-  @state() oauthFlow: import("./controllers/auth.ts").OAuthFlowState | null = null;
-  @state() removingProvider: string | null = null;
-  @state() clockDisplay = "";
-
-  // Toast notifications
-  @state() toasts: ToastEntry[] = [];
-  private toastIdCounter = 0;
-  private toastTimers = new Map<number, number>();
-
-  // Usage tab
-  @state() usageLoading = false;
-  @state() usageError: string | null = null;
-  @state() usageStatus: unknown = null;
-  @state() usageCost: unknown = null;
-  @state() usagePeriod: "24h" | "7d" | "30d" | "all" = "7d";
-
-  // System info (overview)
-  @state() systemInfo: import("./controllers/system-info.ts").SystemInfoResult | null = null;
-  @state() systemInfoLoading = false;
-  @state() systemInfoError: string | null = null;
-
-  // Health monitor tab
-  @state() healthLoading = false;
-  @state() healthError: string | null = null;
-  @state() healthData: HealthData | null = null;
-  @state() healthChannels: Array<{ id: string; status: string }> = [];
-  private healthPollInterval: number | null = null;
-
-  // Security monitoring tab
-  @state() securityLoading = false;
-  @state() securityError: string | null = null;
-  @state() securitySummary: import("./controllers/security.ts").SecuritySummary | null = null;
-  @state() securityStats: import("./controllers/security.ts").SecurityEventStats | null = null;
-  @state() securityEvents: import("./controllers/security.ts").SecurityEvent[] = [];
-  @state() securityAlerts: import("./controllers/security.ts").SecurityEvent[] = [];
-  @state() securityBlocked: import("./controllers/security.ts").SecurityEvent[] = [];
-  @state() securityAudit: import("./controllers/security.ts").SecurityAuditReport | null = null;
-  @state() securityAuditLoading = false;
-  @state() securityFilterCategory:
-    | import("./controllers/security.ts").SecurityEventCategory
-    | "all" = "all";
-  @state() securityFilterSeverity:
-    | import("./controllers/security.ts").SecurityEventSeverity
-    | "all" = "all";
-  @state() securityFilterTimeRange: "1h" | "24h" | "7d" | "30d" | "all" = "24h";
-  @state() securityActiveTab: "summary" | "events" | "alerts" | "blocked" | "audit" = "summary";
-  @state() securityEventsPage = 0;
-  @state() securityEventsPerPage = 50;
-
-  // Voice controls tab
-  @state() voiceLoading = false;
-  @state() voiceError: string | null = null;
-  @state() voiceTtsEnabled = false;
-  @state() voiceTtsProvider: string | null = null;
-  @state() voiceTtsProviders: string[] = [];
-  @state() voiceWakeWord: string | null = null;
-  @state() voiceTalkMode: string | null = null;
-
-  // Confirm dialog
-  @state() confirmDialog: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    onConfirm: () => void;
-    onCancel: () => void;
-  } | null = null;
-
   @state() debugLoading = false;
   @state() debugStatus: StatusSummary | null = null;
   @state() debugHealth: HealthSnapshot | null = null;
@@ -363,31 +307,6 @@ export class OpenClawApp extends LitElement {
   @state() debugCallParams = "{}";
   @state() debugCallResult: string | null = null;
   @state() debugCallError: string | null = null;
-
-  // Model catalog (models.list)
-  @state() modelsLoading = false;
-  @state() modelsError: string | null = null;
-  @state() modelsCatalog: import("./controllers/models.ts").ModelCatalogRow[] = [];
-
-  // Model availability (providers.health + models.cooldowns)
-  @state() modelsAvailabilityLoading = false;
-  @state() modelsAvailabilityError: string | null = null;
-  @state() detectedProviders: Set<string> = new Set();
-  @state() unavailableProviders: Set<string> = new Set();
-  @state() cooldownModels: Set<string> = new Set();
-  @state() closestUsageByProvider: Record<
-    string,
-    import("./controllers/models-availability.ts").ClosestUsageWindow | null
-  > = {};
-
-  // Projects catalog (projects.list)
-  @state() projectsLoading = false;
-  @state() projectsError: string | null = null;
-  @state() projectsRootDir: string | null = null;
-  // Browse root for "projects" picker (can be any directory on disk).
-  @state() projectsBrowseRootDir: string | null = null;
-  @state() projectsIncludeHidden = false;
-  @state() projects: import("./controllers/projects.ts").ProjectEntry[] = [];
 
   @state() logsLoading = false;
   @state() logsError: string | null = null;
@@ -411,7 +330,6 @@ export class OpenClawApp extends LitElement {
   private chatHasAutoScrolled = false;
   private chatUserNearBottom = true;
   @state() chatNewMessagesBelow = false;
-  private chatContentObserver: MutationObserver | null = null;
   private nodesPollInterval: number | null = null;
   private logsPollInterval: number | null = null;
   private debugPollInterval: number | null = null;
@@ -478,11 +396,12 @@ export class OpenClawApp extends LitElement {
     resetChatScrollInternal(this as unknown as Parameters<typeof resetChatScrollInternal>[0]);
   }
 
-  scrollToBottom() {
+  scrollToBottom(opts?: { smooth?: boolean }) {
     resetChatScrollInternal(this as unknown as Parameters<typeof resetChatScrollInternal>[0]);
     scheduleChatScrollInternal(
       this as unknown as Parameters<typeof scheduleChatScrollInternal>[0],
       true,
+      Boolean(opts?.smooth),
     );
   }
 
@@ -644,47 +563,6 @@ export class OpenClawApp extends LitElement {
     const newRatio = Math.max(0.4, Math.min(0.7, ratio));
     this.splitRatio = newRatio;
     this.applySettings({ ...this.settings, splitRatio: newRatio });
-  }
-
-  async handleLoadProviders() {
-    await loadProvidersHealthInternal(this);
-  }
-
-  async handleLoadSecurity() {
-    await loadSecurityData(this as unknown as import("./controllers/security.ts").SecurityState);
-  }
-
-  showToast(type: ToastType, message: string) {
-    const id = ++this.toastIdCounter;
-    const dismissAt = Date.now() + 5000;
-    this.toasts = [...this.toasts, { id, type, message, dismissAt }];
-    const timer = window.setTimeout(() => {
-      this.dismissToast(id);
-    }, 5000);
-    this.toastTimers.set(id, timer);
-  }
-
-  dismissToast(id: number) {
-    this.toasts = this.toasts.filter((t) => t.id !== id);
-    const timer = this.toastTimers.get(id);
-    if (timer != null) {
-      window.clearTimeout(timer);
-      this.toastTimers.delete(id);
-    }
-  }
-
-  showConfirm(opts: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    onConfirm: () => void;
-  }) {
-    this.confirmDialog = {
-      ...opts,
-      onCancel: () => {
-        this.confirmDialog = null;
-      },
-    };
   }
 
   render() {

@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
-import { node } from "@elysiajs/node";
-import { Elysia } from "elysia";
+import express, { type Express } from "express";
 import fs from "node:fs/promises";
+import { danger } from "../globals.js";
 import { SafeOpenError, openFileWithinRoot } from "../infra/fs-safe.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { detectMime } from "./mime.js";
@@ -26,17 +26,17 @@ const isValidMediaId = (id: string) => {
 };
 
 export function attachMediaRoutes(
-  app: Elysia,
+  app: Express,
   ttlMs = DEFAULT_TTL_MS,
   _runtime: RuntimeEnv = defaultRuntime,
 ) {
   const mediaDir = getMediaDir();
 
-  app.get("/media/:id", async ({ params, set }) => {
-    const id = params.id;
+  app.get("/media/:id", async (req, res) => {
+    const id = req.params.id;
     if (!isValidMediaId(id)) {
-      set.status = 400;
-      return "invalid path";
+      res.status(400).send("invalid path");
+      return;
     }
     try {
       const { handle, realPath, stat } = await openFileWithinRoot({
@@ -45,39 +45,46 @@ export function attachMediaRoutes(
       });
       if (stat.size > MAX_MEDIA_BYTES) {
         await handle.close().catch(() => {});
-        set.status = 413;
-        return "too large";
+        res.status(413).send("too large");
+        return;
       }
       if (Date.now() - stat.mtimeMs > ttlMs) {
         await handle.close().catch(() => {});
         await fs.rm(realPath).catch(() => {});
-        set.status = 410;
-        return "expired";
+        res.status(410).send("expired");
+        return;
       }
       const data = await handle.readFile();
       await handle.close().catch(() => {});
       const mime = await detectMime({ buffer: data, filePath: realPath });
       if (mime) {
-        set.headers["content-type"] = mime;
+        res.type(mime);
       }
-      // best-effort single-use cleanup shortly after serving
-      setTimeout(() => {
-        fs.rm(realPath).catch(() => {});
-      }, 50);
-      return data;
+      res.send(data);
+      // best-effort single-use cleanup after response ends
+      res.on("finish", () => {
+        const cleanup = () => {
+          void fs.rm(realPath).catch(() => {});
+        };
+        // Tests should not pay for time-based cleanup delays.
+        if (process.env.VITEST || process.env.NODE_ENV === "test") {
+          queueMicrotask(cleanup);
+          return;
+        }
+        setTimeout(cleanup, 50);
+      });
     } catch (err) {
       if (err instanceof SafeOpenError) {
         if (err.code === "invalid-path") {
-          set.status = 400;
-          return "invalid path";
+          res.status(400).send("invalid path");
+          return;
         }
         if (err.code === "not-found") {
-          set.status = 404;
-          return "not found";
+          res.status(404).send("not found");
+          return;
         }
       }
-      set.status = 404;
-      return "not found";
+      res.status(404).send("not found");
     }
   });
 
@@ -92,16 +99,14 @@ export async function startMediaServer(
   ttlMs = DEFAULT_TTL_MS,
   runtime: RuntimeEnv = defaultRuntime,
 ): Promise<Server> {
-  const app = new Elysia({ adapter: node() });
+  const app = express();
   attachMediaRoutes(app, ttlMs, runtime);
   return await new Promise((resolve, reject) => {
-    app.listen(port, (serverInfo) => {
-      const nodeServer = (serverInfo as { raw?: { node?: { server?: Server } } }).raw?.node?.server;
-      if (nodeServer) {
-        resolve(nodeServer);
-      } else {
-        reject(new Error("Failed to create HTTP server"));
-      }
+    const server = app.listen(port, "127.0.0.1");
+    server.once("listening", () => resolve(server));
+    server.once("error", (err) => {
+      runtime.error(danger(`Media server failed: ${String(err)}`));
+      reject(err);
     });
   });
 }

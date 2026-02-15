@@ -1,7 +1,7 @@
 import type { OpenClawConfig } from "../config/config.js";
 
 const DEFAULT_AGENT_TIMEOUT_SECONDS = 600;
-const MAX_SET_TIMEOUT_MS = 2 ** 31 - 1;
+const MAX_SAFE_TIMEOUT_MS = 2_147_000_000;
 
 const normalizeNumber = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : undefined;
@@ -19,12 +19,11 @@ export function resolveAgentTimeoutMs(opts: {
   minMs?: number;
 }): number {
   const minMs = Math.max(normalizeNumber(opts.minMs) ?? 1, 1);
-  const clampTimeout = (value: number) =>
-    Math.min(MAX_SET_TIMEOUT_MS, Math.max(Math.floor(value), minMs));
-  const defaultMs = clampTimeout(resolveAgentTimeoutSeconds(opts.cfg) * 1000);
-  // Use the largest safe JS setTimeout value to represent "no timeout"
-  // when explicitly set to 0.
-  const NO_TIMEOUT_MS = MAX_SET_TIMEOUT_MS;
+  const clampTimeoutMs = (valueMs: number) =>
+    Math.min(Math.max(valueMs, minMs), MAX_SAFE_TIMEOUT_MS);
+  const defaultMs = clampTimeoutMs(resolveAgentTimeoutSeconds(opts.cfg) * 1000);
+  // Use the maximum timer-safe timeout to represent "no timeout" when explicitly set to 0.
+  const NO_TIMEOUT_MS = MAX_SAFE_TIMEOUT_MS;
   const overrideMs = normalizeNumber(opts.overrideMs);
   if (overrideMs !== undefined) {
     if (overrideMs === 0) {
@@ -33,7 +32,7 @@ export function resolveAgentTimeoutMs(opts: {
     if (overrideMs < 0) {
       return defaultMs;
     }
-    return clampTimeout(overrideMs);
+    return clampTimeoutMs(overrideMs);
   }
   const overrideSeconds = normalizeNumber(opts.overrideSeconds);
   if (overrideSeconds !== undefined) {
@@ -43,7 +42,7 @@ export function resolveAgentTimeoutMs(opts: {
     if (overrideSeconds < 0) {
       return defaultMs;
     }
-    return clampTimeout(overrideSeconds * 1000);
+    return clampTimeoutMs(overrideSeconds * 1000);
   }
   return defaultMs;
 }

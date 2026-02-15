@@ -1,36 +1,14 @@
 import { loadConfig } from "../config/config.js";
-import { resolveAgentIdFromSessionKey } from "../config/sessions.js";
 import { callGateway } from "../gateway/call.js";
-import { emitAgentEvent, onAgentEvent } from "../infra/agent-events.js";
+import { onAgentEvent } from "../infra/agent-events.js";
 import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
-import { recordAgentOutcome } from "./agent-performance-tracker.js";
-import { resolveAgentIdentity } from "./identity.js";
+import { resetAnnounceQueuesForTests } from "./subagent-announce-queue.js";
 import { runSubagentAnnounceFlow, type SubagentRunOutcome } from "./subagent-announce.js";
 import {
   loadSubagentRegistryFromDisk,
   saveSubagentRegistryToDisk,
 } from "./subagent-registry.store.js";
-import { resolveTeamChatSessionKey } from "./team-chat.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
-
-const MAX_SET_TIMEOUT_MS = 2 ** 31 - 1;
-
-export type SubagentUsage = {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheWriteTokens: number;
-  costUsd: number;
-  durationMs: number;
-  toolCalls: number;
-};
-
-export type SubagentProgress = {
-  percent: number;
-  status: string;
-  detail?: string;
-  lastUpdate: number;
-};
 
 export type SubagentRunRecord = {
   runId: string;
@@ -39,8 +17,10 @@ export type SubagentRunRecord = {
   requesterOrigin?: DeliveryContext;
   requesterDisplayKey: string;
   task: string;
-  cleanup: "delete" | "keep" | "idle";
+  cleanup: "delete" | "keep";
   label?: string;
+  model?: string;
+  runTimeoutSeconds?: number;
   createdAt: number;
   startedAt?: number;
   endedAt?: number;
@@ -48,12 +28,7 @@ export type SubagentRunRecord = {
   archiveAtMs?: number;
   cleanupCompletedAt?: number;
   cleanupHandled?: boolean;
-  /** Accumulated resource usage for this run. */
-  usage?: SubagentUsage;
-  /** Real-time progress tracking. */
-  progress?: SubagentProgress;
-  /** Last continuity nudge timestamp to avoid repeated reminders. */
-  continuityNudgeAt?: number;
+  suppressAnnounceReason?: "steer-restart" | "killed";
 };
 
 const subagentRuns = new Map<string, SubagentRunRecord>();
@@ -62,6 +37,7 @@ let listenerStarted = false;
 let listenerStop: (() => void) | null = null;
 // Use var to avoid TDZ when init runs across circular imports during bootstrap.
 var restoreAttempted = false;
+const SUBAGENT_ANNOUNCE_TIMEOUT_MS = 120_000;
 
 function persistSubagentRuns() {
   try {
@@ -72,6 +48,35 @@ function persistSubagentRuns() {
 }
 
 const resumedRuns = new Set<string>();
+
+function suppressAnnounceForSteerRestart(entry?: SubagentRunRecord) {
+  return entry?.suppressAnnounceReason === "steer-restart";
+}
+
+function startSubagentAnnounceCleanupFlow(runId: string, entry: SubagentRunRecord): boolean {
+  if (!beginSubagentCleanup(runId)) {
+    return false;
+  }
+  const requesterOrigin = normalizeDeliveryContext(entry.requesterOrigin);
+  void runSubagentAnnounceFlow({
+    childSessionKey: entry.childSessionKey,
+    childRunId: entry.runId,
+    requesterSessionKey: entry.requesterSessionKey,
+    requesterOrigin,
+    requesterDisplayKey: entry.requesterDisplayKey,
+    task: entry.task,
+    timeoutMs: SUBAGENT_ANNOUNCE_TIMEOUT_MS,
+    cleanup: entry.cleanup,
+    waitForCompletion: false,
+    startedAt: entry.startedAt,
+    endedAt: entry.endedAt,
+    label: entry.label,
+    outcome: entry.outcome,
+  }).then((didAnnounce) => {
+    finalizeSubagentCleanup(runId, entry.cleanup, didAnnounce);
+  });
+  return true;
+}
 
 function resumeSubagentRun(runId: string) {
   if (!runId || resumedRuns.has(runId)) {
@@ -86,34 +91,20 @@ function resumeSubagentRun(runId: string) {
   }
 
   if (typeof entry.endedAt === "number" && entry.endedAt > 0) {
-    if (!beginSubagentCleanup(runId)) {
+    if (suppressAnnounceForSteerRestart(entry)) {
+      resumedRuns.add(runId);
       return;
     }
-    const requesterOrigin = normalizeDeliveryContext(entry.requesterOrigin);
-    void runSubagentAnnounceFlow({
-      childSessionKey: entry.childSessionKey,
-      childRunId: entry.runId,
-      requesterSessionKey: entry.requesterSessionKey,
-      requesterOrigin,
-      requesterDisplayKey: entry.requesterDisplayKey,
-      task: entry.task,
-      timeoutMs: 30_000,
-      cleanup: entry.cleanup,
-      waitForCompletion: false,
-      startedAt: entry.startedAt,
-      endedAt: entry.endedAt,
-      label: entry.label,
-      outcome: entry.outcome,
-    }).then((didAnnounce) => {
-      finalizeSubagentCleanup(runId, entry.cleanup, didAnnounce);
-    });
+    if (!startSubagentAnnounceCleanupFlow(runId, entry)) {
+      return;
+    }
     resumedRuns.add(runId);
     return;
   }
 
   // Wait for completion again after restart.
   const cfg = loadConfig();
-  const waitTimeoutMs = resolveSubagentWaitTimeoutMs(cfg, undefined);
+  const waitTimeoutMs = resolveSubagentWaitTimeoutMs(cfg, entry.runTimeoutSeconds);
   void waitForSubagentCompletion(runId, waitTimeoutMs);
   resumedRuns.add(runId);
 }
@@ -123,10 +114,6 @@ function restoreSubagentRunsOnce() {
     return;
   }
   restoreAttempted = true;
-
-  // Always ensure listener is initialized to capture new spawn events
-  ensureListener();
-
   try {
     const restored = loadSubagentRegistryFromDisk();
     if (restored.size === 0) {
@@ -142,27 +129,9 @@ function restoreSubagentRunsOnce() {
       }
     }
 
-    // Mark orphaned runs (started but never finished before gateway restart)
-    // as failed so they don't appear permanently stuck as "running".
-    const now = Date.now();
-    const ORPHAN_THRESHOLD_MS = 5 * 60_000; // 5 minutes
-    for (const [_runId, entry] of subagentRuns.entries()) {
-      if (entry.outcome || entry.cleanupCompletedAt) {
-        continue;
-      }
-      const anchor = entry.startedAt ?? entry.createdAt ?? 0;
-      if (anchor > 0 && now - anchor > ORPHAN_THRESHOLD_MS && !entry.endedAt) {
-        entry.endedAt = now;
-        entry.outcome = {
-          status: "error",
-          error: "Orphaned: gateway restarted before run completed",
-        };
-      }
-    }
-    persistSubagentRuns();
-
     // Resume pending work.
-    if (subagentRuns.size > 0) {
+    ensureListener();
+    if ([...subagentRuns.values()].some((entry) => entry.archiveAtMs)) {
       startSweeper();
     }
     for (const runId of subagentRuns.keys()) {
@@ -186,7 +155,7 @@ function resolveSubagentWaitTimeoutMs(
   cfg: ReturnType<typeof loadConfig>,
   runTimeoutSeconds?: number,
 ) {
-  return resolveAgentTimeoutMs({ cfg, overrideSeconds: runTimeoutSeconds });
+  return resolveAgentTimeoutMs({ cfg, overrideSeconds: runTimeoutSeconds ?? 0 });
 }
 
 function startSweeper() {
@@ -208,8 +177,6 @@ function stopSweeper() {
 }
 
 async function sweepSubagentRuns() {
-  await runContinuityWatchdog();
-
   const now = Date.now();
   let mutated = false;
   for (const [runId, entry] of subagentRuns.entries()) {
@@ -236,91 +203,13 @@ async function sweepSubagentRuns() {
   }
 }
 
-const CONTINUITY_STALL_MS = 5 * 60_000;
-const CONTINUITY_NUDGE_COOLDOWN_MS = 10 * 60_000;
-
-async function runContinuityWatchdog(nowMs: number = Date.now()) {
-  if (subagentRuns.size === 0) {
-    return;
-  }
-  const cfg = loadConfig();
-  const teamSessionKey = resolveTeamChatSessionKey({ cfg });
-  let mutated = false;
-
-  for (const entry of subagentRuns.values()) {
-    if (entry.cleanupCompletedAt || entry.outcome || entry.endedAt) {
-      continue;
-    }
-    const lastProgressAt = entry.progress?.lastUpdate ?? 0;
-    const lastActivityAt = Math.max(entry.startedAt ?? 0, entry.createdAt ?? 0, lastProgressAt);
-    if (lastActivityAt <= 0 || nowMs - lastActivityAt < CONTINUITY_STALL_MS) {
-      continue;
-    }
-    if (
-      typeof entry.continuityNudgeAt === "number" &&
-      nowMs - entry.continuityNudgeAt < CONTINUITY_NUDGE_COOLDOWN_MS
-    ) {
-      continue;
-    }
-
-    const agentId = resolveAgentIdFromSessionKey(entry.childSessionKey);
-    const identity = resolveAgentIdentity(cfg, agentId);
-    try {
-      await callGateway({
-        method: "chat.inject",
-        params: {
-          sessionKey: teamSessionKey,
-          message:
-            `Continuity check: ${identity?.name ?? agentId}, compartilhe status atual + bloqueios + proxima acao.\n` +
-            "Se concluiu a tarefa, solicite proxima tarefa ou dispensa.",
-          senderAgentId: agentId,
-          senderName: identity?.name ?? agentId,
-          senderEmoji: identity?.emoji,
-          senderAvatar: identity?.avatar,
-        },
-        timeoutMs: 10_000,
-      });
-      entry.continuityNudgeAt = nowMs;
-      mutated = true;
-    } catch {
-      // Non-critical: next sweep can retry.
-    }
-  }
-
-  if (mutated) {
-    persistSubagentRuns();
-  }
-}
-
 function ensureListener() {
   if (listenerStarted) {
     return;
   }
   listenerStarted = true;
   listenerStop = onAgentEvent((evt) => {
-    if (!evt) {
-      return;
-    }
-    // Track tool calls for usage accumulation
-    if (evt.stream === "tool") {
-      const entry = subagentRuns.get(evt.runId);
-      if (entry && evt.data?.phase === "start") {
-        if (!entry.usage) {
-          entry.usage = {
-            inputTokens: 0,
-            outputTokens: 0,
-            cacheReadTokens: 0,
-            cacheWriteTokens: 0,
-            costUsd: 0,
-            durationMs: 0,
-            toolCalls: 0,
-          };
-        }
-        entry.usage.toolCalls += 1;
-      }
-      return;
-    }
-    if (evt.stream !== "lifecycle") {
+    if (!evt || evt.stream !== "lifecycle") {
       return;
     }
     const entry = subagentRuns.get(evt.runId);
@@ -344,103 +233,63 @@ function ensureListener() {
     if (phase === "error") {
       const error = typeof evt.data?.error === "string" ? evt.data.error : undefined;
       entry.outcome = { status: "error", error };
+    } else if (evt.data?.aborted) {
+      entry.outcome = { status: "timeout" };
     } else {
       entry.outcome = { status: "ok" };
     }
     persistSubagentRuns();
 
-    // Record outcome for agent performance tracking.
-    try {
-      const agentId = resolveAgentIdFromSessionKey(entry.childSessionKey);
-      if (agentId) {
-        const latencyMs =
-          typeof entry.startedAt === "number" ? endedAt - entry.startedAt : undefined;
-        const tokens = entry.usage ? entry.usage.inputTokens + entry.usage.outputTokens : undefined;
-        recordAgentOutcome({
-          agentId,
-          taskType: "general", // default; enhanced by task classifier at spawn time
-          success: phase === "end",
-          latencyMs,
-          tokens,
-        });
-      }
-    } catch {
-      // Non-critical: don't block cleanup flow
-    }
-
-    if (!beginSubagentCleanup(evt.runId)) {
+    if (suppressAnnounceForSteerRestart(entry)) {
       return;
     }
-    const requesterOrigin = normalizeDeliveryContext(entry.requesterOrigin);
-    void runSubagentAnnounceFlow({
-      childSessionKey: entry.childSessionKey,
-      childRunId: entry.runId,
-      requesterSessionKey: entry.requesterSessionKey,
-      requesterOrigin,
-      requesterDisplayKey: entry.requesterDisplayKey,
-      task: entry.task,
-      timeoutMs: 30_000,
-      cleanup: entry.cleanup,
-      waitForCompletion: false,
-      startedAt: entry.startedAt,
-      endedAt: entry.endedAt,
-      label: entry.label,
-      outcome: entry.outcome,
-    }).then((didAnnounce) => {
-      finalizeSubagentCleanup(evt.runId, entry.cleanup, didAnnounce);
-    });
+
+    if (!startSubagentAnnounceCleanupFlow(evt.runId, entry)) {
+      return;
+    }
   });
 }
 
-function deleteChildSession(childSessionKey: string) {
-  void callGateway({
-    method: "sessions.delete",
-    params: { key: childSessionKey, deleteTranscript: true },
-    timeoutMs: 10_000,
-  }).catch(() => {
-    // Ignore session deletion failures — the archive sweeper is a fallback.
-  });
-}
-
-function finalizeSubagentCleanup(
-  runId: string,
-  cleanup: "delete" | "keep" | "idle",
-  didAnnounce: boolean,
-) {
+function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didAnnounce: boolean) {
   const entry = subagentRuns.get(runId);
   if (!entry) {
     return;
   }
-  const childSessionKey = entry.childSessionKey;
+  if (!didAnnounce) {
+    // Allow retry on the next wake if announce was deferred or failed.
+    entry.cleanupHandled = false;
+    resumedRuns.delete(runId);
+    persistSubagentRuns();
+    return;
+  }
   if (cleanup === "delete") {
     subagentRuns.delete(runId);
     persistSubagentRuns();
-    deleteChildSession(childSessionKey);
-    return;
-  }
-  if (cleanup === "idle") {
-    // Idle mode: keep session alive for follow-up instructions.
-    // Reset archive timer from completion time (not creation time).
-    const cfg = loadConfig();
-    const archiveAfterMs = resolveArchiveAfterMs(cfg);
-    if (archiveAfterMs) {
-      entry.archiveAtMs = Date.now() + archiveAfterMs;
-    }
-    entry.cleanupCompletedAt = Date.now();
-    persistSubagentRuns();
-    startSweeper();
-    return;
-  }
-  // cleanup === "keep": delete after successful announce only.
-  if (!didAnnounce) {
-    // Allow retry on the next wake if the announce failed.
-    entry.cleanupHandled = false;
-    persistSubagentRuns();
+    retryDeferredCompletedAnnounces(runId);
     return;
   }
   entry.cleanupCompletedAt = Date.now();
   persistSubagentRuns();
-  deleteChildSession(childSessionKey);
+  retryDeferredCompletedAnnounces(runId);
+}
+
+function retryDeferredCompletedAnnounces(excludeRunId?: string) {
+  for (const [runId, entry] of subagentRuns.entries()) {
+    if (excludeRunId && runId === excludeRunId) {
+      continue;
+    }
+    if (typeof entry.endedAt !== "number") {
+      continue;
+    }
+    if (entry.cleanupCompletedAt || entry.cleanupHandled) {
+      continue;
+    }
+    if (suppressAnnounceForSteerRestart(entry)) {
+      continue;
+    }
+    resumedRuns.delete(runId);
+    resumeSubagentRun(runId);
+  }
 }
 
 function beginSubagentCleanup(runId: string) {
@@ -459,55 +308,97 @@ function beginSubagentCleanup(runId: string) {
   return true;
 }
 
-export function updateSubagentUsage(runId: string, delta: Partial<SubagentUsage>) {
-  const entry = subagentRuns.get(runId);
+export function markSubagentRunForSteerRestart(runId: string) {
+  const key = runId.trim();
+  if (!key) {
+    return false;
+  }
+  const entry = subagentRuns.get(key);
   if (!entry) {
-    return;
+    return false;
   }
-  if (!entry.usage) {
-    entry.usage = {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-      costUsd: 0,
-      durationMs: 0,
-      toolCalls: 0,
-    };
+  if (entry.suppressAnnounceReason === "steer-restart") {
+    return true;
   }
-  if (delta.inputTokens) {
-    entry.usage.inputTokens += delta.inputTokens;
-  }
-  if (delta.outputTokens) {
-    entry.usage.outputTokens += delta.outputTokens;
-  }
-  if (delta.cacheReadTokens) {
-    entry.usage.cacheReadTokens += delta.cacheReadTokens;
-  }
-  if (delta.cacheWriteTokens) {
-    entry.usage.cacheWriteTokens += delta.cacheWriteTokens;
-  }
-  if (delta.costUsd) {
-    entry.usage.costUsd += delta.costUsd;
-  }
-  if (delta.durationMs) {
-    entry.usage.durationMs += delta.durationMs;
-  }
-  if (delta.toolCalls) {
-    entry.usage.toolCalls += delta.toolCalls;
-  }
+  entry.suppressAnnounceReason = "steer-restart";
   persistSubagentRuns();
+  return true;
+}
 
-  // Broadcast usage update for real-time hierarchy tracking
-  emitAgentEvent({
-    runId,
-    stream: "lifecycle",
-    sessionKey: entry.childSessionKey,
-    data: {
-      phase: "usage-update",
-      usage: entry.usage,
-    },
-  });
+export function clearSubagentRunSteerRestart(runId: string) {
+  const key = runId.trim();
+  if (!key) {
+    return false;
+  }
+  const entry = subagentRuns.get(key);
+  if (!entry) {
+    return false;
+  }
+  if (entry.suppressAnnounceReason !== "steer-restart") {
+    return true;
+  }
+  entry.suppressAnnounceReason = undefined;
+  persistSubagentRuns();
+  // If the interrupted run already finished while suppression was active, retry
+  // cleanup now so completion output is not lost when restart dispatch fails.
+  resumedRuns.delete(key);
+  if (typeof entry.endedAt === "number" && !entry.cleanupCompletedAt) {
+    resumeSubagentRun(key);
+  }
+  return true;
+}
+
+export function replaceSubagentRunAfterSteer(params: {
+  previousRunId: string;
+  nextRunId: string;
+  fallback?: SubagentRunRecord;
+  runTimeoutSeconds?: number;
+}) {
+  const previousRunId = params.previousRunId.trim();
+  const nextRunId = params.nextRunId.trim();
+  if (!previousRunId || !nextRunId) {
+    return false;
+  }
+
+  const previous = subagentRuns.get(previousRunId);
+  const source = previous ?? params.fallback;
+  if (!source) {
+    return false;
+  }
+
+  if (previousRunId !== nextRunId) {
+    subagentRuns.delete(previousRunId);
+    resumedRuns.delete(previousRunId);
+  }
+
+  const now = Date.now();
+  const cfg = loadConfig();
+  const archiveAfterMs = resolveArchiveAfterMs(cfg);
+  const archiveAtMs = archiveAfterMs ? now + archiveAfterMs : undefined;
+  const runTimeoutSeconds = params.runTimeoutSeconds ?? source.runTimeoutSeconds ?? 0;
+  const waitTimeoutMs = resolveSubagentWaitTimeoutMs(cfg, runTimeoutSeconds);
+
+  const next: SubagentRunRecord = {
+    ...source,
+    runId: nextRunId,
+    startedAt: now,
+    endedAt: undefined,
+    outcome: undefined,
+    cleanupCompletedAt: undefined,
+    cleanupHandled: false,
+    suppressAnnounceReason: undefined,
+    archiveAtMs,
+    runTimeoutSeconds,
+  };
+
+  subagentRuns.set(nextRunId, next);
+  ensureListener();
+  persistSubagentRuns();
+  if (archiveAtMs) {
+    startSweeper();
+  }
+  void waitForSubagentCompletion(nextRunId, waitTimeoutMs);
+  return true;
 }
 
 export function registerSubagentRun(params: {
@@ -517,15 +408,17 @@ export function registerSubagentRun(params: {
   requesterOrigin?: DeliveryContext;
   requesterDisplayKey: string;
   task: string;
-  cleanup: "delete" | "keep" | "idle";
+  cleanup: "delete" | "keep";
   label?: string;
+  model?: string;
   runTimeoutSeconds?: number;
 }) {
   const now = Date.now();
   const cfg = loadConfig();
   const archiveAfterMs = resolveArchiveAfterMs(cfg);
   const archiveAtMs = archiveAfterMs ? now + archiveAfterMs : undefined;
-  const waitTimeoutMs = resolveSubagentWaitTimeoutMs(cfg, params.runTimeoutSeconds);
+  const runTimeoutSeconds = params.runTimeoutSeconds ?? 0;
+  const waitTimeoutMs = resolveSubagentWaitTimeoutMs(cfg, runTimeoutSeconds);
   const requesterOrigin = normalizeDeliveryContext(params.requesterOrigin);
   subagentRuns.set(params.runId, {
     runId: params.runId,
@@ -536,6 +429,8 @@ export function registerSubagentRun(params: {
     task: params.task,
     cleanup: params.cleanup,
     label: params.label,
+    model: params.model,
+    runTimeoutSeconds,
     createdAt: now,
     startedAt: now,
     archiveAtMs,
@@ -543,22 +438,9 @@ export function registerSubagentRun(params: {
   });
   ensureListener();
   persistSubagentRuns();
-
-  // Emit spawn event for real-time hierarchy tracking
-  emitAgentEvent({
-    runId: params.runId,
-    stream: "lifecycle",
-    sessionKey: params.childSessionKey,
-    data: {
-      phase: "spawn",
-      parentSessionKey: params.requesterSessionKey,
-      childSessionKey: params.childSessionKey,
-      label: params.label,
-      task: params.task,
-      createdAt: now,
-    },
-  });
-  startSweeper();
+  if (archiveAfterMs) {
+    startSweeper();
+  }
   // Wait for subagent completion via gateway RPC (cross-process).
   // The in-process lifecycle listener is a fallback for embedded runs.
   void waitForSubagentCompletion(params.runId, waitTimeoutMs);
@@ -578,9 +460,9 @@ async function waitForSubagentCompletion(runId: string, waitTimeoutMs: number) {
         runId,
         timeoutMs,
       },
-      timeoutMs: Math.min(timeoutMs + 10_000, MAX_SET_TIMEOUT_MS),
+      timeoutMs: timeoutMs + 10_000,
     });
-    if (wait?.status !== "ok" && wait?.status !== "error") {
+    if (wait?.status !== "ok" && wait?.status !== "error" && wait?.status !== "timeout") {
       return;
     }
     const entry = subagentRuns.get(runId);
@@ -602,40 +484,30 @@ async function waitForSubagentCompletion(runId: string, waitTimeoutMs: number) {
     }
     const waitError = typeof wait.error === "string" ? wait.error : undefined;
     entry.outcome =
-      wait.status === "error" ? { status: "error", error: waitError } : { status: "ok" };
+      wait.status === "error"
+        ? { status: "error", error: waitError }
+        : wait.status === "timeout"
+          ? { status: "timeout" }
+          : { status: "ok" };
     mutated = true;
     if (mutated) {
       persistSubagentRuns();
     }
-    if (!beginSubagentCleanup(runId)) {
+    if (suppressAnnounceForSteerRestart(entry)) {
       return;
     }
-    const requesterOrigin = normalizeDeliveryContext(entry.requesterOrigin);
-    void runSubagentAnnounceFlow({
-      childSessionKey: entry.childSessionKey,
-      childRunId: entry.runId,
-      requesterSessionKey: entry.requesterSessionKey,
-      requesterOrigin,
-      requesterDisplayKey: entry.requesterDisplayKey,
-      task: entry.task,
-      timeoutMs: 30_000,
-      cleanup: entry.cleanup,
-      waitForCompletion: false,
-      startedAt: entry.startedAt,
-      endedAt: entry.endedAt,
-      label: entry.label,
-      outcome: entry.outcome,
-    }).then((didAnnounce) => {
-      finalizeSubagentCleanup(runId, entry.cleanup, didAnnounce);
-    });
+    if (!startSubagentAnnounceCleanupFlow(runId, entry)) {
+      return;
+    }
   } catch {
     // ignore
   }
 }
 
-export function resetSubagentRegistryForTests() {
+export function resetSubagentRegistryForTests(opts?: { persist?: boolean }) {
   subagentRuns.clear();
   resumedRuns.clear();
+  resetAnnounceQueuesForTests();
   stopSweeper();
   restoreAttempted = false;
   if (listenerStop) {
@@ -643,12 +515,13 @@ export function resetSubagentRegistryForTests() {
     listenerStop = null;
   }
   listenerStarted = false;
-  persistSubagentRuns();
+  if (opts?.persist !== false) {
+    persistSubagentRuns();
+  }
 }
 
 export function addSubagentRunForTests(entry: SubagentRunRecord) {
   subagentRuns.set(entry.runId, entry);
-  persistSubagentRuns();
 }
 
 export function releaseSubagentRun(runId: string) {
@@ -661,6 +534,122 @@ export function releaseSubagentRun(runId: string) {
   }
 }
 
+function findRunIdsByChildSessionKey(childSessionKey: string): string[] {
+  const key = childSessionKey.trim();
+  if (!key) {
+    return [];
+  }
+  const runIds: string[] = [];
+  for (const [runId, entry] of subagentRuns.entries()) {
+    if (entry.childSessionKey === key) {
+      runIds.push(runId);
+    }
+  }
+  return runIds;
+}
+
+function getRunsSnapshotForRead(): Map<string, SubagentRunRecord> {
+  const merged = new Map<string, SubagentRunRecord>();
+  const shouldReadDisk = !(process.env.VITEST || process.env.NODE_ENV === "test");
+  if (shouldReadDisk) {
+    try {
+      // Registry state is persisted to disk so other worker processes (for
+      // example cron runners) can observe active children spawned elsewhere.
+      for (const [runId, entry] of loadSubagentRegistryFromDisk().entries()) {
+        merged.set(runId, entry);
+      }
+    } catch {
+      // Ignore disk read failures and fall back to local memory state.
+    }
+  }
+  for (const [runId, entry] of subagentRuns.entries()) {
+    merged.set(runId, entry);
+  }
+  return merged;
+}
+
+export function resolveRequesterForChildSession(childSessionKey: string): {
+  requesterSessionKey: string;
+  requesterOrigin?: DeliveryContext;
+} | null {
+  const key = childSessionKey.trim();
+  if (!key) {
+    return null;
+  }
+  let best: SubagentRunRecord | undefined;
+  for (const entry of getRunsSnapshotForRead().values()) {
+    if (entry.childSessionKey !== key) {
+      continue;
+    }
+    if (!best || entry.createdAt > best.createdAt) {
+      best = entry;
+    }
+  }
+  if (!best) {
+    return null;
+  }
+  return {
+    requesterSessionKey: best.requesterSessionKey,
+    requesterOrigin: normalizeDeliveryContext(best.requesterOrigin),
+  };
+}
+
+export function isSubagentSessionRunActive(childSessionKey: string): boolean {
+  const runIds = findRunIdsByChildSessionKey(childSessionKey);
+  for (const runId of runIds) {
+    const entry = subagentRuns.get(runId);
+    if (!entry) {
+      continue;
+    }
+    if (typeof entry.endedAt !== "number") {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function markSubagentRunTerminated(params: {
+  runId?: string;
+  childSessionKey?: string;
+  reason?: string;
+}): number {
+  const runIds = new Set<string>();
+  if (typeof params.runId === "string" && params.runId.trim()) {
+    runIds.add(params.runId.trim());
+  }
+  if (typeof params.childSessionKey === "string" && params.childSessionKey.trim()) {
+    for (const runId of findRunIdsByChildSessionKey(params.childSessionKey)) {
+      runIds.add(runId);
+    }
+  }
+  if (runIds.size === 0) {
+    return 0;
+  }
+
+  const now = Date.now();
+  const reason = params.reason?.trim() || "killed";
+  let updated = 0;
+  for (const runId of runIds) {
+    const entry = subagentRuns.get(runId);
+    if (!entry) {
+      continue;
+    }
+    if (typeof entry.endedAt === "number") {
+      continue;
+    }
+    entry.endedAt = now;
+    entry.outcome = { status: "error", error: reason };
+    entry.cleanupHandled = true;
+    entry.cleanupCompletedAt = now;
+    entry.suppressAnnounceReason = "killed";
+    updated += 1;
+  }
+  if (updated > 0) {
+    persistSubagentRuns();
+  }
+  return updated;
+}
+
 export function listSubagentRunsForRequester(requesterSessionKey: string): SubagentRunRecord[] {
   const key = requesterSessionKey.trim();
   if (!key) {
@@ -669,87 +658,86 @@ export function listSubagentRunsForRequester(requesterSessionKey: string): Subag
   return [...subagentRuns.values()].filter((entry) => entry.requesterSessionKey === key);
 }
 
-export function listAllSubagentRuns(): SubagentRunRecord[] {
-  return [...subagentRuns.values()];
+export function countActiveRunsForSession(requesterSessionKey: string): number {
+  const key = requesterSessionKey.trim();
+  if (!key) {
+    return 0;
+  }
+  let count = 0;
+  for (const entry of getRunsSnapshotForRead().values()) {
+    if (entry.requesterSessionKey !== key) {
+      continue;
+    }
+    if (typeof entry.endedAt === "number") {
+      continue;
+    }
+    count += 1;
+  }
+  return count;
+}
+
+export function countActiveDescendantRuns(rootSessionKey: string): number {
+  const root = rootSessionKey.trim();
+  if (!root) {
+    return 0;
+  }
+  const runs = getRunsSnapshotForRead();
+  const pending = [root];
+  const visited = new Set<string>([root]);
+  let count = 0;
+  while (pending.length > 0) {
+    const requester = pending.shift();
+    if (!requester) {
+      continue;
+    }
+    for (const entry of runs.values()) {
+      if (entry.requesterSessionKey !== requester) {
+        continue;
+      }
+      if (typeof entry.endedAt !== "number") {
+        count += 1;
+      }
+      const childKey = entry.childSessionKey.trim();
+      if (!childKey || visited.has(childKey)) {
+        continue;
+      }
+      visited.add(childKey);
+      pending.push(childKey);
+    }
+  }
+  return count;
+}
+
+export function listDescendantRunsForRequester(rootSessionKey: string): SubagentRunRecord[] {
+  const root = rootSessionKey.trim();
+  if (!root) {
+    return [];
+  }
+  const runs = getRunsSnapshotForRead();
+  const pending = [root];
+  const visited = new Set<string>([root]);
+  const descendants: SubagentRunRecord[] = [];
+  while (pending.length > 0) {
+    const requester = pending.shift();
+    if (!requester) {
+      continue;
+    }
+    for (const entry of runs.values()) {
+      if (entry.requesterSessionKey !== requester) {
+        continue;
+      }
+      descendants.push(entry);
+      const childKey = entry.childSessionKey.trim();
+      if (!childKey || visited.has(childKey)) {
+        continue;
+      }
+      visited.add(childKey);
+      pending.push(childKey);
+    }
+  }
+  return descendants;
 }
 
 export function initSubagentRegistry() {
   restoreSubagentRunsOnce();
-}
-
-export async function runContinuityWatchdogForTests(nowMs?: number): Promise<void> {
-  await runContinuityWatchdog(nowMs);
-}
-
-export function updateSubagentProgress(
-  runId: string,
-  update: { percent: number; status: string; detail?: string },
-) {
-  const entry = subagentRuns.get(runId);
-  if (!entry) {
-    return;
-  }
-  const percent = Math.max(0, Math.min(100, Math.floor(update.percent)));
-  const status = update.status.trim();
-  const detail = update.detail?.trim();
-
-  entry.progress = {
-    percent,
-    status,
-    detail,
-    lastUpdate: Date.now(),
-  };
-
-  persistSubagentRuns();
-
-  // Broadcast progress update for real-time hierarchy tracking
-  emitAgentEvent({
-    runId,
-    stream: "lifecycle",
-    sessionKey: entry.childSessionKey,
-    data: {
-      phase: "progress-update",
-      progress: entry.progress,
-    },
-  });
-}
-
-export function getSubagentProgress(runId: string): SubagentProgress | null {
-  const entry = subagentRuns.get(runId);
-  return entry?.progress ?? null;
-}
-
-export function getSubagentRunById(runId: string): SubagentRunRecord | null {
-  return subagentRuns.get(runId) ?? null;
-}
-
-export function getSubagentRunBySessionKey(sessionKey: string): SubagentRunRecord | null {
-  for (const entry of subagentRuns.values()) {
-    if (entry.childSessionKey === sessionKey) {
-      return entry;
-    }
-  }
-  return null;
-}
-
-/**
- * Walk up the subagent spawn chain to find the root (main) session key.
- * This is the webchat session where the human is — all agent activity
- * should be visible there.
- */
-export function resolveRootSessionKey(sessionKey: string): string {
-  let current = sessionKey;
-  const visited = new Set<string>();
-  // Walk up the spawn chain using the registry, not just subagent-format keys.
-  // Agents spawned into their main session (agent:X:main) also have registry
-  // entries with requesterSessionKey pointing to their parent.
-  while (!visited.has(current)) {
-    visited.add(current);
-    const run = getSubagentRunBySessionKey(current);
-    if (!run?.requesterSessionKey) {
-      break;
-    }
-    current = run.requesterSessionKey;
-  }
-  return current;
 }

@@ -1,22 +1,6 @@
-import { z } from "zod";
+import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { AnyAgentTool } from "./common.js";
-import { resolveAgentDir } from "../../agents/agent-scope.js";
-import {
-  ensureAuthProfileStore,
-  resolveAuthProfileDisplayLabel,
-  resolveAuthProfileOrder,
-} from "../../agents/auth-profiles.js";
-import { getCustomProviderApiKey, resolveEnvApiKey } from "../../agents/model-auth.js";
-import { loadModelCatalog } from "../../agents/model-catalog.js";
-import {
-  buildAllowedModelSet,
-  buildModelAliasIndex,
-  modelKey,
-  normalizeProviderId,
-  resolveDefaultModelForAgent,
-  resolveModelRefFromString,
-} from "../../agents/model-selection.js";
 import { normalizeGroupActivation } from "../../auto-reply/group-activation.js";
 import { getFollowupQueueDepth, resolveQueueSettings } from "../../auto-reply/reply/queue.js";
 import { buildStatusMessage } from "../../auto-reply/status.js";
@@ -39,8 +23,23 @@ import {
   resolveAgentIdFromSessionKey,
 } from "../../routing/session-key.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
+import { resolveAgentDir } from "../agent-scope.js";
+import {
+  ensureAuthProfileStore,
+  resolveAuthProfileDisplayLabel,
+  resolveAuthProfileOrder,
+} from "../auth-profiles.js";
 import { formatUserTime, resolveUserTimeFormat, resolveUserTimezone } from "../date-time.js";
-import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
+import { getCustomProviderApiKey, resolveEnvApiKey } from "../model-auth.js";
+import { loadModelCatalog } from "../model-catalog.js";
+import {
+  buildAllowedModelSet,
+  buildModelAliasIndex,
+  modelKey,
+  normalizeProviderId,
+  resolveDefaultModelForAgent,
+  resolveModelRefFromString,
+} from "../model-selection.js";
 import { readStringParam } from "./common.js";
 import {
   shouldResolveSessionIdInput,
@@ -49,12 +48,10 @@ import {
   createAgentToAgentPolicy,
 } from "./sessions-helpers.js";
 
-const SessionStatusToolSchema = zodToToolJsonSchema(
-  z.object({
-    sessionKey: z.string().optional(),
-    model: z.string().optional(),
-  }),
-);
+const SessionStatusToolSchema = Type.Object({
+  sessionKey: Type.Optional(Type.String()),
+  model: Type.Optional(Type.String()),
+});
 
 function formatApiKeySnippet(apiKey: string): string {
   const compact = apiKey.replace(/\s+/g, "");
@@ -107,7 +104,7 @@ function resolveModelAuthLabel(params: {
     if (profile.type === "token") {
       return `token ${formatApiKeySnippet(profile.token)}${label ? ` (${label})` : ""}`;
     }
-    return `api-key ${formatApiKeySnippet(profile.key)}${label ? ` (${label})` : ""}`;
+    return `api-key ${formatApiKeySnippet(profile.key ?? "")}${label ? ` (${label})` : ""}`;
   }
 
   const envKey = resolveEnvApiKey(providerKey);
@@ -439,8 +436,10 @@ export function createSessionStatusTool(opts?: {
           ...agentDefaults,
           model: agentModel,
         },
+        agentId,
         sessionEntry: resolved.entry,
         sessionKey: resolved.key,
+        sessionStorePath: storePath,
         groupActivation,
         modelAuth: resolveModelAuthLabel({
           provider: providerForCard,

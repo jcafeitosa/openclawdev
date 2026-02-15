@@ -29,6 +29,7 @@ type LifecycleHost = {
   basePath: string;
   tab: Tab;
   chatHasAutoScrolled: boolean;
+  chatManualRefreshInFlight: boolean;
   chatLoading: boolean;
   chatMessages: unknown[];
   chatToolMessages: unknown[];
@@ -116,6 +117,9 @@ export function handleDisconnected(host: LifecycleHost) {
 }
 
 export function handleUpdated(host: LifecycleHost, changed: Map<PropertyKey, unknown>) {
+  if (host.tab === "chat" && host.chatManualRefreshInFlight) {
+    return;
+  }
   if (
     host.tab === "chat" &&
     (changed.has("chatMessages") ||

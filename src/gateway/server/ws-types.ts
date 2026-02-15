@@ -17,4 +17,5 @@ export type GatewayWsClient = {
   connId: string;
   /** Presence tracking key (deviceId or instanceId) */
   presenceKey?: string;
+  clientIp?: string;
 };

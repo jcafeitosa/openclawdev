@@ -1,49 +1,12 @@
-/**
- * Model Selection & Routing
- *
- * PRECEDENCE ORDER (highest to lowest priority):
- *
- * 1. **Complexity Routing** (modelByComplexity.{trivial|moderate|complex})
- *    - Triggered when: modelByComplexity.enabled=true OR any complexity slot is configured
- *    - Applies to: ALL task types (coding, reasoning, tools, vision, conversation)
- *    - Configuration: agents.defaults.modelByComplexity.{trivial|moderate|complex}
- *    - Notes:
- *      - autoPickFromPool only affects UI behavior (whether user can pick from pool)
- *      - Complexity routing is explicit configuration and always applies when enabled
- *
- * 2. **Task-Type Specific Models**
- *    - codingModel: agents.defaults.codingModel (for coding tasks)
- *    - imageModel: agents.defaults.imageModel (for vision tasks, checked BEFORE complexity)
- *    - toolModel: agents.defaults.toolModel (for tool/system operation tasks)
- *    - reasoningModel: falls back to default (reasoning models are typically primary)
- *    - Vision tasks check imageModel first (before complexity) to avoid text-only models
- *
- * 3. **Default Model** (agents.defaults.model.primary)
- *    - Agent-specific override: agents.agents.<agentId>.model
- *    - Auto-selection by role: based on agent role (when enabled)
- *    - Global default: configured primary model
- *    - Fallback: hardcoded DEFAULT_MODEL
- *
- * BACKWARD COMPATIBILITY:
- * - Existing configs continue to work unchanged
- * - autoPickFromPool=false now only disables UI pool selection (not complexity routing)
- * - codingModel/imageModel/toolModel are honored AFTER complexity routing
- */
-
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
-import type { TaskComplexity, TaskType } from "./task-classifier.js";
-import { isTruthyEnvValue } from "../infra/env.js";
-import { resolveAgentConfig, resolveAgentModelPrimary, resolveAgentRole } from "./agent-scope.js";
+import { resolveAgentModelPrimary } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
-import { findAgentDefinition } from "./definitions/resolver.js";
-import { getAutoSelectedModel } from "./model-auto-select.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
 
 export type ModelRef = {
   provider: string;
   model: string;
-  accountTag?: string;
 };
 
 export type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -52,6 +15,13 @@ export type ModelAliasIndex = {
   byAlias: Map<string, { alias: string; ref: ModelRef }>;
   byKey: Map<string, string[]>;
 };
+
+const ANTHROPIC_MODEL_ALIASES: Record<string, string> = {
+  "opus-4.6": "claude-opus-4-6",
+  "opus-4.5": "claude-opus-4-5",
+  "sonnet-4.5": "claude-sonnet-4-5",
+};
+const OPENAI_CODEX_OAUTH_MODEL_PREFIXES = ["gpt-5.3-codex"] as const;
 
 function normalizeAliasKey(value: string): string {
   return value.trim().toLowerCase();
@@ -96,16 +66,7 @@ function normalizeAnthropicModelId(model: string): string {
     return trimmed;
   }
   const lower = trimmed.toLowerCase();
-  if (lower === "opus-4.6") {
-    return "claude-opus-4-6";
-  }
-  if (lower === "opus-4.5") {
-    return "claude-opus-4-5";
-  }
-  if (lower === "sonnet-4.5") {
-    return "claude-sonnet-4-5";
-  }
-  return trimmed;
+  return ANTHROPIC_MODEL_ALIASES[lower] ?? trimmed;
 }
 
 function normalizeProviderModelId(provider: string, model: string): string {
@@ -118,31 +79,70 @@ function normalizeProviderModelId(provider: string, model: string): string {
   return model;
 }
 
+function shouldUseOpenAICodexProvider(provider: string, model: string): boolean {
+  if (provider !== "openai") {
+    return false;
+  }
+  const normalized = model.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return OPENAI_CODEX_OAUTH_MODEL_PREFIXES.some(
+    (prefix) => normalized === prefix || normalized.startsWith(`${prefix}-`),
+  );
+}
+
+export function normalizeModelRef(provider: string, model: string): ModelRef {
+  const normalizedProvider = normalizeProviderId(provider);
+  const normalizedModel = normalizeProviderModelId(normalizedProvider, model.trim());
+  if (shouldUseOpenAICodexProvider(normalizedProvider, normalizedModel)) {
+    return { provider: "openai-codex", model: normalizedModel };
+  }
+  return { provider: normalizedProvider, model: normalizedModel };
+}
+
 export function parseModelRef(raw: string, defaultProvider: string): ModelRef | null {
   const trimmed = raw.trim();
   if (!trimmed) {
     return null;
   }
-
-  // Extract accountTag if present (format: provider/model@tag)
-  const atIndex = trimmed.indexOf("@");
-  const accountTag = atIndex !== -1 ? trimmed.slice(atIndex + 1).trim() || undefined : undefined;
-  const providerModelPart = atIndex !== -1 ? trimmed.slice(0, atIndex).trim() : trimmed;
-
-  const slash = providerModelPart.indexOf("/");
+  const slash = trimmed.indexOf("/");
   if (slash === -1) {
-    const provider = normalizeProviderId(defaultProvider);
-    const model = normalizeProviderModelId(provider, providerModelPart);
-    return { provider, model, accountTag };
+    return normalizeModelRef(defaultProvider, trimmed);
   }
-  const providerRaw = providerModelPart.slice(0, slash).trim();
-  const provider = normalizeProviderId(providerRaw);
-  const model = providerModelPart.slice(slash + 1).trim();
-  if (!provider || !model) {
+  const providerRaw = trimmed.slice(0, slash).trim();
+  const model = trimmed.slice(slash + 1).trim();
+  if (!providerRaw || !model) {
     return null;
   }
-  const normalizedModel = normalizeProviderModelId(provider, model);
-  return { provider, model: normalizedModel, accountTag };
+  return normalizeModelRef(providerRaw, model);
+}
+
+export function resolveAllowlistModelKey(raw: string, defaultProvider: string): string | null {
+  const parsed = parseModelRef(raw, defaultProvider);
+  if (!parsed) {
+    return null;
+  }
+  return modelKey(parsed.provider, parsed.model);
+}
+
+export function buildConfiguredAllowlistKeys(params: {
+  cfg: OpenClawConfig | undefined;
+  defaultProvider: string;
+}): Set<string> | null {
+  const rawAllowlist = Object.keys(params.cfg?.agents?.defaults?.models ?? {});
+  if (rawAllowlist.length === 0) {
+    return null;
+  }
+
+  const keys = new Set<string>();
+  for (const raw of rawAllowlist) {
+    const key = resolveAllowlistModelKey(String(raw ?? ""), params.defaultProvider);
+    if (key) {
+      keys.add(key);
+    }
+  }
+  return keys.size > 0 ? keys : null;
 }
 
 export function buildModelAliasIndex(params: {
@@ -221,18 +221,11 @@ export function resolveConfiguredModelRef(params: {
         return aliasMatch.ref;
       }
 
-      // Default to defaultProvider if no provider is specified.
-      // Warn if it looks like an accidental omission, but honor the default.
-      if (params.defaultProvider !== "anthropic") {
-        // Silent fallback to configured default provider
-        return { provider: params.defaultProvider, model: trimmed };
-      }
-
-      // Legacy behavior: warn if falling back to anthropic purely by accident
+      // Default to anthropic if no provider is specified, but warn as this is deprecated.
       console.warn(
-        `[openclaw] Model "${trimmed}" specified without provider. Falling back to "${params.defaultProvider}/${trimmed}". Please use "${params.defaultProvider}/${trimmed}" in your config.`,
+        `[openclaw] Model "${trimmed}" specified without provider. Falling back to "anthropic/${trimmed}". Please use "anthropic/${trimmed}" in your config.`,
       );
-      return { provider: params.defaultProvider, model: trimmed };
+      return { provider: "anthropic", model: trimmed };
     }
 
     const resolved = resolveModelRefFromString({
@@ -251,75 +244,29 @@ export function resolveDefaultModelForAgent(params: {
   cfg: OpenClawConfig;
   agentId?: string;
 }): ModelRef {
-  // 1. Check explicit per-agent model override
   const agentModelOverride = params.agentId
     ? resolveAgentModelPrimary(params.cfg, params.agentId)
     : undefined;
-
-  if (agentModelOverride && agentModelOverride.length > 0) {
-    const cfg = {
-      ...params.cfg,
-      agents: {
-        ...params.cfg.agents,
-        defaults: {
-          ...params.cfg.agents?.defaults,
-          model: {
-            ...(typeof params.cfg.agents?.defaults?.model === "object"
-              ? params.cfg.agents.defaults.model
-              : undefined),
-            primary: agentModelOverride,
-          },
-        },
-      },
-    };
-    return resolveConfiguredModelRef({
-      cfg,
-      defaultProvider: DEFAULT_PROVIDER,
-      defaultModel: DEFAULT_MODEL,
-    });
-  }
-
-  // 1b. Check markdown agent definition model preference
-  if (params.agentId) {
-    const id = params.agentId.trim().toLowerCase();
-    const definition = findAgentDefinition(params.cfg, id, id);
-    if (definition?.model) {
-      const defCfg = {
-        ...params.cfg,
-        agents: {
-          ...params.cfg.agents,
-          defaults: {
-            ...params.cfg.agents?.defaults,
-            model: {
-              ...(typeof params.cfg.agents?.defaults?.model === "object"
-                ? params.cfg.agents.defaults.model
-                : undefined),
-              primary: definition.model,
+  const cfg =
+    agentModelOverride && agentModelOverride.length > 0
+      ? {
+          ...params.cfg,
+          agents: {
+            ...params.cfg.agents,
+            defaults: {
+              ...params.cfg.agents?.defaults,
+              model: {
+                ...(typeof params.cfg.agents?.defaults?.model === "object"
+                  ? params.cfg.agents.defaults.model
+                  : undefined),
+                primary: agentModelOverride,
+              },
             },
           },
-        },
-      };
-      return resolveConfiguredModelRef({
-        cfg: defCfg,
-        defaultProvider: DEFAULT_PROVIDER,
-        defaultModel: DEFAULT_MODEL,
-      });
-    }
-  }
-
-  // 2. Auto-select based on agent role (if catalog has been initialized)
-  const disableAutoSelect = isTruthyEnvValue(process.env.OPENCLAW_DISABLE_MODEL_AUTO_SELECT);
-  if (!disableAutoSelect && params.agentId) {
-    const role = resolveAgentRole(params.cfg, params.agentId);
-    const autoSelected = getAutoSelectedModel(role);
-    if (autoSelected) {
-      return autoSelected;
-    }
-  }
-
-  // 3. Fall back to global default
+        }
+      : params.cfg;
   return resolveConfiguredModelRef({
-    cfg: params.cfg,
+    cfg,
     defaultProvider: DEFAULT_PROVIDER,
     defaultModel: DEFAULT_MODEL,
   });
@@ -516,265 +463,4 @@ export function resolveHooksGmailModel(params: {
   });
 
   return resolved?.ref ?? null;
-}
-
-/**
- * Resolve the coding-specialized model for an agent.
- * Falls back to the default model if no coding model is configured.
- */
-export function resolveCodingModelForAgent(params: {
-  cfg: OpenClawConfig;
-  agentId?: string;
-}): ModelRef {
-  const codingModel = params.cfg.agents?.defaults?.codingModel as
-    | { primary?: string }
-    | string
-    | undefined;
-
-  const primary =
-    typeof codingModel === "string" ? codingModel.trim() : codingModel?.primary?.trim();
-
-  if (primary) {
-    const aliasIndex = buildModelAliasIndex({
-      cfg: params.cfg,
-      defaultProvider: DEFAULT_PROVIDER,
-    });
-
-    const resolved = resolveModelRefFromString({
-      raw: primary,
-      defaultProvider: DEFAULT_PROVIDER,
-      aliasIndex,
-    });
-
-    if (resolved) {
-      return resolved.ref;
-    }
-  }
-
-  // Fallback to the default model
-  return resolveDefaultModelForAgent(params);
-}
-
-/**
- * Resolve the tool-use/system-operations specialized model for an agent.
- * Falls back to the default model if no tool model is configured.
- */
-export function resolveToolModelForAgent(params: {
-  cfg: OpenClawConfig;
-  agentId?: string;
-}): ModelRef {
-  const toolModel = params.cfg.agents?.defaults?.toolModel as
-    | { primary?: string }
-    | string
-    | undefined;
-
-  const primary = typeof toolModel === "string" ? toolModel.trim() : toolModel?.primary?.trim();
-
-  if (primary) {
-    const aliasIndex = buildModelAliasIndex({
-      cfg: params.cfg,
-      defaultProvider: DEFAULT_PROVIDER,
-    });
-
-    const resolved = resolveModelRefFromString({
-      raw: primary,
-      defaultProvider: DEFAULT_PROVIDER,
-      aliasIndex,
-    });
-
-    if (resolved) {
-      return resolved.ref;
-    }
-  }
-
-  return resolveDefaultModelForAgent(params);
-}
-
-/**
- * Resolve the reasoning-specialized model for an agent.
- * Uses the default model (reasoning models are typically set as primary).
- */
-export function resolveReasoningModelForAgent(params: {
-  cfg: OpenClawConfig;
-  agentId?: string;
-}): ModelRef {
-  // For now, reasoning uses the default model since reasoning-capable
-  // models are typically set as the primary model
-  return resolveDefaultModelForAgent(params);
-}
-
-/**
- * Resolve the image-capable model for an agent.
- * Falls back to the default model if no image model is configured.
- */
-export function resolveImageModelForAgent(params: {
-  cfg: OpenClawConfig;
-  agentId?: string;
-}): ModelRef {
-  const imageModel = params.cfg.agents?.defaults?.imageModel as
-    | { primary?: string }
-    | string
-    | undefined;
-
-  const primary = typeof imageModel === "string" ? imageModel.trim() : imageModel?.primary?.trim();
-
-  if (primary) {
-    const aliasIndex = buildModelAliasIndex({
-      cfg: params.cfg,
-      defaultProvider: DEFAULT_PROVIDER,
-    });
-
-    const resolved = resolveModelRefFromString({
-      raw: primary,
-      defaultProvider: DEFAULT_PROVIDER,
-      aliasIndex,
-    });
-
-    if (resolved) {
-      return resolved.ref;
-    }
-  }
-
-  // Fallback to the default model
-  return resolveDefaultModelForAgent(params);
-}
-
-/**
- * Resolve the appropriate model based on the task type.
- * Uses specialized models when configured, falling back to defaults.
- */
-export function resolveModelForTaskType(params: {
-  cfg: OpenClawConfig;
-  taskType: TaskType;
-  agentId?: string;
-}): ModelRef {
-  const { cfg, taskType, agentId } = params;
-
-  switch (taskType) {
-    case "coding":
-      return resolveCodingModelForAgent({ cfg, agentId });
-    case "tools":
-      return resolveToolModelForAgent({ cfg, agentId });
-    case "vision":
-      return resolveImageModelForAgent({ cfg, agentId });
-    case "reasoning":
-      return resolveReasoningModelForAgent({ cfg, agentId });
-    default:
-      return resolveDefaultModelForAgent({ cfg, agentId });
-  }
-}
-
-export type ModelSelectionReason = "complexity" | "taskType" | "default";
-
-export function resolveModelForTaskIntent(params: {
-  cfg: OpenClawConfig;
-  agentId?: string;
-  taskType: TaskType;
-  complexity: TaskComplexity;
-}): { ref: ModelRef; reason: ModelSelectionReason } {
-  const { cfg, agentId, taskType, complexity } = params;
-
-  // Special case: For vision tasks, check imageModel BEFORE complexity routing
-  // to ensure we don't route to text-only models
-  if (taskType === "vision") {
-    const imageModelRaw = cfg.agents?.defaults?.imageModel as
-      | { primary?: string }
-      | string
-      | undefined;
-    const hasImageModel = Boolean(
-      typeof imageModelRaw === "string" ? imageModelRaw.trim() : imageModelRaw?.primary?.trim(),
-    );
-    if (hasImageModel) {
-      return { ref: resolveModelForTaskType({ cfg, taskType, agentId }), reason: "taskType" };
-    }
-    // Fall through to complexity routing if no imageModel configured
-    // BUT validate the complexity-routed model supports vision
-  }
-
-  // PRIORITY 1: Check complexity routing (if enabled)
-  // This applies to ALL task types when complexity mapping is configured
-  const merged = (() => {
-    const defaults = cfg.agents?.defaults?.modelByComplexity;
-    const agentOverride = agentId ? resolveAgentConfig(cfg, agentId)?.modelByComplexity : undefined;
-    if (!defaults && !agentOverride) {
-      return null;
-    }
-    return { ...defaults, ...agentOverride };
-  })();
-
-  const enabled = (() => {
-    if (!merged) {
-      return false;
-    }
-    if (merged.enabled === true) {
-      return true;
-    }
-    if (merged.enabled === false) {
-      return false;
-    }
-    // Auto-enable if any complexity slot is configured
-    return Boolean(merged.trivial?.trim() || merged.moderate?.trim() || merged.complex?.trim());
-  })();
-
-  if (enabled && merged) {
-    const rawOverride =
-      (complexity === "trivial"
-        ? merged.trivial
-        : complexity === "complex"
-          ? merged.complex
-          : merged.moderate) ?? "";
-
-    const trimmed = rawOverride.trim();
-    if (trimmed) {
-      const aliasIndex = buildModelAliasIndex({ cfg, defaultProvider: DEFAULT_PROVIDER });
-      const resolved = resolveModelRefFromString({
-        raw: trimmed,
-        defaultProvider: DEFAULT_PROVIDER,
-        aliasIndex,
-      });
-      if (resolved) {
-        // Note: Vision validation for legacy complexity routing is basic (text-only provider check)
-        // For full capability validation, use model pools system
-        if (taskType === "vision") {
-          const textOnlyProviders = new Set(["cerebras", "zai", "openrouter"]);
-          if (textOnlyProviders.has(normalizeProviderId(resolved.ref.provider))) {
-            // Known text-only provider - fall through to task-specific model
-            const imageRef = resolveImageModelForAgent({ cfg, agentId });
-            return { ref: imageRef, reason: "taskType" };
-          }
-        }
-        return { ref: resolved.ref, reason: "complexity" };
-      }
-    }
-  }
-
-  // PRIORITY 2: Check task-type specific models (codingModel, toolModel, etc)
-  const hasTaskSpecificModel = (() => {
-    const hasPrimary = (raw: unknown): boolean => {
-      if (typeof raw === "string") {
-        return Boolean(raw.trim());
-      }
-      if (raw && typeof raw === "object" && "primary" in raw) {
-        return Boolean((raw as { primary?: string }).primary?.trim());
-      }
-      return false;
-    };
-    switch (taskType) {
-      case "coding":
-        return hasPrimary(cfg.agents?.defaults?.codingModel);
-      case "tools":
-        return hasPrimary(cfg.agents?.defaults?.toolModel);
-      case "vision":
-        return hasPrimary(cfg.agents?.defaults?.imageModel);
-      default:
-        return false;
-    }
-  })();
-
-  if (hasTaskSpecificModel) {
-    return { ref: resolveModelForTaskType({ cfg, taskType, agentId }), reason: "taskType" };
-  }
-
-  // PRIORITY 3: Fall back to default model
-  return { ref: resolveDefaultModelForAgent({ cfg, agentId }), reason: "default" };
 }

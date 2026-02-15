@@ -1,34 +1,37 @@
-import {
-  createServer as createHttpServer,
-  type RequestListener,
-  type Server as HttpServer,
-} from "node:http";
-import { createServer as createHttpsServer } from "node:https";
-import { toNodeHandler } from "srvx/node";
+import type { Server as HttpServer } from "node:http";
 import { WebSocketServer } from "ws";
 import type { CliDeps } from "../cli/deps.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
 import type { PluginRegistry } from "../plugins/registry.js";
 import type { RuntimeEnv } from "../runtime.js";
+import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
-import type { ControlUiRootState } from "./control-ui-shared.js";
+import type { ControlUiRootState } from "./control-ui.js";
 import type { HooksConfigResolved } from "./hooks.js";
 import type { DedupeEntry } from "./server-shared.js";
 import type { GatewayTlsRuntime } from "./server/tls.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
 import { CANVAS_HOST_PATH } from "../canvas-host/a2ui.js";
 import { type CanvasHostHandler, createCanvasHostHandler } from "../canvas-host/server.js";
-import { createGatewayElysiaApp } from "./elysia-gateway.js";
 import { resolveGatewayListenHosts } from "./net.js";
-import { createGatewayBroadcaster } from "./server-broadcast.js";
-import { type ChatRunEntry, createChatRunState } from "./server-chat.js";
+import {
+  createGatewayBroadcaster,
+  type GatewayBroadcastFn,
+  type GatewayBroadcastToConnIdsFn,
+} from "./server-broadcast.js";
+import {
+  type ChatRunEntry,
+  createChatRunState,
+  createToolEventRecipientRegistry,
+} from "./server-chat.js";
 import { MAX_PAYLOAD_BYTES } from "./server-constants.js";
-import { createHookDispatchers } from "./server/hooks.js";
+import { attachGatewayUpgradeHandler, createGatewayHttpServer } from "./server-http.js";
+import { createGatewayHooksRequestHandler } from "./server/hooks.js";
 import { listenGatewayHttpServer } from "./server/http-listen.js";
-import { attachGatewayUpgradeHandler } from "./server/ws-upgrade.js";
+import { createGatewayPluginRequestHandler } from "./server/plugins-http.js";
 
-export interface GatewayRuntimeStateParams {
+export async function createGatewayRuntimeState(params: {
   cfg: import("../config/config.js").OpenClawConfig;
   bindHost: string;
   port: number;
@@ -39,6 +42,8 @@ export interface GatewayRuntimeStateParams {
   openResponsesEnabled: boolean;
   openResponsesConfig?: import("../config/types.gateway.js").GatewayHttpResponsesConfig;
   resolvedAuth: ResolvedGatewayAuth;
+  /** Optional rate limiter for auth brute-force protection. */
+  rateLimiter?: AuthRateLimiter;
   gatewayTls?: GatewayTlsRuntime;
   hooksConfig: () => HooksConfigResolved | null;
   pluginRegistry: PluginRegistry;
@@ -50,23 +55,15 @@ export interface GatewayRuntimeStateParams {
   log: { info: (msg: string) => void; warn: (msg: string) => void };
   logHooks: ReturnType<typeof createSubsystemLogger>;
   logPlugins: ReturnType<typeof createSubsystemLogger>;
-}
-
-export interface GatewayRuntimeStateResult {
+}): Promise<{
   canvasHost: CanvasHostHandler | null;
   httpServer: HttpServer;
   httpServers: HttpServer[];
   httpBindHosts: string[];
   wss: WebSocketServer;
   clients: Set<GatewayWsClient>;
-  broadcast: (
-    event: string,
-    payload: unknown,
-    opts?: {
-      dropIfSlow?: boolean;
-      stateVersion?: { presence?: number; health?: number };
-    },
-  ) => void;
+  broadcast: GatewayBroadcastFn;
+  broadcastToConnIds: GatewayBroadcastToConnIdsFn;
   agentRunSeq: Map<string, number>;
   dedupe: Map<string, DedupeEntry>;
   chatRunState: ReturnType<typeof createChatRunState>;
@@ -79,12 +76,8 @@ export interface GatewayRuntimeStateResult {
     sessionKey?: string,
   ) => ChatRunEntry | undefined;
   chatAbortControllers: Map<string, ChatAbortControllerEntry>;
-}
-
-export async function createGatewayRuntimeState(
-  params: GatewayRuntimeStateParams,
-): Promise<GatewayRuntimeStateResult> {
-  // Canvas host setup (unchanged)
+  toolEventRecipients: ReturnType<typeof createToolEventRecipientRegistry>;
+}> {
   let canvasHost: CanvasHostHandler | null = null;
   if (params.canvasHostEnabled) {
     try {
@@ -106,47 +99,41 @@ export async function createGatewayRuntimeState(
     }
   }
 
-  // Create hook dispatchers for the Elysia routes
-  const hookDispatchers = createHookDispatchers({
+  const clients = new Set<GatewayWsClient>();
+  const { broadcast, broadcastToConnIds } = createGatewayBroadcaster({ clients });
+
+  const handleHooksRequest = createGatewayHooksRequestHandler({
     deps: params.deps,
-    logHooks: params.logHooks,
-  });
-
-  // Create the Elysia gateway app with all route plugins
-  const app = createGatewayElysiaApp({
-    port: params.port,
-    canvasHost,
-    controlUiEnabled: params.controlUiEnabled,
-    controlUiBasePath: params.controlUiBasePath,
-    controlUiRoot: params.controlUiRoot,
-    openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
-    openResponsesEnabled: params.openResponsesEnabled,
-    openResponsesConfig: params.openResponsesConfig,
-    resolvedAuth: params.resolvedAuth,
     getHooksConfig: params.hooksConfig,
-    hookDispatchers,
-    pluginRegistry: params.pluginRegistry,
+    bindHost: params.bindHost,
+    port: params.port,
     logHooks: params.logHooks,
-    logPlugins: params.logPlugins,
-    tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
   });
 
-  // Compile Elysia routes and create a Node.js handler via srvx.
-  // toNodeHandler returns a function with extra srvx metadata — cast to
-  // RequestListener so it's accepted by http.createServer / https.createServer.
-  const nodeHandler = toNodeHandler(app.fetch) as RequestListener;
+  const handlePluginRequest = createGatewayPluginRequestHandler({
+    registry: params.pluginRegistry,
+    log: params.logPlugins,
+  });
 
-  // Multi-bind: create an HTTP(S) server per resolved listen host
   const bindHosts = await resolveGatewayListenHosts(params.bindHost);
   const httpServers: HttpServer[] = [];
   const httpBindHosts: string[] = [];
-
   for (const host of bindHosts) {
-    const tls = params.gatewayTls;
-    const httpServer =
-      tls?.enabled && tls.tlsOptions
-        ? createHttpsServer(tls.tlsOptions, nodeHandler)
-        : createHttpServer(nodeHandler);
+    const httpServer = createGatewayHttpServer({
+      canvasHost,
+      clients,
+      controlUiEnabled: params.controlUiEnabled,
+      controlUiBasePath: params.controlUiBasePath,
+      controlUiRoot: params.controlUiRoot,
+      openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
+      openResponsesEnabled: params.openResponsesEnabled,
+      openResponsesConfig: params.openResponsesConfig,
+      handleHooksRequest,
+      handlePluginRequest,
+      resolvedAuth: params.resolvedAuth,
+      rateLimiter: params.rateLimiter,
+      tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
+    });
     try {
       await listenGatewayHttpServer({
         httpServer,
@@ -169,18 +156,21 @@ export async function createGatewayRuntimeState(
     throw new Error("Gateway HTTP server failed to start");
   }
 
-  // WebSocket server (attached to the raw HTTP server's upgrade event)
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_PAYLOAD_BYTES,
   });
   for (const server of httpServers) {
-    attachGatewayUpgradeHandler({ httpServer: server, wss, canvasHost, port: params.port });
+    attachGatewayUpgradeHandler({
+      httpServer: server,
+      wss,
+      canvasHost,
+      clients,
+      resolvedAuth: params.resolvedAuth,
+      rateLimiter: params.rateLimiter,
+    });
   }
 
-  // Shared state
-  const clients = new Set<GatewayWsClient>();
-  const { broadcast } = createGatewayBroadcaster({ clients });
   const agentRunSeq = new Map<string, number>();
   const dedupe = new Map<string, DedupeEntry>();
   const chatRunState = createChatRunState();
@@ -190,6 +180,7 @@ export async function createGatewayRuntimeState(
   const addChatRun = chatRunRegistry.add;
   const removeChatRun = chatRunRegistry.remove;
   const chatAbortControllers = new Map<string, ChatAbortControllerEntry>();
+  const toolEventRecipients = createToolEventRecipientRegistry();
 
   return {
     canvasHost,
@@ -199,6 +190,7 @@ export async function createGatewayRuntimeState(
     wss,
     clients,
     broadcast,
+    broadcastToConnIds,
     agentRunSeq,
     dedupe,
     chatRunState,
@@ -207,5 +199,6 @@ export async function createGatewayRuntimeState(
     addChatRun,
     removeChatRun,
     chatAbortControllers,
+    toolEventRecipients,
   };
 }

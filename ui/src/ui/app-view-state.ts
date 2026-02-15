@@ -1,24 +1,9 @@
 import type { EventLogEntry } from "./app-events.ts";
-import type { AgentResourcesResult } from "./controllers/agent-resources.ts";
-import type { AuthProviderEntry } from "./controllers/auth.ts";
+import type { CompactionStatus } from "./app-tool-stream.ts";
 import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
-import type { HealthData } from "./controllers/health.ts";
-import type { ClosestUsageWindow } from "./controllers/models-availability.ts";
-import type { ModelCatalogRow } from "./controllers/models.ts";
-import type { ProjectEntry } from "./controllers/projects.ts";
-import type { ProviderHealthEntry } from "./controllers/providers-health.ts";
-import type {
-  SecurityEvent,
-  SecurityEventCategory,
-  SecurityEventSeverity,
-  SecurityEventStats,
-  SecuritySummary,
-  SecurityAuditReport,
-} from "./controllers/security.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
-import type { SystemInfoResult } from "./controllers/system-info.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import type { UiSettings } from "./storage.ts";
@@ -28,9 +13,9 @@ import type {
   AgentsListResult,
   AgentsFilesListResult,
   AgentIdentityResult,
-  AgentHierarchyResult,
   ChannelsStatusSnapshot,
   ConfigSnapshot,
+  ConfigUiHints,
   CronJob,
   CronRunLogEntry,
   CronStatus,
@@ -39,13 +24,16 @@ import type {
   LogLevel,
   NostrProfile,
   PresenceEntry,
+  SessionsUsageResult,
+  CostUsageSummary,
+  SessionUsageTimeSeries,
   SessionsListResult,
   SkillStatusReport,
   StatusSummary,
 } from "./types.ts";
 import type { ChatAttachment, ChatQueueItem, CronFormState } from "./ui-types.ts";
 import type { NostrProfileFormState } from "./views/channels.nostr-profile-form.ts";
-import type { ToastEntry, ToastType } from "./views/toast.ts";
+import type { SessionLogEntry } from "./views/usage.ts";
 
 export type AppViewState = {
   settings: UiSettings;
@@ -70,14 +58,21 @@ export type AppViewState = {
   chatMessages: unknown[];
   chatToolMessages: unknown[];
   chatStream: string | null;
+  chatStreamStartedAt: number | null;
   chatRunId: string | null;
+  compactionStatus: CompactionStatus | null;
   chatAvatarUrl: string | null;
   chatThinkingLevel: string | null;
   chatQueue: ChatQueueItem[];
+  chatManualRefreshInFlight: boolean;
   nodesLoading: boolean;
   nodes: Array<Record<string, unknown>>;
   chatNewMessagesBelow: boolean;
-  scrollToBottom: () => void;
+  sidebarOpen: boolean;
+  sidebarContent: string | null;
+  sidebarError: string | null;
+  splitRatio: number;
+  scrollToBottom: (opts?: { smooth?: boolean }) => void;
   devicesLoading: boolean;
   devicesError: string | null;
   devicesList: DevicePairingList | null;
@@ -101,13 +96,18 @@ export type AppViewState = {
   configSaving: boolean;
   configApplying: boolean;
   updateRunning: boolean;
+  applySessionKey: string;
   configSnapshot: ConfigSnapshot | null;
   configSchema: unknown;
+  configSchemaVersion: string | null;
   configSchemaLoading: boolean;
-  configUiHints: Record<string, unknown>;
+  configUiHints: ConfigUiHints;
   configForm: Record<string, unknown> | null;
   configFormOriginal: Record<string, unknown> | null;
   configFormMode: "form" | "raw";
+  configSearchQuery: string;
+  configActiveSection: string | null;
+  configActiveSubsection: string | null;
   channelsLoading: boolean;
   channelsSnapshot: ChannelsStatusSnapshot | null;
   channelsError: string | null;
@@ -127,7 +127,7 @@ export type AppViewState = {
   agentsList: AgentsListResult | null;
   agentsError: string | null;
   agentsSelectedId: string | null;
-  agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron" | "hierarchy";
+  agentsPanel: "overview" | "files" | "tools" | "skills" | "channels" | "cron";
   agentFilesLoading: boolean;
   agentFilesError: string | null;
   agentFilesList: AgentsFilesListResult | null;
@@ -142,12 +142,6 @@ export type AppViewState = {
   agentSkillsError: string | null;
   agentSkillsReport: SkillStatusReport | null;
   agentSkillsAgentId: string | null;
-  agentResourcesLoading: boolean;
-  agentResourcesError: string | null;
-  agentResourcesData: AgentResourcesResult | null;
-  agentHierarchyLoading: boolean;
-  agentHierarchyError: string | null;
-  agentHierarchyData: AgentHierarchyResult | null;
   sessionsLoading: boolean;
   sessionsResult: SessionsListResult | null;
   sessionsError: string | null;
@@ -155,6 +149,39 @@ export type AppViewState = {
   sessionsFilterLimit: string;
   sessionsIncludeGlobal: boolean;
   sessionsIncludeUnknown: boolean;
+  usageLoading: boolean;
+  usageResult: SessionsUsageResult | null;
+  usageCostSummary: CostUsageSummary | null;
+  usageError: string | null;
+  usageStartDate: string;
+  usageEndDate: string;
+  usageSelectedSessions: string[];
+  usageSelectedDays: string[];
+  usageSelectedHours: number[];
+  usageChartMode: "tokens" | "cost";
+  usageDailyChartMode: "total" | "by-type";
+  usageTimeSeriesMode: "cumulative" | "per-turn";
+  usageTimeSeriesBreakdownMode: "total" | "by-type";
+  usageTimeSeries: SessionUsageTimeSeries | null;
+  usageTimeSeriesLoading: boolean;
+  usageSessionLogs: SessionLogEntry[] | null;
+  usageSessionLogsLoading: boolean;
+  usageSessionLogsExpanded: boolean;
+  usageQuery: string;
+  usageQueryDraft: string;
+  usageQueryDebounceTimer: number | null;
+  usageSessionSort: "tokens" | "cost" | "recent" | "messages" | "errors";
+  usageSessionSortDir: "asc" | "desc";
+  usageRecentSessions: string[];
+  usageTimeZone: "local" | "utc";
+  usageContextExpanded: boolean;
+  usageHeaderPinned: boolean;
+  usageSessionsTab: "all" | "recent";
+  usageVisibleColumns: string[];
+  usageLogFilterRoles: import("./views/usage.js").SessionLogRole[];
+  usageLogFilterTools: string[];
+  usageLogFilterHasTools: boolean;
+  usageLogFilterQuery: string;
   cronLoading: boolean;
   cronJobs: CronJob[];
   cronStatus: CronStatus | null;
@@ -179,21 +206,6 @@ export type AppViewState = {
   debugCallParams: string;
   debugCallResult: string | null;
   debugCallError: string | null;
-  modelsLoading: boolean;
-  modelsError: string | null;
-  modelsCatalog: ModelCatalogRow[];
-  modelsAvailabilityLoading: boolean;
-  modelsAvailabilityError: string | null;
-  detectedProviders: Set<string>;
-  unavailableProviders: Set<string>;
-  cooldownModels: Set<string>;
-  closestUsageByProvider: Record<string, ClosestUsageWindow | null>;
-  projectsLoading: boolean;
-  projectsError: string | null;
-  projectsRootDir: string | null;
-  projectsBrowseRootDir: string | null;
-  projectsIncludeHidden: boolean;
-  projects: ProjectEntry[];
   logsLoading: boolean;
   logsError: string | null;
   logsFile: string | null;
@@ -202,70 +214,13 @@ export type AppViewState = {
   logsLevelFilters: Record<LogLevel, boolean>;
   logsAutoFollow: boolean;
   logsTruncated: boolean;
-  providersHealthLoading: boolean;
-  providersHealthError: string | null;
-  providersHealthEntries: ProviderHealthEntry[];
-  providersHealthUpdatedAt: number | null;
-  providersHealthShowAll: boolean;
-  providersHealthExpanded: string | null;
-  providersModelAllowlist: Set<string>;
-  providersPrimaryModel: string | null;
-  providersModelFallbacks: string[];
-  providersCodingModelPrimary: string | null;
-  providersModelAutoPickFromPool: boolean;
-  providersConfigHash: string | null;
-  providersModelsSaving: boolean;
-  providersModelsDirty: boolean;
-  providersModelsCostFilter: "all" | "high" | "medium" | "low" | "free";
-  authConfigProvider: string | null;
-  authConfigSaving: boolean;
-  authProvidersList: AuthProviderEntry[] | null;
-  oauthFlow: import("./controllers/auth.ts").OAuthFlowState | null;
-  removingProvider: string | null;
-  clockDisplay: string;
-  toasts: ToastEntry[];
-  usageLoading: boolean;
-  usageError: string | null;
-  usageStatus: unknown;
-  usageCost: unknown;
-  usagePeriod: "24h" | "7d" | "30d" | "all";
-  systemInfo: SystemInfoResult | null;
-  systemInfoLoading: boolean;
-  systemInfoError: string | null;
-  healthLoading: boolean;
-  healthError: string | null;
-  healthData: HealthData | null;
-  healthChannels: Array<{ id: string; status: string }>;
-  securityLoading: boolean;
-  securityError: string | null;
-  securitySummary: SecuritySummary | null;
-  securityStats: SecurityEventStats | null;
-  securityEvents: SecurityEvent[];
-  securityAlerts: SecurityEvent[];
-  securityBlocked: SecurityEvent[];
-  securityAudit: SecurityAuditReport | null;
-  securityAuditLoading: boolean;
-  securityFilterCategory: SecurityEventCategory | "all";
-  securityFilterSeverity: SecurityEventSeverity | "all";
-  securityFilterTimeRange: "1h" | "24h" | "7d" | "30d" | "all";
-  securityActiveTab: "summary" | "events" | "alerts" | "blocked" | "audit";
-  securityEventsPage: number;
-  securityEventsPerPage: number;
-  voiceLoading: boolean;
-  voiceError: string | null;
-  voiceTtsEnabled: boolean;
-  voiceTtsProvider: string | null;
-  voiceTtsProviders: string[];
-  voiceWakeWord: string | null;
-  voiceTalkMode: string | null;
-  confirmDialog: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    onConfirm: () => void;
-    onCancel: () => void;
-  } | null;
+  logsCursor: number | null;
+  logsLastFetchAt: number | null;
+  logsLimit: number;
+  logsMaxBytes: number;
+  logsAtBottom: boolean;
   client: GatewayBrowserClient | null;
+  refreshSessionsAfterChat: Set<string>;
   connect: () => void;
   setTab: (tab: Tab) => void;
   setTheme: (theme: ThemeMode, context?: ThemeTransitionContext) => void;
@@ -316,23 +271,15 @@ export type AppViewState = {
   setPassword: (next: string) => void;
   setSessionKey: (next: string) => void;
   setChatMessage: (next: string) => void;
-  handleChatSend: () => Promise<void>;
-  handleChatAbort: () => Promise<void>;
-  handleChatSelectQueueItem: (id: string) => void;
-  handleChatDropQueueItem: (id: string) => void;
-  handleChatClearQueue: () => void;
-  handleLogsFilterChange: (next: string) => void;
-  handleLogsLevelFilterToggle: (level: LogLevel) => void;
-  handleLogsAutoFollowToggle: (next: boolean) => void;
-  handleCallDebugMethod: (method: string, params: string) => Promise<void>;
-  handleLoadProviders: () => Promise<void>;
-  handleLoadSecurity: () => Promise<void>;
-  showToast: (type: ToastType, message: string) => void;
-  dismissToast: (id: number) => void;
-  showConfirm: (opts: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    onConfirm: () => void;
-  }) => void;
+  handleSendChat: (messageOverride?: string, opts?: { restoreDraft?: boolean }) => Promise<void>;
+  handleAbortChat: () => Promise<void>;
+  removeQueuedMessage: (id: string) => void;
+  handleChatScroll: (event: Event) => void;
+  resetToolStream: () => void;
+  resetChatScroll: () => void;
+  exportLogs: (lines: string[], label: string) => void;
+  handleLogsScroll: (event: Event) => void;
+  handleOpenSidebar: (content: string) => void;
+  handleCloseSidebar: () => void;
+  handleSplitRatioChange: (ratio: number) => void;
 };

@@ -100,54 +100,42 @@
   stroke-linejoin: round;
 }
 
-/* "New messages" floating indicator - overlays on top of chat thread */
+/* New messages indicator - floating pill above compose */
 .chat-new-messages {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
+  align-self: center;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 16px;
+  padding: 6px 14px;
+  margin: 8px auto;
   font-size: 13px;
-  font-weight: 500;
+  font-family: var(--font-body);
   color: var(--text);
-  background: var(--panel-strong, var(--panel));
+  background: var(--panel-strong);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 999px;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  white-space: nowrap;
+  z-index: 10;
   transition:
     background 150ms ease-out,
-    box-shadow 150ms ease-out;
-  white-space: nowrap;
+    border-color 150ms ease-out;
 }
 
 .chat-new-messages:hover {
-  background: var(--accent, var(--panel-strong));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  background: var(--panel);
+  border-color: var(--accent);
 }
 
 .chat-new-messages svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
   fill: none;
-  stroke-width: 2px;
-}
-
-:root[data-theme="light"] .chat-new-messages {
-  background: #fff;
-  border-color: rgba(16, 24, 40, 0.12);
-  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.1);
-  color: var(--text);
-}
-
-:root[data-theme="light"] .chat-new-messages:hover {
-  background: #f8fafc;
-  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.15);
+  stroke-width: 1.5px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
 }
 
 /* Chat compose - sticky at bottom */
@@ -345,7 +333,7 @@
 
 .chat-controls__session {
   min-width: 140px;
-  max-width: 420px;
+  max-width: 300px;
 }
 
 .chat-controls__thinking {
@@ -412,7 +400,7 @@
 .chat-controls__session select {
   padding: 6px 10px;
   font-size: 13px;
-  max-width: 420px;
+  max-width: 300px;
   overflow: hidden;
   text-overflow: ellipsis;
 }

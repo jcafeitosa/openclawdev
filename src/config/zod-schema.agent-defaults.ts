@@ -1,10 +1,9 @@
 import { z } from "zod";
 import {
   HeartbeatSchema,
+  AgentSandboxSchema,
+  AgentModelSchema,
   MemorySearchSchema,
-  SandboxBrowserSchema,
-  SandboxDockerSchema,
-  SandboxPruneSchema,
 } from "./zod-schema.agent-runtime.js";
 import {
   BlockStreamingChunkSchema,
@@ -13,102 +12,8 @@ import {
   HumanDelaySchema,
 } from "./zod-schema.core.js";
 
-// Schema for ModelCapabilities partial (for dynamic patterns)
-const ModelCapabilitiesPartialSchema = z
-  .object({
-    coding: z.boolean().optional(),
-    reasoning: z.boolean().optional(),
-    vision: z.boolean().optional(),
-    general: z.boolean().optional(),
-    fast: z.boolean().optional(),
-    creative: z.boolean().optional(),
-    performanceTier: z
-      .union([z.literal("fast"), z.literal("balanced"), z.literal("powerful")])
-      .optional(),
-    costTier: z
-      .union([z.literal("free"), z.literal("cheap"), z.literal("moderate"), z.literal("expensive")])
-      .optional(),
-    primary: z
-      .union([
-        z.literal("coding"),
-        z.literal("reasoning"),
-        z.literal("vision"),
-        z.literal("general"),
-      ])
-      .optional(),
-  })
-  .strict();
-
-// Model pools schemas
-const poolSelectionModeSchema = z.enum(["ordered", "best-fit", "agent-choice"]);
-const poolFallbackBehaviorSchema = z.enum(["next-in-pool", "next-pool", "error"]);
-const capabilityLevelSchema = z.enum(["required", "preferred", "optional"]);
-
-const modelPoolConfigSchema = z
-  .object({
-    models: z.array(z.string()),
-    selectionMode: poolSelectionModeSchema.optional(),
-    fallbackBehavior: poolFallbackBehaviorSchema.optional(),
-    fallbackPool: z.string().optional(),
-    capabilities: z
-      .object({
-        vision: capabilityLevelSchema.optional(),
-        tools: capabilityLevelSchema.optional(),
-        reasoning: capabilityLevelSchema.optional(),
-        extendedThinking: capabilityLevelSchema.optional(),
-        streaming: capabilityLevelSchema.optional(),
-        contextWindow: z.number().optional(),
-      })
-      .optional(),
-  })
-  .strict();
-
-const modelPoolsConfigSchema = z
-  .object({
-    default: modelPoolConfigSchema,
-    coding: modelPoolConfigSchema.optional(),
-    thinking: modelPoolConfigSchema.optional(),
-    vision: modelPoolConfigSchema.optional(),
-    tools: modelPoolConfigSchema.optional(),
-  })
-  .catchall(modelPoolConfigSchema);
-
-const complexityMappingSchema = z
-  .object({
-    trivial: z
-      .object({
-        pool: z.string(),
-        preferIndex: z.number().optional(),
-      })
-      .strict()
-      .optional(),
-    moderate: z
-      .object({
-        pool: z.string(),
-        preferIndex: z.number().optional(),
-      })
-      .strict()
-      .optional(),
-    complex: z
-      .object({
-        pool: z.string(),
-        preferIndex: z.number().optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
-
 export const AgentDefaultsSchema = z
   .object({
-    delegation: z
-      .object({
-        autoRun: z.boolean().optional(),
-        debounceMs: z.number().int().positive().optional(),
-      })
-      .strict()
-      .optional(),
-    persona: z.string().optional(),
     model: z
       .object({
         primary: z.string().optional(),
@@ -123,30 +28,6 @@ export const AgentDefaultsSchema = z
       })
       .strict()
       .optional(),
-    toolModel: z
-      .object({
-        primary: z.string().optional(),
-        fallbacks: z.array(z.string()).optional(),
-      })
-      .strict()
-      .optional(),
-    codingModel: z
-      .object({
-        primary: z.string().optional(),
-        fallbacks: z.array(z.string()).optional(),
-      })
-      .strict()
-      .optional(),
-    modelByComplexity: z
-      .object({
-        enabled: z.boolean().optional(),
-        autoPickFromPool: z.boolean().optional(),
-        trivial: z.string().optional(),
-        moderate: z.string().optional(),
-        complex: z.string().optional(),
-      })
-      .strict()
-      .optional(),
     models: z
       .record(
         z.string(),
@@ -155,29 +36,17 @@ export const AgentDefaultsSchema = z
             alias: z.string().optional(),
             /** Provider-specific API parameters (e.g., GLM-4.7 thinking mode). */
             params: z.record(z.string(), z.unknown()).optional(),
+            /** Enable streaming for this model (default: true, false for Ollama to avoid SDK issue #1205). */
+            streaming: z.boolean().optional(),
           })
           .strict(),
       )
       .optional(),
-    modelPatterns: z.record(z.string(), ModelCapabilitiesPartialSchema).optional(),
     workspace: z.string().optional(),
     repoRoot: z.string().optional(),
-    projects: z
-      .object({
-        rootDir: z.string().optional(),
-        namingConvention: z
-          .union([
-            z.literal("kebab-case"),
-            z.literal("snake_case"),
-            z.literal("camelCase"),
-            z.literal("PascalCase"),
-          ])
-          .optional(),
-      })
-      .strict()
-      .optional(),
     skipBootstrap: z.boolean().optional(),
     bootstrapMaxChars: z.number().int().positive().optional(),
+    bootstrapTotalMaxChars: z.number().int().positive().optional(),
     userTimezone: z.string().optional(),
     timeFormat: z.union([z.literal("auto"), z.literal("12"), z.literal("24")]).optional(),
     envelopeTimezone: z.string().optional(),
@@ -255,14 +124,6 @@ export const AgentDefaultsSchema = z
     blockStreamingChunk: BlockStreamingChunkSchema.optional(),
     blockStreamingCoalesce: BlockStreamingCoalesceSchema.optional(),
     humanDelay: HumanDelaySchema.optional(),
-    role: z
-      .union([
-        z.literal("orchestrator"),
-        z.literal("lead"),
-        z.literal("specialist"),
-        z.literal("worker"),
-      ])
-      .optional(),
     timeoutSeconds: z.number().int().positive().optional(),
     mediaMaxMb: z.number().positive().optional(),
     typingIntervalSeconds: z.number().int().positive().optional(),
@@ -279,40 +140,31 @@ export const AgentDefaultsSchema = z
     subagents: z
       .object({
         maxConcurrent: z.number().int().positive().optional(),
+        maxSpawnDepth: z
+          .number()
+          .int()
+          .min(1)
+          .max(5)
+          .optional()
+          .describe(
+            "Maximum nesting depth for sub-agent spawning. 1 = no nesting (default), 2 = sub-agents can spawn sub-sub-agents.",
+          ),
+        maxChildrenPerAgent: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .describe(
+            "Maximum number of active children a single agent session can spawn (default: 5).",
+          ),
         archiveAfterMinutes: z.number().int().positive().optional(),
-        model: z
-          .union([
-            z.string(),
-            z
-              .object({
-                primary: z.string().optional(),
-                fallbacks: z.array(z.string()).optional(),
-              })
-              .strict(),
-          ])
-          .optional(),
+        model: AgentModelSchema.optional(),
         thinking: z.string().optional(),
-        /** Announce mode: "system" (default) wraps in background task format; "direct" injects agent response with identity */
-        announceMode: z.union([z.literal("system"), z.literal("direct")]).optional(),
       })
       .strict()
       .optional(),
-    sandbox: z
-      .object({
-        mode: z.union([z.literal("off"), z.literal("non-main"), z.literal("all")]).optional(),
-        workspaceAccess: z.union([z.literal("none"), z.literal("ro"), z.literal("rw")]).optional(),
-        sessionToolsVisibility: z.union([z.literal("spawned"), z.literal("all")]).optional(),
-        scope: z.union([z.literal("session"), z.literal("agent"), z.literal("shared")]).optional(),
-        perSession: z.boolean().optional(),
-        workspaceRoot: z.string().optional(),
-        docker: SandboxDockerSchema,
-        browser: SandboxBrowserSchema,
-        prune: SandboxPruneSchema,
-      })
-      .strict()
-      .optional(),
-    modelPools: modelPoolsConfigSchema.optional(),
-    complexityMapping: complexityMappingSchema.optional(),
+    sandbox: AgentSandboxSchema,
   })
   .strict()
   .optional();

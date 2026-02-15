@@ -1,17 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { GatewayRequestHandlers } from "./types.js";
-import {
-  getAllPerformanceRecords,
-  getAgentPerformanceStats,
-} from "../../agents/agent-performance-tracker.js";
+import type { GatewayRequestHandlers, RespondFn } from "./types.js";
 import {
   listAgentIds,
-  resolveAgentModelPrimary,
+  resolveAgentDir,
   resolveAgentWorkspaceDir,
-  resolveDefaultAgentId,
 } from "../../agents/agent-scope.js";
-import { modelKey, resolveDefaultModelForAgent } from "../../agents/model-selection.js";
 import {
   DEFAULT_AGENTS_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
@@ -22,28 +16,33 @@ import {
   DEFAULT_SOUL_FILENAME,
   DEFAULT_TOOLS_FILENAME,
   DEFAULT_USER_FILENAME,
+  ensureAgentWorkspace,
+  isWorkspaceOnboardingCompleted,
 } from "../../agents/workspace.js";
+import { movePathToTrash } from "../../browser/trash.js";
+import {
+  applyAgentConfig,
+  findAgentEntryIndex,
+  listAgentEntries,
+  pruneAgentConfig,
+} from "../../commands/agents.config.js";
 import { loadConfig, writeConfigFile } from "../../config/config.js";
-import { loadSessionStore, resolveStorePath } from "../../config/sessions.js";
-import { resolveHeartbeatSummaryForAgent } from "../../infra/heartbeat-runner.js";
-import { loadCostUsageSummary } from "../../infra/session-cost-usage.js";
-import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
+import { resolveSessionTranscriptsDirForAgent } from "../../config/sessions/paths.js";
+import { DEFAULT_AGENT_ID, normalizeAgentId } from "../../routing/session-key.js";
+import { resolveUserPath } from "../../utils.js";
 import {
   ErrorCodes,
   errorShape,
   formatValidationErrors,
+  validateAgentsCreateParams,
+  validateAgentsDeleteParams,
   validateAgentsFilesGetParams,
   validateAgentsFilesListParams,
   validateAgentsFilesSetParams,
   validateAgentsListParams,
-  validateAgentsModelSetParams,
+  validateAgentsUpdateParams,
 } from "../protocol/index.js";
 import { listAgentsForGateway } from "../session-utils.js";
-
-// Cache for agents.resources to avoid repeated heavy I/O (transcript scans for 62+ agents).
-// The response is cached for 5 minutes; a background refresh keeps data fresh without blocking callers.
-const RESOURCES_CACHE_TTL_MS = 5 * 60 * 1000;
-let resourcesCache: { data: unknown; ts: number; refreshing: boolean } | null = null;
 
 const BOOTSTRAP_FILE_NAMES = [
   DEFAULT_AGENTS_FILENAME,
@@ -54,10 +53,44 @@ const BOOTSTRAP_FILE_NAMES = [
   DEFAULT_HEARTBEAT_FILENAME,
   DEFAULT_BOOTSTRAP_FILENAME,
 ] as const;
+const BOOTSTRAP_FILE_NAMES_POST_ONBOARDING = BOOTSTRAP_FILE_NAMES.filter(
+  (name) => name !== DEFAULT_BOOTSTRAP_FILENAME,
+);
 
 const MEMORY_FILE_NAMES = [DEFAULT_MEMORY_FILENAME, DEFAULT_MEMORY_ALT_FILENAME] as const;
 
 const ALLOWED_FILE_NAMES = new Set<string>([...BOOTSTRAP_FILE_NAMES, ...MEMORY_FILE_NAMES]);
+
+function resolveAgentWorkspaceFileOrRespondError(
+  params: Record<string, unknown>,
+  respond: RespondFn,
+): {
+  cfg: ReturnType<typeof loadConfig>;
+  agentId: string;
+  workspaceDir: string;
+  name: string;
+} | null {
+  const cfg = loadConfig();
+  const rawAgentId = params.agentId;
+  const agentId = resolveAgentIdOrError(
+    typeof rawAgentId === "string" || typeof rawAgentId === "number" ? String(rawAgentId) : "",
+    cfg,
+  );
+  if (!agentId) {
+    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+    return null;
+  }
+  const rawName = params.name;
+  const name = (
+    typeof rawName === "string" || typeof rawName === "number" ? String(rawName) : ""
+  ).trim();
+  if (!ALLOWED_FILE_NAMES.has(name)) {
+    respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, `unsupported file "${name}"`));
+    return null;
+  }
+  const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+  return { cfg, agentId, workspaceDir, name };
+}
 
 type FileMeta = {
   size: number;
@@ -79,7 +112,7 @@ async function statFile(filePath: string): Promise<FileMeta | null> {
   }
 }
 
-async function listAgentFiles(workspaceDir: string) {
+async function listAgentFiles(workspaceDir: string, options?: { hideBootstrap?: boolean }) {
   const files: Array<{
     name: string;
     path: string;
@@ -88,7 +121,10 @@ async function listAgentFiles(workspaceDir: string) {
     updatedAtMs?: number;
   }> = [];
 
-  for (const name of BOOTSTRAP_FILE_NAMES) {
+  const bootstrapFileNames = options?.hideBootstrap
+    ? BOOTSTRAP_FILE_NAMES_POST_ONBOARDING
+    : BOOTSTRAP_FILE_NAMES;
+  for (const name of bootstrapFileNames) {
     const filePath = path.join(workspaceDir, name);
     const meta = await statFile(filePath);
     if (meta) {
@@ -142,103 +178,28 @@ function resolveAgentIdOrError(agentIdRaw: string, cfg: ReturnType<typeof loadCo
   return agentId;
 }
 
-async function collectAgentResources() {
-  const cfg = loadConfig();
-  const defaultAgentId = resolveDefaultAgentId(cfg);
-  const agentList = listAgentsForGateway(cfg);
-  const results = await Promise.all(
-    agentList.agents.map(async (agent) => {
-      const agentId = normalizeAgentId(agent.id);
+function sanitizeIdentityLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
 
-      // Session count + token totals from session store
-      const storePath = resolveStorePath(cfg.session?.store, { agentId });
-      const store = loadSessionStore(storePath);
-      let sessionCount = 0;
-      let activeSessions = 0;
-      let totalInputTokens = 0;
-      let totalOutputTokens = 0;
-      let totalTokens = 0;
-      const now = Date.now();
-      const activeThreshold = 60 * 60 * 1000; // 1 hour
-      for (const [key, entry] of Object.entries(store)) {
-        if (key === "global" || key === "unknown") {
-          continue;
-        }
-        const parsed = parseAgentSessionKey(key);
-        if (parsed && normalizeAgentId(parsed.agentId) !== agentId) {
-          continue;
-        }
-        sessionCount++;
-        totalInputTokens += entry?.inputTokens ?? 0;
-        totalOutputTokens += entry?.outputTokens ?? 0;
-        totalTokens += entry?.totalTokens ?? (entry?.inputTokens ?? 0) + (entry?.outputTokens ?? 0);
-        if (entry?.updatedAt && now - entry.updatedAt < activeThreshold) {
-          activeSessions++;
-        }
-      }
+function resolveOptionalStringParam(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
 
-      // Cost from transcript scanning (7 days for speed)
-      let totalCost = 0;
-      try {
-        const costSummary = await loadCostUsageSummary({ days: 7, config: cfg, agentId });
-        totalCost = costSummary.totals.totalCost;
-      } catch {
-        // cost unavailable
-      }
-
-      // Heartbeat config (runtime alive/ageMs requires active agent loop)
-      const heartbeat = resolveHeartbeatSummaryForAgent(cfg, agentId);
-
-      // Workspace size
-      const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-      let workspaceFiles = 0;
-      let workspaceTotalBytes = 0;
-      try {
-        const entries = await fs.readdir(workspaceDir);
-        for (const name of entries) {
-          try {
-            const stat = await fs.stat(path.join(workspaceDir, name));
-            if (stat.isFile()) {
-              workspaceFiles++;
-              workspaceTotalBytes += stat.size;
-            }
-          } catch {
-            // skip inaccessible files
-          }
-        }
-      } catch {
-        // workspace dir may not exist
-      }
-
-      return {
-        agentId,
-        isDefault: agentId === defaultAgentId,
-        sessions: {
-          total: sessionCount,
-          active: activeSessions,
-        },
-        tokens: {
-          input: totalInputTokens,
-          output: totalOutputTokens,
-          total: totalTokens,
-        },
-        cost: {
-          total: totalCost,
-          days: 7,
-        },
-        heartbeat: {
-          enabled: heartbeat.enabled,
-          everyMs: heartbeat.everyMs ?? null,
-          every: heartbeat.every,
-        },
-        workspace: {
-          files: workspaceFiles,
-          totalBytes: workspaceTotalBytes,
-        },
-      };
-    }),
-  );
-  return { agents: results };
+async function moveToTrashBestEffort(pathname: string): Promise<void> {
+  if (!pathname) {
+    return;
+  }
+  try {
+    await fs.access(pathname);
+  } catch {
+    return;
+  }
+  try {
+    await movePathToTrash(pathname);
+  } catch {
+    // Best-effort: path may already be gone or trash unavailable.
+  }
 }
 
 export const agentsHandlers: GatewayRequestHandlers = {
@@ -259,68 +220,188 @@ export const agentsHandlers: GatewayRequestHandlers = {
     const result = listAgentsForGateway(cfg);
     respond(true, result, undefined);
   },
-  "agents.model.set": async ({ params, respond }) => {
-    if (!validateAgentsModelSetParams(params)) {
+  "agents.create": async ({ params, respond }) => {
+    if (!validateAgentsCreateParams(params)) {
       respond(
         false,
         undefined,
         errorShape(
           ErrorCodes.INVALID_REQUEST,
-          `invalid agents.model.set params: ${formatValidationErrors(
-            validateAgentsModelSetParams.errors,
+          `invalid agents.create params: ${formatValidationErrors(
+            validateAgentsCreateParams.errors,
           )}`,
         ),
       );
       return;
     }
+
     const cfg = loadConfig();
-    const agentId = resolveAgentIdOrError(String(params.agentId ?? ""), cfg);
-    if (!agentId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
-      return;
-    }
-    const newModel = params.model;
-    const agents = cfg.agents?.list ?? [];
-    const entryIndex = agents.findIndex((entry) => entry && normalizeAgentId(entry.id) === agentId);
-    if (entryIndex === -1) {
+    const rawName = String(params.name ?? "").trim();
+    const agentId = normalizeAgentId(rawName);
+    if (agentId === DEFAULT_AGENT_ID) {
       respond(
         false,
         undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, "agent not found in config"),
+        errorShape(ErrorCodes.INVALID_REQUEST, `"${DEFAULT_AGENT_ID}" is reserved`),
       );
       return;
     }
-    const nextAgents = [...agents];
-    const entry = { ...nextAgents[entryIndex] };
-    if (newModel === null) {
-      delete entry.model;
-    } else {
-      entry.model = { primary: newModel };
-    }
-    nextAgents[entryIndex] = entry;
-    const nextCfg = {
-      ...cfg,
-      agents: { ...cfg.agents, list: nextAgents },
-    };
-    await writeConfigFile(nextCfg);
 
-    const updatedCfg = loadConfig();
-    const agentOverride = resolveAgentModelPrimary(updatedCfg, agentId);
-    const effective = resolveDefaultModelForAgent({ cfg: updatedCfg, agentId });
-    const effectiveKey = modelKey(effective.provider, effective.model);
-    respond(
-      true,
-      {
-        ok: true,
-        agentId,
-        model: {
-          effective: effectiveKey,
-          override: agentOverride || undefined,
-          isSystemDefault: !agentOverride,
-        },
-      },
-      undefined,
-    );
+    if (findAgentEntryIndex(listAgentEntries(cfg), agentId) >= 0) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" already exists`),
+      );
+      return;
+    }
+
+    const workspaceDir = resolveUserPath(String(params.workspace ?? "").trim());
+
+    // Resolve agentDir against the config we're about to persist (vs the pre-write config),
+    // so subsequent resolutions can't disagree about the agent's directory.
+    let nextConfig = applyAgentConfig(cfg, {
+      agentId,
+      name: rawName,
+      workspace: workspaceDir,
+    });
+    const agentDir = resolveAgentDir(nextConfig, agentId);
+    nextConfig = applyAgentConfig(nextConfig, { agentId, agentDir });
+
+    // Ensure workspace & transcripts exist BEFORE writing config so a failure
+    // here does not leave a broken config entry behind.
+    const skipBootstrap = Boolean(nextConfig.agents?.defaults?.skipBootstrap);
+    await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: !skipBootstrap });
+    await fs.mkdir(resolveSessionTranscriptsDirForAgent(agentId), { recursive: true });
+
+    await writeConfigFile(nextConfig);
+
+    // Always write Name to IDENTITY.md; optionally include emoji/avatar.
+    const safeName = sanitizeIdentityLine(rawName);
+    const emoji = resolveOptionalStringParam(params.emoji);
+    const avatar = resolveOptionalStringParam(params.avatar);
+    const identityPath = path.join(workspaceDir, DEFAULT_IDENTITY_FILENAME);
+    const lines = [
+      "",
+      `- Name: ${safeName}`,
+      ...(emoji ? [`- Emoji: ${sanitizeIdentityLine(emoji)}`] : []),
+      ...(avatar ? [`- Avatar: ${sanitizeIdentityLine(avatar)}`] : []),
+      "",
+    ];
+    await fs.appendFile(identityPath, lines.join("\n"), "utf-8");
+
+    respond(true, { ok: true, agentId, name: rawName, workspace: workspaceDir }, undefined);
+  },
+  "agents.update": async ({ params, respond }) => {
+    if (!validateAgentsUpdateParams(params)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid agents.update params: ${formatValidationErrors(
+            validateAgentsUpdateParams.errors,
+          )}`,
+        ),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    const agentId = normalizeAgentId(String(params.agentId ?? ""));
+    if (findAgentEntryIndex(listAgentEntries(cfg), agentId) < 0) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" not found`),
+      );
+      return;
+    }
+
+    const workspaceDir =
+      typeof params.workspace === "string" && params.workspace.trim()
+        ? resolveUserPath(params.workspace.trim())
+        : undefined;
+
+    const model = resolveOptionalStringParam(params.model);
+    const avatar = resolveOptionalStringParam(params.avatar);
+
+    const nextConfig = applyAgentConfig(cfg, {
+      agentId,
+      ...(typeof params.name === "string" && params.name.trim()
+        ? { name: params.name.trim() }
+        : {}),
+      ...(workspaceDir ? { workspace: workspaceDir } : {}),
+      ...(model ? { model } : {}),
+    });
+
+    await writeConfigFile(nextConfig);
+
+    if (workspaceDir) {
+      const skipBootstrap = Boolean(nextConfig.agents?.defaults?.skipBootstrap);
+      await ensureAgentWorkspace({ dir: workspaceDir, ensureBootstrapFiles: !skipBootstrap });
+    }
+
+    if (avatar) {
+      const workspace = workspaceDir ?? resolveAgentWorkspaceDir(nextConfig, agentId);
+      await fs.mkdir(workspace, { recursive: true });
+      const identityPath = path.join(workspace, DEFAULT_IDENTITY_FILENAME);
+      await fs.appendFile(identityPath, `\n- Avatar: ${sanitizeIdentityLine(avatar)}\n`, "utf-8");
+    }
+
+    respond(true, { ok: true, agentId }, undefined);
+  },
+  "agents.delete": async ({ params, respond }) => {
+    if (!validateAgentsDeleteParams(params)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid agents.delete params: ${formatValidationErrors(
+            validateAgentsDeleteParams.errors,
+          )}`,
+        ),
+      );
+      return;
+    }
+
+    const cfg = loadConfig();
+    const agentId = normalizeAgentId(String(params.agentId ?? ""));
+    if (agentId === DEFAULT_AGENT_ID) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `"${DEFAULT_AGENT_ID}" cannot be deleted`),
+      );
+      return;
+    }
+    if (findAgentEntryIndex(listAgentEntries(cfg), agentId) < 0) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `agent "${agentId}" not found`),
+      );
+      return;
+    }
+
+    const deleteFiles = typeof params.deleteFiles === "boolean" ? params.deleteFiles : true;
+    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const agentDir = resolveAgentDir(cfg, agentId);
+    const sessionsDir = resolveSessionTranscriptsDirForAgent(agentId);
+
+    const result = pruneAgentConfig(cfg, agentId);
+    await writeConfigFile(result.config);
+
+    if (deleteFiles) {
+      await Promise.all([
+        moveToTrashBestEffort(workspaceDir),
+        moveToTrashBestEffort(agentDir),
+        moveToTrashBestEffort(sessionsDir),
+      ]);
+    }
+
+    respond(true, { ok: true, agentId, removedBindings: result.removedBindings }, undefined);
   },
   "agents.files.list": async ({ params, respond }) => {
     if (!validateAgentsFilesListParams(params)) {
@@ -343,7 +424,13 @@ export const agentsHandlers: GatewayRequestHandlers = {
       return;
     }
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-    const files = await listAgentFiles(workspaceDir);
+    let hideBootstrap = false;
+    try {
+      hideBootstrap = await isWorkspaceOnboardingCompleted(workspaceDir);
+    } catch {
+      // Fall back to showing BOOTSTRAP if workspace state cannot be read.
+    }
+    const files = await listAgentFiles(workspaceDir, { hideBootstrap });
     respond(true, { agentId, workspace: workspaceDir, files }, undefined);
   },
   "agents.files.get": async ({ params, respond }) => {
@@ -360,22 +447,11 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const cfg = loadConfig();
-    const agentId = resolveAgentIdOrError(String(params.agentId ?? ""), cfg);
-    if (!agentId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond);
+    if (!resolved) {
       return;
     }
-    const name = String(params.name ?? "").trim();
-    if (!ALLOWED_FILE_NAMES.has(name)) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `unsupported file "${name}"`),
-      );
-      return;
-    }
-    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const { agentId, workspaceDir, name } = resolved;
     const filePath = path.join(workspaceDir, name);
     const meta = await statFile(filePath);
     if (!meta) {
@@ -422,22 +498,11 @@ export const agentsHandlers: GatewayRequestHandlers = {
       );
       return;
     }
-    const cfg = loadConfig();
-    const agentId = resolveAgentIdOrError(String(params.agentId ?? ""), cfg);
-    if (!agentId) {
-      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "unknown agent id"));
+    const resolved = resolveAgentWorkspaceFileOrRespondError(params, respond);
+    if (!resolved) {
       return;
     }
-    const name = String(params.name ?? "").trim();
-    if (!ALLOWED_FILE_NAMES.has(name)) {
-      respond(
-        false,
-        undefined,
-        errorShape(ErrorCodes.INVALID_REQUEST, `unsupported file "${name}"`),
-      );
-      return;
-    }
-    const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+    const { agentId, workspaceDir, name } = resolved;
     await fs.mkdir(workspaceDir, { recursive: true });
     const filePath = path.join(workspaceDir, name);
     const content = String(params.content ?? "");
@@ -460,58 +525,5 @@ export const agentsHandlers: GatewayRequestHandlers = {
       },
       undefined,
     );
-  },
-  "agents.performance": ({ params, respond }) => {
-    let agentId = "";
-    if (params && typeof params === "object" && "agentId" in params) {
-      const value = (params as { agentId?: unknown }).agentId;
-      if (typeof value === "string") {
-        agentId = value.trim();
-      } else if (value != null && typeof value === "number") {
-        agentId = value.toString();
-      } else if (value != null) {
-        // Handle complex objects by stringifying
-        agentId = JSON.stringify(value);
-      }
-    }
-
-    if (agentId) {
-      const stats = getAgentPerformanceStats(agentId);
-      respond(true, { agentId, records: stats }, undefined);
-    } else {
-      const records = getAllPerformanceRecords();
-      respond(true, { records }, undefined);
-    }
-  },
-  "agents.resources": async ({ respond }) => {
-    const now = Date.now();
-
-    // Return cached data if fresh enough
-    if (resourcesCache && now - resourcesCache.ts < RESOURCES_CACHE_TTL_MS) {
-      respond(true, resourcesCache.data, undefined);
-      return;
-    }
-
-    // If a background refresh is already running, return stale cache if available
-    if (resourcesCache?.refreshing) {
-      respond(true, resourcesCache.data, undefined);
-      return;
-    }
-
-    // Mark as refreshing (prevents concurrent heavy scans)
-    if (resourcesCache) {
-      resourcesCache.refreshing = true;
-    }
-
-    try {
-      const data = await collectAgentResources();
-      resourcesCache = { data, ts: Date.now(), refreshing: false };
-      respond(true, data, undefined);
-    } catch {
-      if (resourcesCache) {
-        resourcesCache.refreshing = false;
-      }
-      respond(true, resourcesCache?.data ?? { agents: [] }, undefined);
-    }
   },
 };

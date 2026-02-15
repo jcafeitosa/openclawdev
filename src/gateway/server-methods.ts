@@ -2,25 +2,18 @@ import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-met
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
-import { authHandlers } from "./server-methods/auth.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
-import { collaborationAdvancedHandlers } from "./server-methods/collaboration-advanced.js";
-import { collaborationHandlers } from "./server-methods/collaboration.js";
 import { configHandlers } from "./server-methods/config.js";
 import { connectHandlers } from "./server-methods/connect.js";
 import { cronHandlers } from "./server-methods/cron.js";
-import { delegationHandlers } from "./server-methods/delegation.js";
 import { deviceHandlers } from "./server-methods/devices.js";
 import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
 import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
 import { modelsHandlers } from "./server-methods/models.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
-import { providersHealthHandlers } from "./server-methods/providers-health.js";
-import { providersHandlers } from "./server-methods/providers.js";
-import { securityHandlers } from "./server-methods/security.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
@@ -39,7 +32,11 @@ const WRITE_SCOPE = "operator.write";
 const APPROVALS_SCOPE = "operator.approvals";
 const PAIRING_SCOPE = "operator.pairing";
 
-const APPROVAL_METHODS = new Set(["exec.approval.request", "exec.approval.resolve"]);
+const APPROVAL_METHODS = new Set([
+  "exec.approval.request",
+  "exec.approval.waitDecision",
+  "exec.approval.resolve",
+]);
 const NODE_ROLE_METHODS = new Set(["node.invoke.result", "node.event", "skills.bins"]);
 const PAIRING_METHODS = new Set([
   "node.pair.request",
@@ -65,10 +62,6 @@ const READ_METHODS = new Set([
   "tts.status",
   "tts.providers",
   "models.list",
-  "projects.list",
-  // Listing is read-only, but browsing the filesystem can be sensitive.
-  // Keep pickDirectory as a write/admin endpoint.
-  "models.cooldowns",
   "agents.list",
   "agent.identity.get",
   "skills.status",
@@ -78,38 +71,13 @@ const READ_METHODS = new Set([
   "cron.list",
   "cron.status",
   "cron.runs",
-  "system.info",
   "system-presence",
   "last-heartbeat",
   "node.list",
   "node.describe",
   "chat.history",
-  "providers.list",
-  "providers.usage",
-  "providers.health",
-  "providers.health.check",
-  "providers.health.ranked",
-  // Collaboration read endpoints
-  "collab.session.get",
-  "collab.thread.get",
-  "collab.standup",
-  "collab.poll.get",
-  "collab.review.get",
-  "collab.review.list",
-  // Delegation read endpoints
-  "delegation.get",
-  "delegation.list",
-  "delegation.pending",
-  "delegation.metrics",
-  // Security monitoring endpoints
-  "security.events.query",
-  "security.events.stats",
-  "security.alerts",
-  "security.blocked",
-  "security.session",
-  "security.ip",
-  "security.audit",
-  "security.summary",
+  "config.get",
+  "talk.config",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -126,23 +94,6 @@ const WRITE_METHODS = new Set([
   "chat.send",
   "chat.abort",
   "browser.request",
-  "fs.pickDirectory",
-  // Collaboration write endpoints
-  "collab.session.init",
-  "collab.proposal.publish",
-  "collab.proposal.challenge",
-  "collab.proposal.agree",
-  "collab.decision.finalize",
-  "collab.poll",
-  "collab.poll.vote",
-  "collab.submit_review",
-  "collab.review.submit",
-  // Delegation write endpoints
-  "delegation.create",
-  "delegation.review",
-  "delegation.accept",
-  "delegation.complete",
-  "delegation.reject",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -198,6 +149,9 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method.startsWith("wizard.") ||
     method.startsWith("update.") ||
     method === "channels.logout" ||
+    method === "agents.create" ||
+    method === "agents.update" ||
+    method === "agents.delete" ||
     method === "skills.install" ||
     method === "skills.update" ||
     method === "cron.add" ||
@@ -221,9 +175,6 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...healthHandlers,
   ...channelsHandlers,
   ...chatHandlers,
-  ...collaborationHandlers,
-  ...collaborationAdvancedHandlers,
-  ...delegationHandlers,
   ...cronHandlers,
   ...deviceHandlers,
   ...execApprovalsHandlers,
@@ -243,10 +194,6 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...browserHandlers,
-  ...providersHandlers,
-  ...providersHealthHandlers,
-  ...authHandlers,
-  ...securityHandlers,
 };
 
 export async function handleGatewayRequest(

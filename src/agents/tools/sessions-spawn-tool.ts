@@ -1,35 +1,19 @@
+import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
-import { z } from "zod";
 import type { GatewayMessageChannel } from "../../utils/message-channel.js";
 import type { AnyAgentTool } from "./common.js";
 import { formatThinkingLevels, normalizeThinkLevel } from "../../auto-reply/thinking.js";
 import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
-import {
-  isSubagentSessionKey,
-  normalizeAgentId,
-  parseAgentSessionKey,
-} from "../../routing/session-key.js";
+import { normalizeAgentId, parseAgentSessionKey } from "../../routing/session-key.js";
 import { normalizeDeliveryContext } from "../../utils/delivery-context.js";
-import {
-  AGENT_ROLE_RANK,
-  canSpawnRole,
-  listAgentIds,
-  resolveAgentConfig,
-  resolveAgentRole,
-} from "../agent-scope.js";
-import { buildCollaborationAwareTask } from "../collaboration-spawn.js";
-import { registerDelegation } from "../delegation-registry.js";
-import { resolveAgentIdentity } from "../identity.js";
+import { resolveAgentConfig } from "../agent-scope.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
-import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
+import { resolveDefaultModelForAgent } from "../model-selection.js";
+import { optionalStringEnum } from "../schema/typebox.js";
 import { buildSubagentSystemPrompt } from "../subagent-announce.js";
-import {
-  getSubagentRunBySessionKey,
-  listSubagentRunsForRequester,
-  registerSubagentRun,
-} from "../subagent-registry.js";
-import { resolveTeamChatSessionKey } from "../team-chat.js";
+import { getSubagentDepthFromSessionStore } from "../subagent-depth.js";
+import { countActiveRunsForSession, registerSubagentRun } from "../subagent-registry.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
   resolveDisplaySessionKey,
@@ -37,22 +21,16 @@ import {
   resolveMainSessionAlias,
 } from "./sessions-helpers.js";
 
-const SessionsSpawnToolSchema = zodToToolJsonSchema(
-  z.object({
-    task: z.string(),
-    label: z.string().optional(),
-    agentId: z.string().optional(),
-    model: z.string().optional(),
-    thinking: z.string().optional(),
-    runTimeoutSeconds: z.number().min(0).optional(),
-    timeoutSeconds: z.number().min(0).optional(),
-    cleanup: z.enum(["delete", "keep", "idle"]).optional(),
-    debateSessionKey: z
-      .string()
-      .describe("Collaboration session key for team context injection")
-      .optional(),
-  }),
-);
+const SessionsSpawnToolSchema = Type.Object({
+  task: Type.String(),
+  label: Type.Optional(Type.String()),
+  agentId: Type.Optional(Type.String()),
+  model: Type.Optional(Type.String()),
+  thinking: Type.Optional(Type.String()),
+  runTimeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
+  timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
+  cleanup: optionalStringEnum(["delete", "keep"] as const),
+});
 
 function splitModelRef(ref?: string) {
   if (!ref) {
@@ -105,76 +83,35 @@ export function createSessionsSpawnTool(opts?: {
     parameters: SessionsSpawnToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
-      let task = readStringParam(params, "task", { required: true });
+      const task = readStringParam(params, "task", { required: true });
       const label = typeof params.label === "string" ? params.label.trim() : "";
       const requestedAgentId = readStringParam(params, "agentId");
       const modelOverride = readStringParam(params, "model");
       const thinkingOverrideRaw = readStringParam(params, "thinking");
       const cleanup =
-        params.cleanup === "keep" || params.cleanup === "delete" || params.cleanup === "idle"
-          ? params.cleanup
-          : "idle";
+        params.cleanup === "keep" || params.cleanup === "delete" ? params.cleanup : "keep";
       const requesterOrigin = normalizeDeliveryContext({
         channel: opts?.agentChannel,
         accountId: opts?.agentAccountId,
         to: opts?.agentTo,
         threadId: opts?.agentThreadId,
       });
-      const runTimeoutSeconds = (() => {
-        const explicit =
-          typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
-            ? Math.max(0, Math.floor(params.runTimeoutSeconds))
-            : undefined;
-        if (explicit !== undefined) {
-          return explicit;
-        }
-        const legacy =
-          typeof params.timeoutSeconds === "number" && Number.isFinite(params.timeoutSeconds)
-            ? Math.max(0, Math.floor(params.timeoutSeconds))
-            : undefined;
-        return legacy ?? 0;
-      })();
+      // Default to 0 (no timeout) when omitted. Sub-agent runs are long-lived
+      // by default and should not inherit the main agent 600s timeout.
+      const legacyTimeoutSeconds =
+        typeof params.timeoutSeconds === "number" && Number.isFinite(params.timeoutSeconds)
+          ? Math.max(0, Math.floor(params.timeoutSeconds))
+          : undefined;
+      const runTimeoutSeconds =
+        typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
+          ? Math.max(0, Math.floor(params.runTimeoutSeconds))
+          : (legacyTimeoutSeconds ?? 0);
       let modelWarning: string | undefined;
       let modelApplied = false;
 
       const cfg = loadConfig();
       const { mainKey, alias } = resolveMainSessionAlias(cfg);
       const requesterSessionKey = opts?.agentSessionKey;
-
-      // Enforce max 6 active sub-tasks per parent session
-      const MAX_SUBTASKS_PER_PARENT = 6;
-      if (requesterSessionKey) {
-        const activeChildren = listSubagentRunsForRequester(requesterSessionKey).filter(
-          (r) => !r.endedAt && !r.cleanupCompletedAt,
-        );
-        if (activeChildren.length >= MAX_SUBTASKS_PER_PARENT) {
-          return jsonResult({
-            status: "forbidden",
-            error: `Maximum ${MAX_SUBTASKS_PER_PARENT} active sub-tasks reached. Wait for existing tasks to complete or use a lead agent to decompose further.`,
-          });
-        }
-      }
-
-      // Allow multi-level delegation with a depth limit (max 3 levels)
-      const MAX_SPAWN_DEPTH = 3;
-      if (typeof requesterSessionKey === "string" && isSubagentSessionKey(requesterSessionKey)) {
-        let depth = 0;
-        let currentKey: string | undefined = requesterSessionKey;
-        while (currentKey && isSubagentSessionKey(currentKey)) {
-          depth += 1;
-          if (depth >= MAX_SPAWN_DEPTH) {
-            break;
-          }
-          const parentRun = getSubagentRunBySessionKey(currentKey);
-          currentKey = parentRun?.requesterSessionKey;
-        }
-        if (depth >= MAX_SPAWN_DEPTH) {
-          return jsonResult({
-            status: "forbidden",
-            error: `Maximum delegation depth (${MAX_SPAWN_DEPTH}) reached. Complete your assigned work instead of delegating further.`,
-          });
-        }
-      }
       const requesterInternalKey = requesterSessionKey
         ? resolveInternalSessionKey({
             key: requesterSessionKey,
@@ -188,40 +125,30 @@ export function createSessionsSpawnTool(opts?: {
         mainKey,
       });
 
+      const callerDepth = getSubagentDepthFromSessionStore(requesterInternalKey, { cfg });
+      const maxSpawnDepth = cfg.agents?.defaults?.subagents?.maxSpawnDepth ?? 1;
+      if (callerDepth >= maxSpawnDepth) {
+        return jsonResult({
+          status: "forbidden",
+          error: `sessions_spawn is not allowed at this depth (current depth: ${callerDepth}, max: ${maxSpawnDepth})`,
+        });
+      }
+
+      const maxChildren = cfg.agents?.defaults?.subagents?.maxChildrenPerAgent ?? 5;
+      const activeChildren = countActiveRunsForSession(requesterInternalKey);
+      if (activeChildren >= maxChildren) {
+        return jsonResult({
+          status: "forbidden",
+          error: `sessions_spawn has reached max active children for this session (${activeChildren}/${maxChildren})`,
+        });
+      }
+
       const requesterAgentId = normalizeAgentId(
         opts?.requesterAgentIdOverride ?? parseAgentSessionKey(requesterInternalKey)?.agentId,
       );
-      // Use explicit agentId when provided; auto-select if requester is orchestrator/lead; fall back to requester's agent.
-      let targetAgentId: string;
-      if (requestedAgentId) {
-        targetAgentId = normalizeAgentId(requestedAgentId);
-      } else {
-        const requesterRole = resolveAgentRole(cfg, requesterAgentId);
-        if (AGENT_ROLE_RANK[requesterRole] >= 2) {
-          // Orchestrator/lead: try auto-selecting best agent for the task
-          try {
-            const { findBestAgentForTask } = await import("../capabilities-registry.js");
-            const bestMatch = findBestAgentForTask(task);
-            if (bestMatch && bestMatch.confidence > 0.5) {
-              targetAgentId = bestMatch.agentId;
-            } else {
-              targetAgentId = requesterAgentId;
-            }
-          } catch {
-            targetAgentId = requesterAgentId;
-          }
-        } else {
-          targetAgentId = requesterAgentId;
-        }
-      }
-      // Validate that the target agent is a registered agent.
-      const registeredAgentIds = listAgentIds(cfg).map((id) => id.toLowerCase());
-      if (!registeredAgentIds.includes(targetAgentId.toLowerCase())) {
-        return jsonResult({
-          status: "error",
-          error: `agentId "${targetAgentId}" is not a registered agent. Available agents: ${registeredAgentIds.join(", ")}`,
-        });
-      }
+      const targetAgentId = requestedAgentId
+        ? normalizeAgentId(requestedAgentId)
+        : requesterAgentId;
       if (targetAgentId !== requesterAgentId) {
         const allowAgents = resolveAgentConfig(cfg, requesterAgentId)?.subagents?.allowAgents ?? [];
         const allowAny = allowAgents.some((value) => value.trim() === "*");
@@ -243,25 +170,20 @@ export function createSessionsSpawnTool(opts?: {
           });
         }
       }
-      // Role-based spawn permission: requester must be same rank or higher.
-      const requesterRole = resolveAgentRole(cfg, requesterAgentId);
-      const targetRole = resolveAgentRole(cfg, targetAgentId);
-      if (!canSpawnRole(requesterRole, targetRole)) {
-        return jsonResult({
-          status: "forbidden",
-          error: `Agent "${requesterAgentId}" (${requesterRole}) cannot spawn "${targetAgentId}" (${targetRole}) — insufficient rank`,
-        });
-      }
-
-      const debateSessionKey = readStringParam(params, "debateSessionKey");
-
       const childSessionKey = `agent:${targetAgentId}:subagent:${crypto.randomUUID()}`;
+      const childDepth = callerDepth + 1;
       const spawnedByKey = requesterInternalKey;
       const targetAgentConfig = resolveAgentConfig(cfg, targetAgentId);
+      const runtimeDefaultModel = resolveDefaultModelForAgent({
+        cfg,
+        agentId: targetAgentId,
+      });
       const resolvedModel =
         normalizeModelSelection(modelOverride) ??
         normalizeModelSelection(targetAgentConfig?.subagents?.model) ??
-        normalizeModelSelection(cfg.agents?.defaults?.subagents?.model);
+        normalizeModelSelection(cfg.agents?.defaults?.subagents?.model) ??
+        normalizeModelSelection(cfg.agents?.defaults?.model?.primary) ??
+        normalizeModelSelection(`${runtimeDefaultModel.provider}/${runtimeDefaultModel.model}`);
 
       const resolvedThinkingDefaultRaw =
         readStringParam(targetAgentConfig?.subagents ?? {}, "thinking") ??
@@ -281,6 +203,22 @@ export function createSessionsSpawnTool(opts?: {
         }
         thinkingOverride = normalized;
       }
+      try {
+        await callGateway({
+          method: "sessions.patch",
+          params: { key: childSessionKey, spawnDepth: childDepth },
+          timeoutMs: 10_000,
+        });
+      } catch (err) {
+        const messageText =
+          err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+        return jsonResult({
+          status: "error",
+          error: messageText,
+          childSessionKey,
+        });
+      }
+
       if (resolvedModel) {
         try {
           await callGateway({
@@ -304,55 +242,35 @@ export function createSessionsSpawnTool(opts?: {
           modelWarning = messageText;
         }
       }
-      // Enrich task with collaboration context when spawning after a team debate
-      if (debateSessionKey) {
+      if (thinkingOverride !== undefined) {
         try {
-          task = await buildCollaborationAwareTask({
-            task,
-            agentId: targetAgentId,
-            debateSessionKey,
-            agentRole: targetRole,
+          await callGateway({
+            method: "sessions.patch",
+            params: {
+              key: childSessionKey,
+              thinkingLevel: thinkingOverride === "off" ? null : thinkingOverride,
+            },
+            timeoutMs: 10_000,
           });
-        } catch {
-          // Non-critical — proceed with original task
+        } catch (err) {
+          const messageText =
+            err instanceof Error ? err.message : typeof err === "string" ? err : "error";
+          return jsonResult({
+            status: "error",
+            error: messageText,
+            childSessionKey,
+          });
         }
       }
-
       const childSystemPrompt = buildSubagentSystemPrompt({
         requesterSessionKey,
         requesterOrigin,
         childSessionKey,
         label: label || undefined,
         task,
-        cleanup,
+        childDepth,
+        maxSpawnDepth,
       });
-
-      // Inject active peer context so spawned agents know about concurrent teammates
-      try {
-        const activeRuns = listSubagentRunsForRequester(requesterInternalKey).filter(
-          (r) => !r.outcome && r.childSessionKey !== childSessionKey,
-        );
-        if (activeRuns.length > 0) {
-          const peerLines = activeRuns
-            .map((r) => {
-              const peerId = parseAgentSessionKey(r.childSessionKey)?.agentId;
-              if (!peerId) {
-                return null;
-              }
-              const peerName = resolveAgentIdentity(cfg, peerId)?.name ?? peerId;
-              const peerRole = resolveAgentRole(cfg, peerId);
-              return `- **${peerName}** (${peerId}, ${peerRole}): ${(r.task ?? "").slice(0, 100)}`;
-            })
-            .filter(Boolean);
-          if (peerLines.length > 0) {
-            task +=
-              "\n\n---\n**Active peers working on related tasks (consult them via sessions_send):**\n" +
-              peerLines.join("\n");
-          }
-        }
-      } catch {
-        // Non-critical
-      }
 
       const childIdem = crypto.randomUUID();
       let childRunId: string = childIdem;
@@ -363,12 +281,16 @@ export function createSessionsSpawnTool(opts?: {
             message: task,
             sessionKey: childSessionKey,
             channel: requesterOrigin?.channel,
+            to: requesterOrigin?.to ?? undefined,
+            accountId: requesterOrigin?.accountId ?? undefined,
+            threadId:
+              requesterOrigin?.threadId != null ? String(requesterOrigin.threadId) : undefined,
             idempotencyKey: childIdem,
             deliver: false,
             lane: AGENT_LANE_SUBAGENT,
             extraSystemPrompt: childSystemPrompt,
             thinking: thinkingOverride,
-            timeout: runTimeoutSeconds > 0 ? runTimeoutSeconds : undefined,
+            timeout: runTimeoutSeconds,
             label: label || undefined,
             spawnedBy: spawnedByKey,
             groupId: opts?.agentGroupId ?? undefined,
@@ -400,49 +322,9 @@ export function createSessionsSpawnTool(opts?: {
         task,
         cleanup,
         label: label || undefined,
+        model: resolvedModel,
         runTimeoutSeconds,
       });
-
-      // Auto-create delegation record for graph visibility
-      try {
-        registerDelegation({
-          fromAgentId: requesterAgentId,
-          fromSessionKey: requesterInternalKey,
-          fromRole: requesterRole,
-          toAgentId: targetAgentId,
-          toSessionKey: childSessionKey,
-          toRole: targetRole,
-          task: task.slice(0, 200),
-          priority: "normal",
-        });
-      } catch {
-        // Non-critical — don't fail the spawn
-      }
-
-      // Announce delegation in the root webchat session (Slack-like visibility)
-      try {
-        const rootSession = resolveTeamChatSessionKey({ cfg });
-        const requesterIdentity = resolveAgentIdentity(cfg, requesterAgentId);
-        const targetIdentity = resolveAgentIdentity(cfg, targetAgentId);
-        const fromName = requesterIdentity?.name ?? requesterAgentId;
-        const toName = targetIdentity?.name ?? targetAgentId;
-        const fromEmoji = requesterIdentity?.emoji ?? "🤖";
-        const taskPreview = (label || task).slice(0, 200);
-        callGateway({
-          method: "chat.inject",
-          params: {
-            sessionKey: rootSession,
-            message: `Delegating to **${toName}** (${targetRole}): ${taskPreview}`,
-            senderAgentId: requesterAgentId,
-            senderName: fromName,
-            senderEmoji: fromEmoji,
-            senderAvatar: requesterIdentity?.avatar,
-          },
-          timeoutMs: 5_000,
-        }).catch(() => {});
-      } catch {
-        // Non-critical — don't block the spawn
-      }
 
       return jsonResult({
         status: "accepted",

@@ -1,7 +1,5 @@
-import os from "node:os";
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
-import type { AgentRole } from "../config/types.agents.js";
 import { resolveStateDir } from "../config/paths.js";
 import {
   DEFAULT_AGENT_ID,
@@ -9,8 +7,7 @@ import {
   parseAgentSessionKey,
 } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
-import { findAgentDefinition, listGlobalAgentDefinitions } from "./definitions/resolver.js";
-import { DEFAULT_AGENT_WORKSPACE_DIR } from "./workspace.js";
+import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 
@@ -18,15 +15,10 @@ type AgentEntry = NonNullable<NonNullable<OpenClawConfig["agents"]>["list"]>[num
 
 type ResolvedAgentConfig = {
   name?: string;
-  role?: AgentRole;
   workspace?: string;
   agentDir?: string;
   model?: AgentEntry["model"];
-  modelByComplexity?: AgentEntry["modelByComplexity"];
   skills?: AgentEntry["skills"];
-  capabilities?: string[];
-  expertise?: string[];
-  persona?: string;
   memorySearch?: AgentEntry["memorySearch"];
   humanDelay?: AgentEntry["humanDelay"];
   heartbeat?: AgentEntry["heartbeat"];
@@ -48,11 +40,12 @@ function listAgents(cfg: OpenClawConfig): AgentEntry[] {
 }
 
 export function listAgentIds(cfg: OpenClawConfig): string[] {
+  const agents = listAgents(cfg);
+  if (agents.length === 0) {
+    return [DEFAULT_AGENT_ID];
+  }
   const seen = new Set<string>();
   const ids: string[] = [];
-
-  // 1. Configured agents
-  const agents = listAgents(cfg);
   for (const entry of agents) {
     const id = normalizeAgentId(entry?.id);
     if (seen.has(id)) {
@@ -61,23 +54,6 @@ export function listAgentIds(cfg: OpenClawConfig): string[] {
     seen.add(id);
     ids.push(id);
   }
-
-  // 2. Global markdown agents
-  try {
-    const globalDefs = listGlobalAgentDefinitions();
-    for (const def of globalDefs) {
-      const id = normalizeAgentId(def.id);
-      if (seen.has(id)) {
-        continue;
-      }
-      seen.add(id);
-      ids.push(id);
-    }
-  } catch (err) {
-    // Ignore errors during definitions loading to prevent crash
-    console.warn("Failed to list global agent definitions:", err);
-  }
-
   return ids.length > 0 ? ids : [DEFAULT_AGENT_ID];
 }
 
@@ -126,37 +102,17 @@ export function resolveAgentConfig(
   const id = normalizeAgentId(agentId);
   const entry = resolveAgentEntry(cfg, id);
   if (!entry) {
-    // Fallback: check markdown agent definitions
-    const definition = findAgentDefinition(cfg, id, id);
-    if (definition) {
-      return {
-        name: definition.name,
-        role: definition.role,
-        capabilities: definition.capabilities,
-        expertise: definition.expertise,
-        skills: definition.skills,
-        persona: definition.systemPrompt,
-      };
-    }
     return undefined;
   }
   return {
     name: typeof entry.name === "string" ? entry.name : undefined,
-    role: entry.role,
     workspace: typeof entry.workspace === "string" ? entry.workspace : undefined,
     agentDir: typeof entry.agentDir === "string" ? entry.agentDir : undefined,
     model:
       typeof entry.model === "string" || (entry.model && typeof entry.model === "object")
         ? entry.model
         : undefined,
-    modelByComplexity:
-      typeof entry.modelByComplexity === "object" && entry.modelByComplexity
-        ? entry.modelByComplexity
-        : undefined,
     skills: Array.isArray(entry.skills) ? entry.skills : undefined,
-    capabilities: Array.isArray(entry.capabilities) ? entry.capabilities : undefined,
-    expertise: Array.isArray(entry.expertise) ? entry.expertise : undefined,
-    persona: typeof entry.persona === "string" ? entry.persona : undefined,
     memorySearch: entry.memorySearch,
     humanDelay: entry.humanDelay,
     heartbeat: entry.heartbeat,
@@ -207,85 +163,46 @@ export function resolveAgentModelFallbacksOverride(
   return Array.isArray(raw.fallbacks) ? raw.fallbacks : undefined;
 }
 
+export function resolveEffectiveModelFallbacks(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  hasSessionModelOverride: boolean;
+}): string[] | undefined {
+  const agentFallbacksOverride = resolveAgentModelFallbacksOverride(params.cfg, params.agentId);
+  if (!params.hasSessionModelOverride) {
+    return agentFallbacksOverride;
+  }
+  const defaultFallbacks =
+    typeof params.cfg.agents?.defaults?.model === "object"
+      ? (params.cfg.agents.defaults.model.fallbacks ?? [])
+      : [];
+  return agentFallbacksOverride ?? defaultFallbacks;
+}
+
 export function resolveAgentWorkspaceDir(cfg: OpenClawConfig, agentId: string) {
   const id = normalizeAgentId(agentId);
   const configured = resolveAgentConfig(cfg, id)?.workspace?.trim();
   if (configured) {
     return resolveUserPath(configured);
   }
-  // All agents share the default workspace unless explicitly configured.
-  // Isolated per-agent workspaces caused agents to lose context of the
-  // main project (missing deps, wrong paths, build loops).
-  const fallback = cfg.agents?.defaults?.workspace?.trim();
-  if (fallback) {
-    return resolveUserPath(fallback);
+  const defaultAgentId = resolveDefaultAgentId(cfg);
+  if (id === defaultAgentId) {
+    const fallback = cfg.agents?.defaults?.workspace?.trim();
+    if (fallback) {
+      return resolveUserPath(fallback);
+    }
+    return resolveDefaultAgentWorkspaceDir(process.env);
   }
-  return DEFAULT_AGENT_WORKSPACE_DIR;
-}
-
-export const AGENT_ROLE_RANK: Record<AgentRole, number> = {
-  orchestrator: 3,
-  lead: 2,
-  specialist: 1,
-  worker: 0,
-};
-
-export const DEFAULT_AGENT_ROLE: AgentRole = "specialist";
-
-export function resolveAgentRole(cfg: OpenClawConfig, agentId: string): AgentRole {
-  const agentConfig = resolveAgentConfig(cfg, agentId);
-  if (agentConfig?.role) {
-    return agentConfig.role;
-  }
-  if (cfg.agents?.defaults?.role) {
-    return cfg.agents.defaults.role;
-  }
-
-  // Check markdown agent definitions as fallback
-  const id = normalizeAgentId(agentId);
-  const definition = findAgentDefinition(cfg, id, id);
-  if (definition?.role) {
-    return definition.role;
-  }
-
-  // The main/default agent acts as the orchestrator by default.
-  if (agentId === DEFAULT_AGENT_ID) {
-    return "orchestrator";
-  }
-  return DEFAULT_AGENT_ROLE;
-}
-
-export function canSpawnRole(requesterRole: AgentRole, targetRole: AgentRole): boolean {
-  return AGENT_ROLE_RANK[requesterRole] >= AGENT_ROLE_RANK[targetRole];
-}
-
-export type DelegationDirectionResult = "downward" | "upward";
-
-/**
- * Determine delegation direction between two roles.
- * Higher rank → downward (direct delegation).
- * Lower rank → upward (request, requires review).
- * Same rank → downward (peer = direct).
- */
-export function canDelegate(from: AgentRole, to: AgentRole): DelegationDirectionResult {
-  const fromRank = AGENT_ROLE_RANK[from];
-  const toRank = AGENT_ROLE_RANK[to];
-  if (fromRank >= toRank) {
-    return "downward";
-  }
-  return "upward";
+  const stateDir = resolveStateDir(process.env);
+  return path.join(stateDir, `workspace-${id}`);
 }
 
 export function resolveAgentDir(cfg: OpenClawConfig, agentId: string) {
   const id = normalizeAgentId(agentId);
-  // Use resolveAgentEntry directly instead of resolveAgentConfig to avoid
-  // infinite recursion: resolveAgentConfig → findAgentDefinition →
-  // resolveAgentDefinitions → resolveAgentDir → resolveAgentConfig → ...
-  const entry = resolveAgentEntry(cfg, id);
-  const configured = typeof entry?.agentDir === "string" ? entry.agentDir.trim() : undefined;
+  const configured = resolveAgentConfig(cfg, id)?.agentDir?.trim();
   if (configured) {
     return resolveUserPath(configured);
   }
-  const root = resolveStateDir(process.env, os.homedir);
+  const root = resolveStateDir(process.env);
   return path.join(root, "agents", id, "agent");
 }

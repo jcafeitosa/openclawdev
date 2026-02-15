@@ -1,6 +1,10 @@
 import type { OpenClawConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
-import { isAcpSessionKey, normalizeAgentId, normalizeMainKey } from "../../routing/session-key.js";
+import {
+  isAcpSessionKey,
+  isSubagentSessionKey,
+  normalizeMainKey,
+} from "../../routing/session-key.js";
 import { sanitizeUserFacingText } from "../pi-embedded-helpers.js";
 import {
   stripDowngradedToolCallText,
@@ -67,6 +71,39 @@ export function resolveInternalSessionKey(params: { key: string; alias: string; 
     return params.alias;
   }
   return params.key;
+}
+
+export function resolveSandboxSessionToolsVisibility(cfg: OpenClawConfig): "spawned" | "all" {
+  return cfg.agents?.defaults?.sandbox?.sessionToolsVisibility ?? "spawned";
+}
+
+export function resolveSandboxedSessionToolContext(params: {
+  cfg: OpenClawConfig;
+  agentSessionKey?: string;
+  sandboxed?: boolean;
+}): {
+  mainKey: string;
+  alias: string;
+  visibility: "spawned" | "all";
+  requesterInternalKey: string | undefined;
+  restrictToSpawned: boolean;
+} {
+  const { mainKey, alias } = resolveMainSessionAlias(params.cfg);
+  const visibility = resolveSandboxSessionToolsVisibility(params.cfg);
+  const requesterInternalKey =
+    typeof params.agentSessionKey === "string" && params.agentSessionKey.trim()
+      ? resolveInternalSessionKey({
+          key: params.agentSessionKey,
+          alias,
+          mainKey,
+        })
+      : undefined;
+  const restrictToSpawned =
+    params.sandboxed === true &&
+    visibility === "spawned" &&
+    !!requesterInternalKey &&
+    !isSubagentSessionKey(requesterInternalKey);
+  return { mainKey, alias, visibility, requesterInternalKey, restrictToSpawned };
 }
 
 export type AgentToAgentPolicy = {
@@ -147,33 +184,6 @@ export function looksLikeSessionKey(value: string): boolean {
 export function shouldResolveSessionIdInput(value: string): boolean {
   // Treat anything that doesn't look like a well-formed key as a sessionId candidate.
   return looksLikeSessionId(value) || !looksLikeSessionKey(value);
-}
-
-const AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
-const AGENT_ID_PAREN_RE = /\(([a-z0-9][a-z0-9_-]{0,63})\)\s*$/i;
-
-/**
- * Extract a plausible agent ID from a raw string.
- * Handles: "backend-architect", "Carlos (backend-architect)", etc.
- * Excludes UUIDs which look like agent IDs but should be resolved as session IDs.
- */
-export function extractAgentIdCandidate(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  // Exclude UUIDs — they match AGENT_ID_RE but are session IDs, not agent IDs
-  if (SESSION_ID_RE.test(trimmed)) {
-    return null;
-  }
-  if (AGENT_ID_RE.test(trimmed)) {
-    return trimmed;
-  }
-  const parenMatch = trimmed.match(AGENT_ID_PAREN_RE);
-  if (parenMatch) {
-    return parenMatch[1];
-  }
-  return null;
 }
 
 export type SessionReferenceResolution =
@@ -281,32 +291,6 @@ export async function resolveSessionReference(params: {
   restrictToSpawned: boolean;
 }): Promise<SessionReferenceResolution> {
   const raw = params.sessionKey.trim();
-
-  // Detect plain agent IDs (e.g. "backend-architect", "Carlos (backend-architect)")
-  // and convert to canonical agent session key before attempting resolution.
-  const agentIdCandidate = extractAgentIdCandidate(raw);
-  if (agentIdCandidate && !raw.startsWith("agent:")) {
-    const agentKey = `agent:${normalizeAgentId(agentIdCandidate)}:${params.mainKey}`;
-    const resolvedByAgentKey = await resolveSessionKeyFromKey({
-      key: agentKey,
-      alias: params.alias,
-      mainKey: params.mainKey,
-      requesterInternalKey: params.requesterInternalKey,
-      restrictToSpawned: params.restrictToSpawned,
-    });
-    if (resolvedByAgentKey) {
-      return resolvedByAgentKey;
-    }
-    // Gateway may not know the session yet — return the constructed key directly
-    // so the message delivery will create the session on first contact.
-    const displayKey = resolveDisplaySessionKey({
-      key: agentKey,
-      alias: params.alias,
-      mainKey: params.mainKey,
-    });
-    return { ok: true, key: agentKey, displayKey, resolvedViaSessionId: false };
-  }
-
   if (shouldResolveSessionIdInput(raw)) {
     // Prefer key resolution to avoid misclassifying custom keys as sessionIds.
     const resolvedByKey = await resolveSessionKeyFromKey({
@@ -442,5 +426,10 @@ export function extractAssistantText(message: unknown): string | undefined {
     }
   }
   const joined = chunks.join("").trim();
-  return joined ? sanitizeUserFacingText(joined) : undefined;
+  const stopReason = (message as { stopReason?: unknown }).stopReason;
+  const errorMessage = (message as { errorMessage?: unknown }).errorMessage;
+  const errorContext =
+    stopReason === "error" || (typeof errorMessage === "string" && Boolean(errorMessage.trim()));
+
+  return joined ? sanitizeUserFacingText(joined, { errorContext }) : undefined;
 }

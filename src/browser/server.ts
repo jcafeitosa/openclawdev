@@ -1,13 +1,22 @@
 import type { Server } from "node:http";
-import { node } from "@elysiajs/node";
-import { Elysia } from "elysia";
+import express from "express";
+import type { BrowserRouteRegistrar } from "./routes/types.js";
 import { loadConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveBrowserConfig, resolveProfile } from "./config.js";
+import { ensureBrowserControlAuth, resolveBrowserControlAuth } from "./control-auth.js";
 import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
+import { isPwAiLoaded } from "./pw-ai-state.js";
 import { registerBrowserRoutes } from "./routes/index.js";
-import { createBrowserRouteAdapter } from "./routes/types.js";
-import { type BrowserServerState, createBrowserRouteContext } from "./server-context.js";
+import {
+  type BrowserServerState,
+  createBrowserRouteContext,
+  listKnownProfileNames,
+} from "./server-context.js";
+import {
+  installBrowserAuthMiddleware,
+  installBrowserCommonMiddleware,
+} from "./server-middleware.js";
 
 let state: BrowserServerState | null = null;
 const log = createSubsystemLogger("browser");
@@ -24,24 +33,31 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
     return null;
   }
 
-  const app = new Elysia({ adapter: node() });
-  const registrar = createBrowserRouteAdapter(app);
+  let browserAuth = resolveBrowserControlAuth(cfg);
+  try {
+    const ensured = await ensureBrowserControlAuth({ cfg });
+    browserAuth = ensured.auth;
+    if (ensured.generatedToken) {
+      logServer.info("No browser auth configured; generated gateway.auth.token automatically.");
+    }
+  } catch (err) {
+    logServer.warn(`failed to auto-configure browser auth: ${String(err)}`);
+  }
+
+  const app = express();
+  installBrowserCommonMiddleware(app);
+  installBrowserAuthMiddleware(app, browserAuth);
 
   const ctx = createBrowserRouteContext({
     getState: () => state,
+    refreshConfigFromDisk: true,
   });
-  registerBrowserRoutes(registrar, ctx);
+  registerBrowserRoutes(app as unknown as BrowserRouteRegistrar, ctx);
 
   const port = resolved.controlPort;
   const server = await new Promise<Server>((resolve, reject) => {
-    app.listen({ port, hostname: "127.0.0.1" }, (serverInfo) => {
-      const nodeServer = (serverInfo as { raw?: { node?: { server?: Server } } }).raw?.node?.server;
-      if (nodeServer) {
-        resolve(nodeServer);
-      } else {
-        reject(new Error("Failed to create HTTP server"));
-      }
-    });
+    const s = app.listen(port, "127.0.0.1", () => resolve(s));
+    s.once("error", reject);
   }).catch((err) => {
     logServer.error(`openclaw browser server failed to bind 127.0.0.1:${port}: ${String(err)}`);
     return null;
@@ -70,7 +86,8 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
     });
   }
 
-  logServer.info(`Browser control listening on http://127.0.0.1:${port}/`);
+  const authMode = browserAuth.token ? "token" : browserAuth.password ? "password" : "off";
+  logServer.info(`Browser control listening on http://127.0.0.1:${port}/ (auth=${authMode})`);
   return state;
 }
 
@@ -82,12 +99,13 @@ export async function stopBrowserControlServer(): Promise<void> {
 
   const ctx = createBrowserRouteContext({
     getState: () => state,
+    refreshConfigFromDisk: true,
   });
 
   try {
     const current = state;
     if (current) {
-      for (const name of Object.keys(current.resolved.profiles)) {
+      for (const name of listKnownProfileNames(current)) {
         try {
           await ctx.forProfile(name).stopRunningBrowser();
         } catch {
@@ -106,11 +124,13 @@ export async function stopBrowserControlServer(): Promise<void> {
   }
   state = null;
 
-  // Optional: Playwright is not always available (e.g. embedded gateway builds).
-  try {
-    const mod = await import("./pw-ai.js");
-    await mod.closePlaywrightBrowserConnection();
-  } catch {
-    // ignore
+  // Optional: avoid importing heavy Playwright bridge when this process never used it.
+  if (isPwAiLoaded()) {
+    try {
+      const mod = await import("./pw-ai.js");
+      await mod.closePlaywrightBrowserConnection();
+    } catch {
+      // ignore
+    }
   }
 }
