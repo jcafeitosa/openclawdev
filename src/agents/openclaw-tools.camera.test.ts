@@ -5,13 +5,13 @@ const { callGateway } = vi.hoisted(() => ({
 }));
 
 vi.mock("../gateway/call.js", () => ({ callGateway }));
-vi.mock("../media/image-ops.js", () => ({
-  getImageMetadata: vi.fn(async () => ({ width: 1, height: 1 })),
-  resizeToJpeg: vi.fn(async () => Buffer.from("jpeg")),
-}));
 
 import "./test-helpers/fast-core-tools.js";
 import { createOpenClawTools } from "./openclaw-tools.js";
+
+// Smallest valid 1x1 black JPEG (sharp can parse this).
+const TINY_JPEG_BASE64 =
+  "/9j/2wBDABALDA4MChAODQ4SERATGCgaGBYWGDEjJR0oOjM9PDkzODdASFxOQERXRTc4UG1RV19iZ2hnPk1xeXBkeFxlZ2P/2wBDARESEhgVGC8aGi9jQjhCY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2P/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AJ+AD//Z";
 
 describe("nodes camera_snap", () => {
   beforeEach(() => {
@@ -27,7 +27,7 @@ describe("nodes camera_snap", () => {
         return {
           payload: {
             format: "jpg",
-            base64: "aGVsbG8=",
+            base64: TINY_JPEG_BASE64,
             width: 1,
             height: 1,
           },
@@ -65,7 +65,7 @@ describe("nodes camera_snap", () => {
         return {
           payload: {
             format: "jpg",
-            base64: "aGVsbG8=",
+            base64: TINY_JPEG_BASE64,
             width: 1,
             height: 1,
           },

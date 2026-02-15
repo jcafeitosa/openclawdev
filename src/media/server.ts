@@ -2,7 +2,6 @@ import type { Server } from "node:http";
 import { node } from "@elysiajs/node";
 import { Elysia } from "elysia";
 import fs from "node:fs/promises";
-import { danger } from "../globals.js";
 import { SafeOpenError, openFileWithinRoot } from "../infra/fs-safe.js";
 import { defaultRuntime, type RuntimeEnv } from "../runtime.js";
 import { detectMime } from "./mime.js";
@@ -33,7 +32,7 @@ export function attachMediaRoutes(
 ) {
   const mediaDir = getMediaDir();
 
-  app.get("/media/:id", async ({ params, set, store }) => {
+  app.get("/media/:id", async ({ params, set }) => {
     const id = params.id;
     if (!isValidMediaId(id)) {
       set.status = 400;
@@ -61,8 +60,10 @@ export function attachMediaRoutes(
       if (mime) {
         set.headers["content-type"] = mime;
       }
-      // store realPath for cleanup after response
-      (store as Record<string, unknown>).realPath = realPath;
+      // best-effort single-use cleanup shortly after serving
+      setTimeout(() => {
+        fs.rm(realPath).catch(() => {});
+      }, 50);
       return data;
     } catch (err) {
       if (err instanceof SafeOpenError) {
@@ -80,16 +81,6 @@ export function attachMediaRoutes(
     }
   });
 
-  // best-effort single-use cleanup after response ends
-  app.onAfterResponse(({ store }) => {
-    const realPath = (store as Record<string, unknown>).realPath;
-    if (typeof realPath === "string") {
-      setTimeout(() => {
-        fs.rm(realPath).catch(() => {});
-      }, 50);
-    }
-  });
-
   // periodic cleanup
   setInterval(() => {
     void cleanOldMedia(ttlMs);
@@ -104,19 +95,13 @@ export async function startMediaServer(
   const app = new Elysia({ adapter: node() });
   attachMediaRoutes(app, ttlMs, runtime);
   return await new Promise((resolve, reject) => {
-    const server = app.listen(port) as unknown as { server?: Server };
-    if (server.server) {
-      server.server.once("listening", () => {
-        if (server.server) {
-          resolve(server.server);
-        }
-      });
-      server.server.once("error", (err) => {
-        runtime.error(danger(`Media server failed: ${String(err)}`));
-        reject(err);
-      });
-    } else {
-      reject(new Error("Failed to create HTTP server"));
-    }
+    app.listen(port, (serverInfo) => {
+      const nodeServer = (serverInfo as { raw?: { node?: { server?: Server } } }).raw?.node?.server;
+      if (nodeServer) {
+        resolve(nodeServer);
+      } else {
+        reject(new Error("Failed to create HTTP server"));
+      }
+    });
   });
 }

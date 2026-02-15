@@ -57,17 +57,21 @@ export async function startBrowserBridgeServer(params: {
   registerBrowserRoutes(registrar, ctx);
 
   const server = await new Promise<Server>((resolve, reject) => {
-    const instance = app.listen({ port, hostname: host }) as unknown as { server?: Server };
-    if (instance.server) {
-      instance.server.once("listening", () => {
-        if (instance.server) {
-          resolve(instance.server);
+    app.listen({ port, hostname: host }, (serverInfo) => {
+      const nodeServer = (serverInfo as { raw?: { node?: { server?: Server } } }).raw?.node?.server;
+      if (nodeServer) {
+        // The node server may not have its address ready immediately.
+        // If it's already listening, resolve now; otherwise wait for the 'listening' event.
+        if (nodeServer.listening) {
+          resolve(nodeServer);
+        } else {
+          nodeServer.once("listening", () => resolve(nodeServer));
+          nodeServer.once("error", reject);
         }
-      });
-      instance.server.once("error", reject);
-    } else {
-      reject(new Error("Failed to create HTTP server"));
-    }
+      } else {
+        reject(new Error("Failed to create HTTP server"));
+      }
+    });
   });
 
   const address = server.address() as AddressInfo | null;

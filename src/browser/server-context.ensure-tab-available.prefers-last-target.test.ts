@@ -1,22 +1,66 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserServerState } from "./server-context.js";
-import { createBrowserRouteContext } from "./server-context.js";
 
-vi.mock("./chrome.js", () => ({
+const chromeMocks = vi.hoisted(() => ({
   isChromeCdpReady: vi.fn(async () => true),
   isChromeReachable: vi.fn(async () => true),
   launchOpenClawChrome: vi.fn(async () => {
     throw new Error("unexpected launch");
   }),
-  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw"),
   stopOpenClawChrome: vi.fn(async () => {}),
 }));
 
+vi.mock("./chrome.js", () => chromeMocks);
+
+vi.mock("./chrome-paths.js", () => ({
+  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw"),
+}));
+
+vi.mock("./extension-relay.js", () => ({
+  ensureChromeExtensionRelayServer: vi.fn(async () => {}),
+  stopChromeExtensionRelayServer: vi.fn(async () => {}),
+  getChromeExtensionRelayAuthHeaders: vi.fn(() => ({})),
+}));
+
 describe("browser server-context ensureTabAvailable", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    chromeMocks.isChromeCdpReady.mockClear();
+    chromeMocks.isChromeReachable.mockClear();
+  });
+
+  function makeState(): BrowserServerState {
+    return {
+      // oxlint-disable-next-line typescript/no-explicit-any
+      server: null as any,
+      port: 0,
+      resolved: {
+        enabled: true,
+        controlPort: 18791,
+        cdpProtocol: "http",
+        cdpHost: "127.0.0.1",
+        cdpIsLoopback: true,
+        color: "#FF4500",
+        headless: true,
+        noSandbox: false,
+        attachOnly: false,
+        defaultProfile: "chrome",
+        profiles: {
+          chrome: {
+            driver: "extension",
+            cdpUrl: "http://127.0.0.1:18792",
+            cdpPort: 18792,
+            color: "#00AA00",
+          },
+          openclaw: { cdpPort: 18800, color: "#FF4500" },
+        },
+      },
+      profiles: new Map(),
+    };
+  }
+
   it("sticks to the last selected target when targetId is omitted", async () => {
     const fetchMock = vi.fn();
-    // 1st call (snapshot): stable ordering A then B (twice)
-    // 2nd call (act): reversed ordering B then A (twice)
     const responses = [
       [
         { id: "A", type: "page", url: "https://a.example", webSocketDebuggerUrl: "ws://x/a" },
@@ -45,47 +89,14 @@ describe("browser server-context ensureTabAvailable", () => {
       if (!next) {
         throw new Error("no more responses");
       }
-      return {
-        ok: true,
-        json: async () => next,
-      } as unknown as Response;
+      return { ok: true, json: async () => next } as unknown as Response;
     });
 
     global.fetch = fetchMock;
 
-    const state: BrowserServerState = {
-      // unused in these tests
-      // oxlint-disable-next-line typescript/no-explicit-any
-      server: null as any,
-      port: 0,
-      resolved: {
-        enabled: true,
-        controlPort: 18791,
-        cdpProtocol: "http",
-        cdpHost: "127.0.0.1",
-        cdpIsLoopback: true,
-        color: "#FF4500",
-        headless: true,
-        noSandbox: false,
-        attachOnly: false,
-        defaultProfile: "chrome",
-        profiles: {
-          chrome: {
-            driver: "extension",
-            cdpUrl: "http://127.0.0.1:18792",
-            cdpPort: 18792,
-            color: "#00AA00",
-          },
-          openclaw: { cdpPort: 18800, color: "#FF4500" },
-        },
-      },
-      profiles: new Map(),
-    };
-
-    const ctx = createBrowserRouteContext({
-      getState: () => state,
-    });
-
+    const { createBrowserRouteContext } = await import("./server-context.js");
+    const state = makeState();
+    const ctx = createBrowserRouteContext({ getState: () => state });
     const chrome = ctx.forProfile("chrome");
     const first = await chrome.ensureTabAvailable();
     expect(first.targetId).toBe("A");
@@ -114,34 +125,8 @@ describe("browser server-context ensureTabAvailable", () => {
 
     global.fetch = fetchMock;
 
-    const state: BrowserServerState = {
-      // oxlint-disable-next-line typescript/no-explicit-any
-      server: null as any,
-      port: 0,
-      resolved: {
-        enabled: true,
-        controlPort: 18791,
-        cdpProtocol: "http",
-        cdpHost: "127.0.0.1",
-        cdpIsLoopback: true,
-        color: "#FF4500",
-        headless: true,
-        noSandbox: false,
-        attachOnly: false,
-        defaultProfile: "chrome",
-        profiles: {
-          chrome: {
-            driver: "extension",
-            cdpUrl: "http://127.0.0.1:18792",
-            cdpPort: 18792,
-            color: "#00AA00",
-          },
-          openclaw: { cdpPort: 18800, color: "#FF4500" },
-        },
-      },
-      profiles: new Map(),
-    };
-
+    const { createBrowserRouteContext } = await import("./server-context.js");
+    const state = makeState();
     const ctx = createBrowserRouteContext({ getState: () => state });
     const chrome = ctx.forProfile("chrome");
     const chosen = await chrome.ensureTabAvailable("NOT_A_TAB");
@@ -150,7 +135,7 @@ describe("browser server-context ensureTabAvailable", () => {
 
   it("returns a descriptive message when no extension tabs are attached", async () => {
     const fetchMock = vi.fn();
-    const responses = [[]];
+    const responses: unknown[][] = [[]];
     fetchMock.mockImplementation(async (url: unknown) => {
       const u = String(url);
       if (!u.includes("/json/list")) {
@@ -165,34 +150,8 @@ describe("browser server-context ensureTabAvailable", () => {
 
     global.fetch = fetchMock;
 
-    const state: BrowserServerState = {
-      // oxlint-disable-next-line typescript/no-explicit-any
-      server: null as any,
-      port: 0,
-      resolved: {
-        enabled: true,
-        controlPort: 18791,
-        cdpProtocol: "http",
-        cdpHost: "127.0.0.1",
-        cdpIsLoopback: true,
-        color: "#FF4500",
-        headless: true,
-        noSandbox: false,
-        attachOnly: false,
-        defaultProfile: "chrome",
-        profiles: {
-          chrome: {
-            driver: "extension",
-            cdpUrl: "http://127.0.0.1:18792",
-            cdpPort: 18792,
-            color: "#00AA00",
-          },
-          openclaw: { cdpPort: 18800, color: "#FF4500" },
-        },
-      },
-      profiles: new Map(),
-    };
-
+    const { createBrowserRouteContext } = await import("./server-context.js");
+    const state = makeState();
     const ctx = createBrowserRouteContext({ getState: () => state });
     const chrome = ctx.forProfile("chrome");
     await expect(chrome.ensureTabAvailable()).rejects.toThrow(/no attached Chrome tabs/i);

@@ -4,7 +4,7 @@ import type { BrowserProfileConfig, OpenClawConfig } from "../config/config.js";
 import type { BrowserRouteContext, ProfileStatus } from "./server-context.js";
 import { loadConfig, writeConfigFile } from "../config/config.js";
 import { deriveDefaultBrowserCdpPortRange } from "../config/port-defaults.js";
-import { resolveOpenClawUserDataDir } from "./chrome.js";
+import { resolveOpenClawUserDataDir } from "./chrome-paths.js";
 import { parseHttpUrl, resolveProfile } from "./config.js";
 import { DEFAULT_BROWSER_DEFAULT_PROFILE_NAME } from "./constants.js";
 import {

@@ -126,6 +126,10 @@ vi.mock("./chrome.js", () => ({
   }),
 }));
 
+vi.mock("./chrome-paths.js", () => ({
+  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw"),
+}));
+
 vi.mock("./cdp.js", () => ({
   createTargetViaCdp: cdpMocks.createTargetViaCdp,
   normalizeCdpWsUrl: vi.fn((wsUrl: string) => wsUrl),
@@ -187,6 +191,7 @@ function makeResponse(
 
 describe("browser control server", () => {
   beforeEach(async () => {
+    vi.resetModules();
     reachable = false;
     cfgAttachOnly = false;
     createTargetId = null;

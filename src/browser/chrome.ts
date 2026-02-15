@@ -6,9 +6,9 @@ import WebSocket from "ws";
 import type { ResolvedBrowserConfig, ResolvedBrowserProfile } from "./config.js";
 import { ensurePortAvailable } from "../infra/ports.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
-import { CONFIG_DIR } from "../utils.js";
 import { appendCdpPath } from "./cdp.helpers.js";
 import { getHeadersWithAuth, normalizeCdpWsUrl } from "./cdp.js";
+import { resolveOpenClawUserDataDir } from "./chrome-paths.js";
 import {
   type BrowserExecutable,
   resolveBrowserExecutableForPlatform,
@@ -18,10 +18,7 @@ import {
   ensureProfileCleanExit,
   isProfileDecorated,
 } from "./chrome.profile-decoration.js";
-import {
-  DEFAULT_OPENCLAW_BROWSER_COLOR,
-  DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME,
-} from "./constants.js";
+import { DEFAULT_OPENCLAW_BROWSER_COLOR } from "./constants.js";
 
 const log = createSubsystemLogger("browser").child("chrome");
 
@@ -37,6 +34,8 @@ export {
   ensureProfileCleanExit,
   isProfileDecorated,
 } from "./chrome.profile-decoration.js";
+// Re-export for backward compatibility with existing importers.
+export { resolveOpenClawUserDataDir } from "./chrome-paths.js";
 
 function exists(filePath: string) {
   try {
@@ -57,10 +56,6 @@ export type RunningChrome = {
 
 function resolveBrowserExecutable(resolved: ResolvedBrowserConfig): BrowserExecutable | null {
   return resolveBrowserExecutableForPlatform(resolved, process.platform);
-}
-
-export function resolveOpenClawUserDataDir(profileName = DEFAULT_OPENCLAW_BROWSER_PROFILE_NAME) {
-  return path.join(CONFIG_DIR, "browser", profileName, "user-data");
 }
 
 function cdpUrlForPort(cdpPort: number) {

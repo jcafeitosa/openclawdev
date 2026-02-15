@@ -125,6 +125,10 @@ vi.mock("./chrome.js", () => ({
   }),
 }));
 
+vi.mock("./chrome-paths.js", () => ({
+  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw"),
+}));
+
 vi.mock("./cdp.js", () => ({
   createTargetViaCdp: cdpMocks.createTargetViaCdp,
   normalizeCdpWsUrl: vi.fn((wsUrl: string) => wsUrl),
@@ -186,6 +190,7 @@ function makeResponse(
 
 describe("browser control server", () => {
   beforeEach(async () => {
+    vi.resetModules();
     reachable = false;
     cfgAttachOnly = false;
     createTargetId = null;
@@ -416,10 +421,13 @@ describe("browser control server", () => {
     const bridge = await startBrowserBridgeServer({
       resolved: {
         enabled: true,
+        evaluateEnabled: true,
         controlPort: 0,
         cdpProtocol: "http",
         cdpHost: "127.0.0.1",
         cdpIsLoopback: true,
+        remoteCdpTimeoutMs: 1500,
+        remoteCdpHandshakeTimeoutMs: 3000,
         color: "#FF4500",
         headless: true,
         noSandbox: false,

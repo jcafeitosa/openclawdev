@@ -34,17 +34,14 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
 
   const port = resolved.controlPort;
   const server = await new Promise<Server>((resolve, reject) => {
-    const instance = app.listen({ port, hostname: "127.0.0.1" }) as unknown as { server?: Server };
-    if (instance.server) {
-      instance.server.once("listening", () => {
-        if (instance.server) {
-          resolve(instance.server);
-        }
-      });
-      instance.server.once("error", reject);
-    } else {
-      reject(new Error("Failed to create HTTP server"));
-    }
+    app.listen({ port, hostname: "127.0.0.1" }, (serverInfo) => {
+      const nodeServer = (serverInfo as { raw?: { node?: { server?: Server } } }).raw?.node?.server;
+      if (nodeServer) {
+        resolve(nodeServer);
+      } else {
+        reject(new Error("Failed to create HTTP server"));
+      }
+    });
   }).catch((err) => {
     logServer.error(`openclaw browser server failed to bind 127.0.0.1:${port}: ${String(err)}`);
     return null;

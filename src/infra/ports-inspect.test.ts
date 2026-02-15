@@ -1,10 +1,12 @@
 import net from "node:net";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const runCommandWithTimeoutMock = vi.fn();
+const { runCommandWithTimeoutMock } = vi.hoisted(() => ({
+  runCommandWithTimeoutMock: vi.fn(),
+}));
 
 vi.mock("../process/exec.js", () => ({
-  runCommandWithTimeout: (...args: unknown[]) => runCommandWithTimeoutMock(...args),
+  runCommandWithTimeout: runCommandWithTimeoutMock,
 }));
 
 const describeUnix = process.platform === "win32" ? describe.skip : describe;
@@ -24,6 +26,7 @@ describeUnix("inspectPortUsage", () => {
     );
 
     try {
+      vi.resetModules();
       const { inspectPortUsage } = await import("./ports-inspect.js");
       const result = await inspectPortUsage(port);
       expect(result.status).toBe("busy");

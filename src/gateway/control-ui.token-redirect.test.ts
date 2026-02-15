@@ -1,57 +1,13 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage } from "node:http";
+import { Elysia } from "elysia";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
-import { handleControlUiHttpRequest } from "./control-ui.js";
-
-function makeReq(params: {
-  url: string;
-  method?: string;
-  host?: string;
-  remoteAddress?: string;
-}): IncomingMessage {
-  const req = {
-    url: params.url,
-    method: params.method ?? "GET",
-    headers: {
-      host: params.host ?? "localhost:18789",
-    },
-    socket: {
-      remoteAddress: params.remoteAddress ?? "127.0.0.1",
-    },
-  };
-  // oxlint-disable-next-line typescript/no-explicit-any
-  return req as any;
-}
-
-function makeRes(): ServerResponse & { headers: Map<string, string>; body: string } {
-  const headers = new Map<string, string>();
-  const res = {
-    statusCode: 200,
-    headers,
-    body: "",
-    setHeader(key: string, value: unknown) {
-      headers.set(key.toLowerCase(), String(value));
-    },
-    end(value?: unknown) {
-      if (typeof value === "string") {
-        this.body = value;
-      } else if (Buffer.isBuffer(value)) {
-        this.body = value.toString("utf8");
-      } else if (value == null) {
-        this.body = "";
-      } else if (typeof value === "number" || typeof value === "boolean") {
-        this.body = String(value);
-      } else {
-        // Avoid Object default stringification in tests; surface the data instead.
-        this.body = JSON.stringify(value);
-      }
-    },
-  };
-  // oxlint-disable-next-line typescript/no-explicit-any
-  return res as any;
-}
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+// Spy on environment boundaries only (config loading + Node.js socket extraction)
+import * as configModule from "../config/config.js";
+import * as nodeCompatModule from "./elysia-node-compat.js";
+import { controlUiRoutes } from "./routes/control-ui.js";
 
 function makeUiRoot(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-control-ui-"));
@@ -59,74 +15,86 @@ function makeUiRoot(): string {
   return dir;
 }
 
-describe("handleControlUiHttpRequest (tokenized redirect)", () => {
-  it("redirects local root requests to a tokenized URL", () => {
-    const root = makeUiRoot();
-    const req = makeReq({ url: "/" });
-    const res = makeRes();
+function fakeNodeReq(remoteAddress: string, host: string): IncomingMessage {
+  return {
+    headers: { host },
+    socket: { remoteAddress },
+    // oxlint-disable-next-line typescript/no-explicit-any
+  } as any;
+}
 
-    const handled = handleControlUiHttpRequest(req, res, {
-      root: { kind: "resolved", path: root },
-      config: {
-        gateway: { auth: { mode: "token", token: "abc123" } },
-        // oxlint-disable-next-line typescript/no-explicit-any
-      } as any,
+describe("controlUiRoutes (tokenized redirect)", () => {
+  let root: string;
+  let loadConfigSpy: ReturnType<typeof vi.spyOn>;
+  let getNodeRequestSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeAll(() => {
+    root = makeUiRoot();
+    loadConfigSpy = vi.spyOn(configModule, "loadConfig");
+    getNodeRequestSpy = vi.spyOn(nodeCompatModule, "getNodeRequest");
+  });
+
+  afterAll(() => {
+    loadConfigSpy.mockRestore();
+    getNodeRequestSpy.mockRestore();
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  function createApp() {
+    return new Elysia().use(
+      controlUiRoutes({ basePath: "", root: { kind: "resolved", path: root } }),
+    );
+  }
+
+  function setupLocalRequest(token: string) {
+    loadConfigSpy.mockReturnValue({
+      gateway: { auth: { mode: "token", token } },
     });
+    getNodeRequestSpy.mockReturnValue(fakeNodeReq("127.0.0.1", "localhost:18789"));
+  }
 
-    expect(handled).toBe(true);
-    expect(res.statusCode).toBe(302);
+  it("redirects local root requests to a tokenized URL", async () => {
+    const app = createApp();
+    setupLocalRequest("abc123");
+
+    const res = await app.handle(new Request("http://localhost:18789/"));
+
+    expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/?token=abc123");
   });
 
-  it("redirects local deep links to a tokenized URL", () => {
-    const root = makeUiRoot();
-    const req = makeReq({ url: "/hierarchy" });
-    const res = makeRes();
+  it("redirects local deep links to a tokenized URL", async () => {
+    const app = createApp();
+    setupLocalRequest("abc123");
 
-    const handled = handleControlUiHttpRequest(req, res, {
-      root: { kind: "resolved", path: root },
-      config: {
-        gateway: { auth: { mode: "token", token: "abc123" } },
-        // oxlint-disable-next-line typescript/no-explicit-any
-      } as any,
-    });
+    const res = await app.handle(new Request("http://localhost:18789/hierarchy"));
 
-    expect(handled).toBe(true);
-    expect(res.statusCode).toBe(302);
+    expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/hierarchy?token=abc123");
   });
 
-  it("does not redirect when token is already present", () => {
-    const root = makeUiRoot();
-    const req = makeReq({ url: "/?token=abc123" });
-    const res = makeRes();
+  it("does not redirect when token is already present", async () => {
+    const app = createApp();
+    setupLocalRequest("abc123");
 
-    handleControlUiHttpRequest(req, res, {
-      root: { kind: "resolved", path: root },
-      config: {
-        gateway: { auth: { mode: "token", token: "abc123" } },
-        // oxlint-disable-next-line typescript/no-explicit-any
-      } as any,
-    });
+    const res = await app.handle(new Request("http://localhost:18789/?token=abc123"));
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("__OPENCLAW_CONTROL_UI_BASE_PATH__");
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("__OPENCLAW_CONTROL_UI_BASE_PATH__");
   });
 
-  it("does not redirect non-local requests", () => {
-    const root = makeUiRoot();
-    const req = makeReq({ url: "/", remoteAddress: "10.0.0.5" });
-    const res = makeRes();
-
-    handleControlUiHttpRequest(req, res, {
-      root: { kind: "resolved", path: root },
-      config: {
-        gateway: { auth: { mode: "token", token: "abc123" } },
-        // oxlint-disable-next-line typescript/no-explicit-any
-      } as any,
+  it("does not redirect non-local requests", async () => {
+    const app = createApp();
+    loadConfigSpy.mockReturnValue({
+      gateway: { auth: { mode: "token", token: "abc123" } },
     });
+    getNodeRequestSpy.mockReturnValue(fakeNodeReq("10.0.0.5", "localhost:18789"));
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("__OPENCLAW_CONTROL_UI_BASE_PATH__");
+    const res = await app.handle(new Request("http://localhost:18789/"));
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain("__OPENCLAW_CONTROL_UI_BASE_PATH__");
   });
 });

@@ -10,11 +10,11 @@ import type {
   ProfileStatus,
 } from "./server-context.types.js";
 import { appendCdpPath, createTargetViaCdp, getHeadersWithAuth, normalizeCdpWsUrl } from "./cdp.js";
+import { resolveOpenClawUserDataDir } from "./chrome-paths.js";
 import {
   isChromeCdpReady,
   isChromeReachable,
   launchOpenClawChrome,
-  resolveOpenClawUserDataDir,
   stopOpenClawChrome,
 } from "./chrome.js";
 import { resolveProfile } from "./config.js";

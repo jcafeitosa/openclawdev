@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { MACOS_APP_SOURCES_DIR } from "../compat/legacy-names.js";
 import { CronPayloadSchema } from "../gateway/protocol/schema.js";
 
@@ -50,7 +51,8 @@ async function resolveSwiftFiles(cwd: string): Promise<string[]> {
 
 describe("cron protocol conformance", () => {
   it("ui + swift include all cron providers from gateway schema", async () => {
-    const channels = extractCronChannels(CronPayloadSchema as SchemaLike);
+    const jsonSchema = z.toJSONSchema(CronPayloadSchema);
+    const channels = extractCronChannels(jsonSchema as SchemaLike);
     expect(channels.length).toBeGreaterThan(0);
 
     const cwd = process.cwd();

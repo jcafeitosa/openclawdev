@@ -7,8 +7,11 @@ vi.mock("./chrome.js", () => ({
   launchOpenClawChrome: vi.fn(async () => {
     throw new Error("unexpected launch");
   }),
-  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw"),
   stopOpenClawChrome: vi.fn(async () => {}),
+}));
+
+vi.mock("./chrome-paths.js", () => ({
+  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw"),
 }));
 
 function makeState(
