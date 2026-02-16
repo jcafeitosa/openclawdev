@@ -48,6 +48,22 @@ export async function runSessionsSendA2AFlow(params: {
       }
     }
     if (!latestReply) {
+      // Inject a fallback warning into the requester's team chat so the
+      // caller knows the target agent completed without producing output.
+      const senderAgentId = params.targetSessionKey.split(":")[1] ?? "unknown";
+      try {
+        await callGateway({
+          method: "chat.inject",
+          params: {
+            sessionKey: params.requesterSessionKey ?? params.targetSessionKey,
+            message: `Agent ${senderAgentId} completed without assistant text.`,
+            senderAgentId,
+          },
+          timeoutMs: 5000,
+        });
+      } catch {
+        // best-effort
+      }
       return;
     }
 
@@ -138,6 +154,23 @@ export async function runSessionsSendA2AFlow(params: {
           to: announceTarget.to,
           error: formatErrorMessage(err),
         });
+      }
+    } else if (!announceTarget && latestReply) {
+      // Fallback: inject reply into requester's team chat when announce target
+      // is not resolvable (e.g. no channel bound for the target agent).
+      const senderAgentId = params.targetSessionKey.split(":")[1] ?? "unknown";
+      try {
+        await callGateway({
+          method: "chat.inject",
+          params: {
+            sessionKey: params.requesterSessionKey ?? params.targetSessionKey,
+            message: latestReply,
+            senderAgentId,
+          },
+          timeoutMs: 5000,
+        });
+      } catch {
+        // best-effort
       }
     }
   } catch (err) {

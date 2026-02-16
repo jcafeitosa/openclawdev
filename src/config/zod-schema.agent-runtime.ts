@@ -507,7 +507,7 @@ export const AgentEntrySchema = z
       .strict()
       .optional(),
     sandbox: AgentSandboxSchema,
-    tools: z.unknown().optional(),
+    tools: AgentToolsSchema,
     role: z.string().optional(),
     icon: z.string().optional(),
     emoji: z.string().optional(),

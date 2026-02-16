@@ -1,10 +1,13 @@
 import { vi } from "vitest";
 
 vi.mock("../auth-profiles.js", () => ({
+  ensureAuthProfileStore: vi.fn(() => ({ profiles: {}, usageStats: {} })),
   isProfileInCooldown: vi.fn(() => false),
   markAuthProfileFailure: vi.fn(async () => {}),
   markAuthProfileGood: vi.fn(async () => {}),
   markAuthProfileUsed: vi.fn(async () => {}),
+  resolveAuthProfileOrder: vi.fn(() => []),
+  listProfilesForProvider: vi.fn(() => []),
 }));
 
 vi.mock("../usage.js", () => ({
@@ -58,10 +61,17 @@ vi.mock("../model-auth.js", () => ({
     source: "test",
   })),
   resolveAuthProfileOrder: vi.fn(() => []),
+  resolveEnvApiKey: vi.fn(() => undefined),
 }));
 
 vi.mock("../models-config.js", () => ({
   ensureOpenClawModelsJson: vi.fn(async () => {}),
+  mergeProviders: vi.fn(
+    (params: { implicit?: Record<string, unknown>; explicit?: Record<string, unknown> }) => ({
+      ...params.implicit,
+      ...params.explicit,
+    }),
+  ),
 }));
 
 vi.mock("../context-window-guard.js", () => ({

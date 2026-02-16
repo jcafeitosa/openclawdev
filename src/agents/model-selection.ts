@@ -1,5 +1,6 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
+import type { TaskComplexity, TaskType } from "./task-classifier.js";
 import { resolveAgentModelPrimary } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
@@ -7,6 +8,7 @@ import { normalizeGoogleModelId } from "./models-config.providers.js";
 export type ModelRef = {
   provider: string;
   model: string;
+  accountTag?: string;
 };
 
 export type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -106,16 +108,33 @@ export function parseModelRef(raw: string, defaultProvider: string): ModelRef | 
   if (!trimmed) {
     return null;
   }
-  const slash = trimmed.indexOf("/");
+
+  // Extract accountTag if present (format: ...@tag)
+  let mainPart: string;
+  let accountTag: string | undefined;
+  const atIndex = trimmed.indexOf("@");
+  if (atIndex !== -1) {
+    mainPart = trimmed.slice(0, atIndex);
+    const tagRaw = trimmed.slice(atIndex + 1).trim();
+    accountTag = tagRaw || undefined;
+  } else {
+    mainPart = trimmed;
+  }
+
+  const slash = mainPart.indexOf("/");
+  let ref: ModelRef;
   if (slash === -1) {
-    return normalizeModelRef(defaultProvider, trimmed);
+    ref = normalizeModelRef(defaultProvider, mainPart);
+  } else {
+    const providerRaw = mainPart.slice(0, slash).trim();
+    const model = mainPart.slice(slash + 1).trim();
+    if (!providerRaw || !model) {
+      return null;
+    }
+    ref = normalizeModelRef(providerRaw, model);
   }
-  const providerRaw = trimmed.slice(0, slash).trim();
-  const model = trimmed.slice(slash + 1).trim();
-  if (!providerRaw || !model) {
-    return null;
-  }
-  return normalizeModelRef(providerRaw, model);
+
+  return { ...ref, accountTag };
 }
 
 export function resolveAllowlistModelKey(raw: string, defaultProvider: string): string | null {
@@ -463,4 +482,129 @@ export function resolveHooksGmailModel(params: {
   });
 
   return resolved?.ref ?? null;
+}
+
+/**
+ * Resolve the coding-specialized model from config.
+ * Falls back to the default model when no codingModel is configured.
+ */
+export function resolveCodingModelForAgent(params: {
+  cfg: OpenClawConfig;
+  agentId?: string;
+}): ModelRef {
+  const codingModelRaw =
+    (
+      params.cfg.agents?.defaults?.codingModel as { primary?: string } | undefined
+    )?.primary?.trim() ?? "";
+  if (codingModelRaw) {
+    const resolved = parseModelRef(codingModelRaw, DEFAULT_PROVIDER);
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return resolveDefaultModelForAgent(params);
+}
+
+/**
+ * Resolve a model ref from a "provider/model" string, returning a ModelRef or falling back to the global default.
+ */
+function resolveModelPrimaryOrDefault(raw: string | undefined, cfg: OpenClawConfig): ModelRef {
+  const trimmed = raw?.trim() ?? "";
+  if (trimmed) {
+    const resolved = parseModelRef(trimmed, DEFAULT_PROVIDER);
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return resolveConfiguredModelRef({
+    cfg,
+    defaultProvider: DEFAULT_PROVIDER,
+    defaultModel: DEFAULT_MODEL,
+  });
+}
+
+/**
+ * Resolve the best model for a given task type based on config.
+ *
+ * - "coding" → cfg.agents.defaults.codingModel
+ * - "vision" → cfg.agents.defaults.imageModel
+ * - otherwise → cfg.agents.defaults.model (default)
+ */
+export function resolveModelForTaskType(params: {
+  cfg: OpenClawConfig;
+  taskType: TaskType;
+}): ModelRef {
+  const defaults = params.cfg.agents?.defaults;
+  if (params.taskType === "coding") {
+    const codingPrimary = (defaults?.codingModel as { primary?: string } | undefined)?.primary;
+    if (codingPrimary?.trim()) {
+      return resolveModelPrimaryOrDefault(codingPrimary, params.cfg);
+    }
+  }
+  if (params.taskType === "vision") {
+    const imagePrimary = (defaults?.imageModel as { primary?: string } | undefined)?.primary;
+    if (imagePrimary?.trim()) {
+      return resolveModelPrimaryOrDefault(imagePrimary, params.cfg);
+    }
+  }
+  return resolveModelPrimaryOrDefault(
+    (defaults?.model as { primary?: string } | undefined)?.primary,
+    params.cfg,
+  );
+}
+
+/**
+ * Resolve the best model for a given task intent, considering both task type
+ * and prompt complexity.
+ *
+ * Priority:
+ * 1. Vision tasks always use imageModel (reason: "taskType").
+ * 2. Coding tasks with explicit codingModel use codingModel (reason: "taskType").
+ * 3. If modelByComplexity.enabled and an explicit mapping exists for the
+ *    detected complexity, use it (reason: "complexity").
+ * 4. Otherwise fall back to the default model (reason: "taskType").
+ */
+export function resolveModelForTaskIntent(params: {
+  cfg: OpenClawConfig;
+  taskType: TaskType;
+  complexity: TaskComplexity;
+}): { reason: "taskType" | "complexity"; ref: ModelRef } {
+  const defaults = params.cfg.agents?.defaults;
+
+  // Vision always wins over complexity.
+  if (params.taskType === "vision") {
+    const imagePrimary = (defaults?.imageModel as { primary?: string } | undefined)?.primary;
+    if (imagePrimary?.trim()) {
+      return { reason: "taskType", ref: resolveModelPrimaryOrDefault(imagePrimary, params.cfg) };
+    }
+  }
+
+  // Coding with explicit codingModel wins over complexity.
+  if (params.taskType === "coding") {
+    const codingPrimary = (defaults?.codingModel as { primary?: string } | undefined)?.primary;
+    if (codingPrimary?.trim()) {
+      return { reason: "taskType", ref: resolveModelPrimaryOrDefault(codingPrimary, params.cfg) };
+    }
+  }
+
+  // Complexity-based routing.
+  const byComplexity = defaults?.modelByComplexity;
+  if (byComplexity?.enabled) {
+    const complexityModel = byComplexity[params.complexity];
+    if (complexityModel?.trim()) {
+      const resolved = parseModelRef(complexityModel, DEFAULT_PROVIDER);
+      if (resolved) {
+        return { reason: "complexity", ref: resolved };
+      }
+    }
+  }
+
+  // Default fallback.
+  return {
+    reason: "taskType",
+    ref: resolveModelPrimaryOrDefault(
+      (defaults?.model as { primary?: string } | undefined)?.primary,
+      params.cfg,
+    ),
+  };
 }

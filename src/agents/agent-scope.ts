@@ -18,6 +18,7 @@ type ResolvedAgentConfig = {
   name?: string;
   workspace?: string;
   agentDir?: string;
+  persona?: string;
   model?: AgentEntry["model"];
   skills?: AgentEntry["skills"];
   memorySearch?: AgentEntry["memorySearch"];
@@ -109,6 +110,10 @@ export function resolveAgentConfig(
     name: typeof entry.name === "string" ? entry.name : undefined,
     workspace: typeof entry.workspace === "string" ? entry.workspace : undefined,
     agentDir: typeof entry.agentDir === "string" ? entry.agentDir : undefined,
+    persona:
+      typeof (entry as Record<string, unknown>).persona === "string"
+        ? ((entry as Record<string, unknown>).persona as string)
+        : undefined,
     model:
       typeof entry.model === "string" || (entry.model && typeof entry.model === "object")
         ? entry.model
@@ -242,7 +247,9 @@ export function canSpawnRole(spawnerRole: AgentRole, targetRole: AgentRole): boo
   return AGENT_ROLE_RANK[spawnerRole] >= AGENT_ROLE_RANK[targetRole];
 }
 
-/** Whether `fromRole` can delegate work to `toRole`. */
-export function canDelegate(fromRole: AgentRole, toRole: AgentRole): boolean {
-  return AGENT_ROLE_RANK[fromRole] >= AGENT_ROLE_RANK[toRole];
+/** Resolve delegation direction between two roles (always allowed; direction indicates flow). */
+export function canDelegate(fromRole: AgentRole, toRole: AgentRole): "downward" | "upward" {
+  const fromRank = AGENT_ROLE_RANK[fromRole];
+  const toRank = AGENT_ROLE_RANK[toRole];
+  return fromRank >= toRank ? "downward" : "upward";
 }

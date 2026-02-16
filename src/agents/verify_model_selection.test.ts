@@ -70,6 +70,7 @@ vi.mock("./auth-profiles", () => ({
   ensureAuthProfileStore: () => ({ profiles: {} }),
   isProfileInCooldown: () => false,
   resolveAuthProfileOrder: () => [],
+  listProfilesForProvider: () => [],
 }));
 
 // Mock cooldowns

@@ -738,6 +738,80 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
   return descendants;
 }
 
+export function listAllSubagentRuns(): SubagentRunRecord[] {
+  return [...getRunsSnapshotForRead().values()];
+}
+
+// --- Continuity Watchdog ---
+
+/** Track progress updates per subagent run. */
+type SubagentProgress = {
+  percent: number;
+  status: string;
+  updatedAt: number;
+};
+
+const progressMap = new Map<string, SubagentProgress>();
+const lastNudgeMap = new Map<string, number>();
+
+const WATCHDOG_STALL_THRESHOLD_MS = 5 * 60_000; // 5 minutes with no progress
+const WATCHDOG_NUDGE_COOLDOWN_MS = 5 * 60_000; // Don't nudge same run within 5 minutes
+
+export function updateSubagentProgress(runId: string, update: { percent: number; status: string }) {
+  progressMap.set(runId, {
+    percent: update.percent,
+    status: update.status,
+    updatedAt: Date.now(),
+  });
+}
+
+/**
+ * Run the continuity watchdog: detects stalled subagents and injects a nudge
+ * message into their session to prompt progress.
+ */
+export async function runContinuityWatchdogForTests(now: number) {
+  for (const [runId, entry] of subagentRuns.entries()) {
+    // Skip completed runs.
+    if (entry.endedAt) {
+      continue;
+    }
+
+    const startedAt = entry.startedAt ?? entry.createdAt;
+    const elapsed = now - startedAt;
+    if (elapsed < WATCHDOG_STALL_THRESHOLD_MS) {
+      continue;
+    }
+
+    // Check for recent progress.
+    const progress = progressMap.get(runId);
+    if (progress && now - progress.updatedAt < WATCHDOG_STALL_THRESHOLD_MS) {
+      continue;
+    }
+
+    // Respect cooldown.
+    const lastNudge = lastNudgeMap.get(runId);
+    if (lastNudge && now - lastNudge < WATCHDOG_NUDGE_COOLDOWN_MS) {
+      continue;
+    }
+
+    // Nudge the stalled subagent.
+    lastNudgeMap.set(runId, now);
+    try {
+      await callGateway({
+        method: "chat.inject",
+        params: {
+          sessionKey: entry.childSessionKey,
+          message: `[Continuity check] Sua tarefa "${entry.task}" parece estar parada. Reporte status ou prossiga para a proxima tarefa. Se concluiu, solicite dispensa.`,
+          senderAgentId: entry.requesterDisplayKey,
+        },
+        timeoutMs: 5000,
+      });
+    } catch {
+      // best-effort
+    }
+  }
+}
+
 export function initSubagentRegistry() {
   restoreSubagentRunsOnce();
 }

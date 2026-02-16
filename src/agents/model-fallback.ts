@@ -22,6 +22,94 @@ import {
 } from "./model-selection.js";
 import { isLikelyContextOverflowError } from "./pi-embedded-helpers.js";
 
+/* ---------------------------------------------------------------------------
+ * Per-model cooldown tracking (fork-only).
+ * ------------------------------------------------------------------------- */
+
+type ModelCooldownEntry = {
+  provider: string;
+  model: string;
+  key: string;
+  cooldownUntilMs: number;
+  reason: string;
+  failureCount: number;
+};
+
+export type ModelCooldownSnapshot = {
+  provider: string;
+  model: string;
+  key: string;
+  untilMs: number;
+  remainingMs: number;
+  failures: number;
+  reason: string;
+};
+
+const modelCooldowns = new Map<string, ModelCooldownEntry>();
+
+function makeModelCooldownKey(provider: string, model: string): string {
+  return `${provider}/${model}`;
+}
+
+export function isModelCoolingDown(
+  modelRef: { provider: string; model: string },
+  now?: number,
+): boolean {
+  const currentTime = now ?? Date.now();
+  const key = makeModelCooldownKey(modelRef.provider, modelRef.model);
+  const entry = modelCooldowns.get(key);
+  if (!entry) {
+    return false;
+  }
+  if (currentTime >= entry.cooldownUntilMs) {
+    modelCooldowns.delete(key);
+    return false;
+  }
+  return true;
+}
+
+export function setModelCooldown(params: {
+  provider: string;
+  model: string;
+  durationMs: number;
+  reason: string;
+  failureCount?: number;
+}): void {
+  const key = makeModelCooldownKey(params.provider, params.model);
+  modelCooldowns.set(key, {
+    provider: params.provider,
+    model: params.model,
+    key,
+    cooldownUntilMs: Date.now() + params.durationMs,
+    reason: params.reason,
+    failureCount: params.failureCount ?? 1,
+  });
+}
+
+export function getModelCooldownSnapshot(): ModelCooldownSnapshot[] {
+  const now = Date.now();
+  return [...modelCooldowns.values()]
+    .map((entry) => ({
+      provider: entry.provider,
+      model: entry.model,
+      key: entry.key,
+      untilMs: entry.cooldownUntilMs,
+      remainingMs: Math.max(0, entry.cooldownUntilMs - now),
+      failures: entry.failureCount,
+      reason: entry.reason,
+    }))
+    .filter((s) => s.remainingMs > 0);
+}
+
+/** Reset cooldown state for tests. */
+export function resetModelCooldownsForTests(): void {
+  modelCooldowns.clear();
+}
+
+/* ---------------------------------------------------------------------------
+ * Model fallback types and helpers.
+ * ------------------------------------------------------------------------- */
+
 type ModelCandidate = {
   provider: string;
   model: string;

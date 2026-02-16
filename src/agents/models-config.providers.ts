@@ -665,6 +665,31 @@ export async function resolveImplicitProviders(params: {
     allowKeychainPrompt: false,
   });
 
+  // Common OpenAI-compatible providers resolved from env vars.
+  const commonProviders: {
+    id: string;
+    baseUrl: string;
+    api?: ProviderConfig["api"];
+  }[] = [
+    { id: "groq", baseUrl: "https://api.groq.com/openai/v1" },
+    { id: "cerebras", baseUrl: "https://api.cerebras.ai/v1" },
+    { id: "xai", baseUrl: "https://api.x.ai/v1" },
+    { id: "openrouter", baseUrl: "https://openrouter.ai/api/v1" },
+    { id: "mistral", baseUrl: "https://api.mistral.ai/v1" },
+  ];
+  for (const common of commonProviders) {
+    const key =
+      resolveEnvApiKeyVarName(common.id) ??
+      resolveApiKeyFromProfiles({ provider: common.id, store: authStore });
+    if (key) {
+      providers[common.id] = {
+        baseUrl: common.baseUrl,
+        apiKey: key,
+        ...(common.api ? { api: common.api } : {}),
+      };
+    }
+  }
+
   const minimaxKey =
     resolveEnvApiKeyVarName("minimax") ??
     resolveApiKeyFromProfiles({ provider: "minimax", store: authStore });
@@ -805,6 +830,25 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "nvidia", store: authStore });
   if (nvidiaKey) {
     providers.nvidia = { ...buildNvidiaProvider(), apiKey: nvidiaKey };
+  }
+
+  // Google Antigravity (Gemini CLI) — resolve OAuth profiles.
+  const antigravityProfiles = listProfilesForProvider(authStore, "google-antigravity");
+  for (const profileId of antigravityProfiles) {
+    const cred = authStore.profiles[profileId];
+    if (cred?.type !== "oauth") {
+      continue;
+    }
+    const access = (cred as { access?: string }).access?.trim();
+    const projectId = (cred as { projectId?: string }).projectId?.trim();
+    if (!access) {
+      continue;
+    }
+    providers["google-antigravity"] = {
+      api: "google-gemini-cli",
+      apiKey: JSON.stringify({ token: access, projectId: projectId ?? "" }),
+    };
+    break;
   }
 
   return providers;
