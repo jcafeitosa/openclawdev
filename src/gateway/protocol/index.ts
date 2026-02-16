@@ -232,8 +232,8 @@ const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").defau
 
 export const validateConnectParams = ajv.compile(ConnectParamsSchema);
 export const validateRequestFrame = ajv.compile(RequestFrameSchema);
-export const validateResponseFrame = ajv.compile(ResponseFrameSchema);
-export const validateEventFrame = ajv.compile(EventFrameSchema);
+export const validateResponseFrame = ajv.compile<ResponseFrame>(ResponseFrameSchema);
+export const validateEventFrame = ajv.compile<EventFrame>(EventFrameSchema);
 export const validateSendParams = ajv.compile(SendParamsSchema);
 export const validatePollParams = ajv.compile<PollParams>(PollParamsSchema);
 export const validateAgentParams = ajv.compile(AgentParamsSchema);
@@ -383,6 +383,32 @@ export function formatValidationErrors(errors: ErrorObject[] | null | undefined)
   }
   return unique.join("; ");
 }
+
+// Zod-based validators for schemas not compiled through AJV.
+import { FsPickDirectoryParamsSchema } from "./schema/fs.js";
+import { ProjectsListParamsSchema } from "./schema/projects.js";
+
+export function validateFsPickDirectoryParams(data: unknown): boolean {
+  return FsPickDirectoryParamsSchema.safeParse(data).success;
+}
+export function validateProjectsListParams(data: unknown): boolean {
+  return ProjectsListParamsSchema.safeParse(data).success;
+}
+
+// models.cooldowns accepts an optional empty object — keep the validator
+// AJV-shaped (has `.errors`) so the caller can use `formatValidationErrors`.
+export const validateModelsCooldownsParams: {
+  (data: unknown): boolean;
+  errors?: import("ajv").ErrorObject[] | null;
+} = Object.assign(
+  (data: unknown): boolean => {
+    if (data === undefined || data === null) {
+      return true;
+    }
+    return typeof data === "object" && !Array.isArray(data);
+  },
+  { errors: null as import("ajv").ErrorObject[] | null },
+);
 
 export {
   ConnectParamsSchema,

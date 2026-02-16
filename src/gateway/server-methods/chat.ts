@@ -729,3 +729,51 @@ export const chatHandlers: GatewayRequestHandlers = {
     respond(true, { ok: true, messageId: appended.messageId });
   },
 };
+
+/**
+ * Inject a chat message into a session transcript and broadcast to connected
+ * clients.  Used by the collaboration and delegation subsystems to deliver
+ * system-generated messages (e.g. task assignments, status updates) into agent
+ * sessions.
+ */
+export function injectChatMessage(params: {
+  context: GatewayRequestContext;
+  sessionKey: string;
+  message: string;
+  label?: string;
+  senderIdentity?: {
+    agentId: string;
+    name: string;
+    emoji?: string;
+    avatar?: string;
+  };
+}): void {
+  const { cfg, storePath, entry } = loadSessionEntry(params.sessionKey);
+  const sessionId = entry?.sessionId;
+  if (!sessionId || !storePath) {
+    return;
+  }
+  const agentId = resolveSessionAgentId({ sessionKey: params.sessionKey, config: cfg });
+  const prefix = params.senderIdentity ? `[${params.senderIdentity.name}] ` : "";
+  const appended = appendAssistantTranscriptMessage({
+    message: `${prefix}${params.message}`,
+    label: params.label,
+    sessionId,
+    storePath,
+    sessionFile: entry?.sessionFile,
+    agentId,
+    createIfMissing: true,
+  });
+  if (!appended.ok || !appended.messageId || !appended.message) {
+    return;
+  }
+  const chatPayload = {
+    runId: `inject-${appended.messageId}`,
+    sessionKey: params.sessionKey,
+    seq: 0,
+    state: "final" as const,
+    message: appended.message,
+  };
+  params.context.broadcast("chat", chatPayload);
+  params.context.nodeSendToSession(params.sessionKey, "chat", chatPayload);
+}

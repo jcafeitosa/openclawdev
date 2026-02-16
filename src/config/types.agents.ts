@@ -22,6 +22,14 @@ export type AgentConfig = {
   id: string;
   default?: boolean;
   name?: string;
+  /** Agent role in the delegation hierarchy. */
+  role?: AgentRole;
+  /** Agent capabilities for capability-based routing. */
+  capabilities?: string[];
+  /** Agent expertise domains. */
+  expertise?: string[];
+  /** Agent availability mode. */
+  availability?: "auto" | "manual";
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;

@@ -183,6 +183,10 @@ export function buildAgentSystemPrompt(params: {
   docsPath?: string;
   workspaceNotes?: string[];
   ttsHint?: string;
+  /** Root directory for multi-project workspaces. */
+  projectsRootDir?: string;
+  /** Naming convention hint for projects. */
+  projectNamingConvention?: string;
   /** Controls which hardcoded sections to include. Defaults to "full". */
   promptMode?: PromptMode;
   runtimeInfo?: {

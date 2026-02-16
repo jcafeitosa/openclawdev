@@ -154,6 +154,20 @@ export function looksLikeSessionId(value: string): boolean {
   return SESSION_ID_RE.test(value.trim());
 }
 
+const AGENT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+/**
+ * If `value` looks like a bare agent ID (e.g. "backend-architect"),
+ * returns it; otherwise returns `undefined`.
+ */
+export function extractAgentIdCandidate(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes(":") || trimmed.includes("/")) {
+    return undefined;
+  }
+  return AGENT_ID_RE.test(trimmed) ? trimmed : undefined;
+}
+
 export function looksLikeSessionKey(value: string): boolean {
   const raw = value.trim();
   if (!raw) {
