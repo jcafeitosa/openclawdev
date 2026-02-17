@@ -100,13 +100,8 @@ async function buildEnrichment(
   const profile = await service.getAgentProfile?.(agentId);
 
   if (!profile) {
-    // Service unavailable or error — return minimal enrichment
-    return {
-      preRunContext: "",
-      matchedRules: [],
-      suggestCompaction: false,
-      relationshipContext: undefined,
-    };
+    // Service unavailable or error — return empty enrichment
+    return EMPTY_ENRICHMENT;
   }
 
   const sections: string[] = [];
