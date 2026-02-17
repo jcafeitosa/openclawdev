@@ -1,0 +1,34 @@
+{
+  "name": "@openclaw/telegram-handlers",
+  "version": "1.0.0",
+  "description": "Telegram command handlers for OpenClaw agent system",
+  "keywords": [
+    "agents",
+    "bot",
+    "handlers",
+    "openclaw",
+    "telegram"
+  ],
+  "license": "MIT",
+  "author": "OpenClaw Team",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "format": "prettier --write .",
+    "lint": "eslint .",
+    "test": "vitest",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "peerDependencies": {
+    "@openclaw/core": "*"
+  }
+}
