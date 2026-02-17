@@ -244,6 +244,49 @@ export async function runMigrations(): Promise<void> {
         END $$;
       `,
     },
+    {
+      name: "004_create_auth_credentials",
+      up: `
+        CREATE TABLE IF NOT EXISTS auth_credentials (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          profile_id TEXT NOT NULL UNIQUE,
+          provider TEXT NOT NULL,
+          credential_type TEXT NOT NULL,
+          encrypted_data TEXT NOT NULL,
+          iv TEXT NOT NULL,
+          auth_tag TEXT NOT NULL,
+          key_version INTEGER NOT NULL DEFAULT 1,
+          email TEXT,
+          expires_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_auth_creds_provider ON auth_credentials (provider);
+        CREATE INDEX IF NOT EXISTS idx_auth_creds_type ON auth_credentials (credential_type);
+        CREATE INDEX IF NOT EXISTS idx_auth_creds_expires ON auth_credentials (expires_at) WHERE expires_at IS NOT NULL;
+
+        CREATE TABLE IF NOT EXISTS auth_usage_stats (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          profile_id TEXT NOT NULL UNIQUE REFERENCES auth_credentials(profile_id) ON DELETE CASCADE,
+          last_used TIMESTAMPTZ,
+          error_count INTEGER DEFAULT 0,
+          last_failure_at TIMESTAMPTZ,
+          failure_counts JSONB DEFAULT '{}',
+          cooldown_until TIMESTAMPTZ,
+          disabled_until TIMESTAMPTZ,
+          disabled_reason TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_auth_usage_profile ON auth_usage_stats (profile_id);
+
+        CREATE TABLE IF NOT EXISTS auth_store_meta (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_at TIMESTAMPTZ DEFAULT NOW()
+        );
+      `,
+    },
   ];
 
   // Apply pending migrations

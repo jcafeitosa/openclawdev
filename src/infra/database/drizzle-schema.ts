@@ -310,6 +310,58 @@ export const agentMistakePatterns = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Auth: encrypted credentials (centralized auth store)
+// ---------------------------------------------------------------------------
+
+export const authCredentials = pgTable(
+  "auth_credentials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: text("profile_id").notNull().unique(),
+    provider: text("provider").notNull(),
+    credentialType: text("credential_type").notNull(), // "api_key" | "token" | "oauth"
+    encryptedData: text("encrypted_data").notNull(), // AES-256-GCM ciphertext (JSON blob)
+    iv: text("iv").notNull(), // unique per encryption
+    authTag: text("auth_tag").notNull(), // GCM authentication tag
+    keyVersion: integer("key_version").notNull().default(1),
+    email: text("email"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_auth_creds_provider").on(t.provider),
+    index("idx_auth_creds_type").on(t.credentialType),
+    index("idx_auth_creds_expires").on(t.expiresAt),
+  ],
+);
+
+export const authUsageStats = pgTable(
+  "auth_usage_stats",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    profileId: text("profile_id")
+      .notNull()
+      .unique()
+      .references(() => authCredentials.profileId, { onDelete: "cascade" }),
+    lastUsed: timestamp("last_used", { withTimezone: true }),
+    errorCount: integer("error_count").default(0),
+    lastFailureAt: timestamp("last_failure_at", { withTimezone: true }),
+    failureCounts: jsonb("failure_counts").default({}),
+    cooldownUntil: timestamp("cooldown_until", { withTimezone: true }),
+    disabledUntil: timestamp("disabled_until", { withTimezone: true }),
+    disabledReason: text("disabled_reason"),
+  },
+  (t) => [index("idx_auth_usage_profile").on(t.profileId)],
+);
+
+export const authStoreMeta = pgTable("auth_store_meta", {
+  key: text("key").primaryKey(), // "order", "lastGood"
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // Schema metadata (for version tracking)
 // ---------------------------------------------------------------------------
 
