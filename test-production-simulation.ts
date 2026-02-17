@@ -69,8 +69,8 @@ try {
   );
   console.log("   " + "─".repeat(70));
   console.log("");
-} catch (error: any) {
-  console.error("   ❌ Failed to build memory context:", error.message);
+} catch (error: unknown) {
+  console.error("   ❌ Failed to build memory context:", (error as Error).message);
   console.log("   Agent will continue without memory (non-blocking)\n");
 }
 
@@ -146,8 +146,8 @@ try {
   const savedPercent = Math.round((savedTokens / 5000) * 100);
   console.log(`   💰 Tokens saved: ~${savedTokens} tokens (${savedPercent}%)`);
   console.log("");
-} catch (error: any) {
-  console.error("   ❌ Failed to build system prompt:", error.message);
+} catch (error: unknown) {
+  console.error("   ❌ Failed to build system prompt:", (error as Error).message);
   process.exit(1);
 }
 

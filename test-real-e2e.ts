@@ -15,8 +15,8 @@ try {
   const db = memoryManager["db"];
   await db`DELETE FROM agent_memory WHERE agent_id = 'main'`;
   console.log("   ✅ Cleaned up old memories\n");
-} catch (error: any) {
-  console.error("   ⚠️  Cleanup failed:", error.message);
+} catch (error: unknown) {
+  console.error("   ⚠️  Cleanup failed:", (error as Error).message);
 }
 
 // Step 2: Create real test memories
@@ -57,8 +57,8 @@ for (const mem of testMemories) {
     console.log(`      ID: ${created.id}`);
     console.log(`      Has embedding: ${created.embedding ? "Yes" : "No"}`);
     createdCount++;
-  } catch (error: any) {
-    console.error(`   ❌ Failed: ${mem.title}`, error.message);
+  } catch (error: unknown) {
+    console.error(`   ❌ Failed: ${mem.title}`, (error as Error).message);
   }
 }
 

@@ -219,7 +219,9 @@ export async function applySessionsPatchToStore(params: {
     if (raw === null) {
       delete next.workspaceDir;
     } else if (raw !== undefined) {
-      const resolved = resolveWorkspaceDirPatch(String(raw));
+      const resolved = resolveWorkspaceDirPatch(
+        typeof raw === "string" ? raw : JSON.stringify(raw),
+      );
       if (!resolved.ok) {
         return invalid(resolved.error);
       }
@@ -300,7 +302,9 @@ export async function applySessionsPatchToStore(params: {
     if (raw === null) {
       delete next.projectDir;
     } else if (raw !== undefined) {
-      const resolved = resolveWorkspaceDirPatch(String(raw));
+      const resolved = resolveWorkspaceDirPatch(
+        typeof raw === "string" ? raw : JSON.stringify(raw),
+      );
       if (!resolved.ok) {
         // Keep the older error key for clarity when legacy clients call this field.
         return invalid(resolved.error.replace("workspaceDir", "projectDir"));

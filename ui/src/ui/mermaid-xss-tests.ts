@@ -92,7 +92,7 @@ export async function runXssTests(): Promise<{
 
   for (const testCase of xssTestCases) {
     try {
-      const output = await toSanitizedMarkdownHtml(testCase.input);
+      const output = toSanitizedMarkdownHtml(testCase.input);
 
       // Check if any dangerous content leaked through
       let testPassed = true;

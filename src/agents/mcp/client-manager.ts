@@ -58,7 +58,11 @@ export class McpClientManager {
   }
 
   private async connectServer(name: string, config: McpServerConfig): Promise<void> {
-    let transport: StdioClientTransport | SSEClientTransport;
+    let transport:
+      | StdioClientTransport
+      | SSEClientTransport
+      | StreamableHTTPClientTransport
+      | WebSocketClientTransport;
 
     if (config.type === "stdio" || !config.type) {
       if (!config.command) {
@@ -89,18 +93,14 @@ export class McpClientManager {
       if (config.env?.GITHUB_PERSONAL_ACCESS_TOKEN) {
         headers["Authorization"] = `Bearer ${config.env.GITHUB_PERSONAL_ACCESS_TOKEN}`;
       }
-      // Type cast needed: StreamableHTTPClientTransport is valid but TS doesn't recognize it
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       transport = new StreamableHTTPClientTransport(new URL(config.url), {
         requestInit: Object.keys(headers).length > 0 ? { headers } : undefined,
-      }) as any;
+      });
     } else if (config.type === "websocket") {
       if (!config.url) {
         throw new Error(`MCP server "${name}": url required for WebSocket transport`);
       }
-      // Type cast needed: WebSocketClientTransport is valid but TS doesn't recognize it
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      transport = new WebSocketClientTransport(new URL(config.url)) as any;
+      transport = new WebSocketClientTransport(new URL(config.url));
     } else {
       const _exhaustiveCheck: never = config.type;
       throw new Error(`MCP server "${name}": unsupported transport type`);

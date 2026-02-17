@@ -9,7 +9,6 @@ import {
   shouldUseMemoryContext,
 } from "./src/agents/hooks/memory-context-hook.js";
 import { buildFormattedContext } from "./src/services/agent-memory/context-builder.js";
-import { generateEmbedding } from "./src/services/agent-memory/embedding-service.js";
 import { memoryManager } from "./src/services/agent-memory/memory-manager.js";
 
 console.log("🧪 FULL INTEGRATION TEST\n");
@@ -47,11 +46,12 @@ for (const mem of memories) {
   try {
     const created = await memoryManager.createMemory(mem);
     console.log(`   ✅ Created: ${created.title} (${created.id})`);
-  } catch (error: any) {
-    if (error.code === "23505") {
+  } catch (error: unknown) {
+    const err = error as Record<string, unknown>;
+    if (err.code === "23505") {
       console.log(`   ⏭️  Skipped (duplicate): ${mem.title}`);
     } else {
-      console.error(`   ❌ Failed: ${mem.title}`, error.message);
+      console.error(`   ❌ Failed: ${mem.title}`, err.message);
       process.exit(1);
     }
   }

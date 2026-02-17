@@ -74,8 +74,10 @@ export class HookRunner {
         if (val === undefined) {
           return false;
         }
-        const argRegex = new RegExp(String(pattern));
-        if (!argRegex.test(String(val))) {
+        const argRegex = new RegExp(
+          typeof pattern === "string" ? pattern : JSON.stringify(pattern),
+        );
+        if (!argRegex.test(typeof val === "string" ? val : JSON.stringify(val))) {
           return false;
         }
       }
