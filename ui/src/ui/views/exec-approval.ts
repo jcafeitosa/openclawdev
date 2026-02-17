@@ -15,11 +15,24 @@ function formatRemaining(ms: number): string {
   return `${hours}h`;
 }
 
-function renderMetaRow(label: string, value?: string | null) {
-  if (!value) {
-    return nothing;
+function extractVerb(ask: string | null | undefined, command: string): string {
+  if (ask) {
+    // e.g. "Run sed -n ..." or "Read file /foo/bar"
+    const match = ask.match(/^(\w+)\s/);
+    if (match) {
+      return match[1];
+    }
   }
-  return html`<div class="exec-approval-meta-row"><span>${label}</span><span>${value}</span></div>`;
+  // Fallback: derive from command
+  const cmd = command.trim().split(/\s+/)[0] ?? "Execute";
+  return cmd.charAt(0).toUpperCase() + cmd.slice(1);
+}
+
+function buildDescription(ask: string | null | undefined, command: string): string {
+  if (ask) {
+    return ask;
+  }
+  return command;
 }
 
 export function renderExecApprovalPrompt(state: AppViewState) {
@@ -29,58 +42,52 @@ export function renderExecApprovalPrompt(state: AppViewState) {
   }
   const request = active.request;
   const remainingMs = active.expiresAtMs - Date.now();
-  const remaining = remainingMs > 0 ? `expires in ${formatRemaining(remainingMs)}` : "expired";
+  const isExpired = remainingMs <= 0;
   const queueCount = state.execApprovalQueue.length;
+
+  const verb = extractVerb(request.ask, request.command);
+  const description = buildDescription(request.ask, request.command);
+  // Remove the leading verb from description for inline display
+  const descriptionBody = description.replace(new RegExp(`^${verb}\\s+`, "i"), "");
+
   return html`
-    <div class="exec-approval-overlay" role="dialog" aria-live="polite">
+    <div class="exec-approval-overlay" role="dialog" aria-modal="true" aria-label="Permission request">
       <div class="exec-approval-card">
-        <div class="exec-approval-header">
-          <div>
-            <div class="exec-approval-title">Exec approval needed</div>
-            <div class="exec-approval-sub">${remaining}</div>
-          </div>
-          ${
-            queueCount > 1
-              ? html`<div class="exec-approval-queue">${queueCount} pending</div>`
-              : nothing
-          }
-        </div>
+        ${
+          queueCount > 1
+            ? html`<div class="exec-approval-queue-badge">${queueCount} pending</div>`
+            : nothing
+        }
+        <p class="exec-approval-desc">
+          Allow Claude to <strong>${verb}</strong> ${descriptionBody}
+        </p>
         <div class="exec-approval-command mono">${request.command}</div>
-        <div class="exec-approval-meta">
-          ${renderMetaRow("Host", request.host)}
-          ${renderMetaRow("Agent", request.agentId)}
-          ${renderMetaRow("Session", request.sessionKey)}
-          ${renderMetaRow("CWD", request.cwd)}
-          ${renderMetaRow("Resolved", request.resolvedPath)}
-          ${renderMetaRow("Security", request.security)}
-          ${renderMetaRow("Ask", request.ask)}
-        </div>
         ${
           state.execApprovalError
             ? html`<div class="exec-approval-error">${state.execApprovalError}</div>`
             : nothing
         }
+        ${
+          isExpired
+            ? html`
+                <div class="exec-approval-expired">Request expired</div>
+              `
+            : nothing
+        }
         <div class="exec-approval-actions">
           <button
-            class="btn primary"
-            ?disabled=${state.execApprovalBusy}
-            @click=${() => state.handleExecApprovalDecision("allow-once")}
-          >
-            Allow once
-          </button>
-          <button
-            class="btn"
-            ?disabled=${state.execApprovalBusy}
-            @click=${() => state.handleExecApprovalDecision("allow-always")}
-          >
-            Always allow
-          </button>
-          <button
-            class="btn danger"
-            ?disabled=${state.execApprovalBusy}
+            class="exec-approval-btn exec-approval-btn--deny"
+            ?disabled=${state.execApprovalBusy || isExpired}
             @click=${() => state.handleExecApprovalDecision("deny")}
           >
-            Deny
+            Deny <kbd class="exec-approval-kbd">Esc</kbd>
+          </button>
+          <button
+            class="exec-approval-btn exec-approval-btn--allow"
+            ?disabled=${state.execApprovalBusy || isExpired}
+            @click=${() => state.handleExecApprovalDecision("allow-once")}
+          >
+            Allow once <kbd class="exec-approval-kbd">⌘</kbd><kbd class="exec-approval-kbd">↵</kbd>
           </button>
         </div>
       </div>

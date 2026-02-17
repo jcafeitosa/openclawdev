@@ -369,57 +369,109 @@ export function renderChat(props: ChatProps) {
       }
 
       <div class="chat-compose">
-        ${renderAttachmentPreview(props)}
-        <div class="chat-compose__row">
-          <label class="field chat-compose__field">
-            <span>Message</span>
-            <textarea
-              ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
-              .value=${props.draft}
-              dir=${detectTextDirection(props.draft)}
-              ?disabled=${!props.connected}
-              @keydown=${(e: KeyboardEvent) => {
-                if (e.key !== "Enter") {
-                  return;
-                }
-                if (e.isComposing || e.keyCode === 229) {
-                  return;
-                }
-                if (e.shiftKey) {
-                  return;
-                } // Allow Shift+Enter for line breaks
-                if (!props.connected) {
-                  return;
-                }
-                e.preventDefault();
-                if (canCompose) {
-                  props.onSend();
-                }
-              }}
-              @input=${(e: Event) => {
-                const target = e.target as HTMLTextAreaElement;
-                adjustTextareaHeight(target);
-                props.onDraftChange(target.value);
-              }}
-              @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
-              placeholder=${composePlaceholder}
-            ></textarea>
-          </label>
-          <div class="chat-compose__actions">
-            <button
-              class="btn"
-              ?disabled=${!props.connected || (!canAbort && props.sending)}
-              @click=${canAbort ? props.onAbort : props.onNewSession}
-            >
-              ${canAbort ? "Stop" : "New session"}
-            </button>
-            <button
-              class="btn primary"
-              ?disabled=${!props.connected}
-              @click=${props.onSend}
-            >
-              ${isBusy ? "Queue" : "Send"}<kbd class="btn-kbd">↵</kbd>
-            </button>
+        <div class="chat-compose__bar">
+          ${renderAttachmentPreview(props)}
+          <textarea
+            class="chat-compose__input"
+            ${ref((el) => el && adjustTextareaHeight(el as HTMLTextAreaElement))}
+            .value=${props.draft}
+            dir=${detectTextDirection(props.draft)}
+            ?disabled=${!props.connected}
+            @keydown=${(e: KeyboardEvent) => {
+              if (e.key !== "Enter") {
+                return;
+              }
+              if (e.isComposing || e.keyCode === 229) {
+                return;
+              }
+              if (e.shiftKey) {
+                return;
+              }
+              if (!props.connected) {
+                return;
+              }
+              e.preventDefault();
+              if (canCompose) {
+                props.onSend();
+              }
+            }}
+            @input=${(e: Event) => {
+              const target = e.target as HTMLTextAreaElement;
+              adjustTextareaHeight(target);
+              props.onDraftChange(target.value);
+            }}
+            @paste=${(e: ClipboardEvent) => handlePaste(e, props)}
+            placeholder=${composePlaceholder}
+          ></textarea>
+          <div class="chat-compose__controls">
+            <div class="chat-compose__controls-left">
+              <button
+                class="compose-pill compose-pill--icon"
+                type="button"
+                ?disabled=${!props.connected}
+                aria-label="Add attachment"
+                title="Add attachment"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              </button>
+              <button
+                class="compose-pill"
+                type="button"
+                ?disabled=${!props.connected}
+                aria-label="Ask permissions"
+                title="Ask permissions"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v10M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8a6 6 0 0 0 6 6h2a8 8 0 0 0 8-8v-1a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2"/></svg>
+                <span class="compose-pill__label">Ask permissions</span>
+                ${icons.chevronDown}
+              </button>
+            </div>
+            <div class="chat-compose__controls-right">
+              <button
+                class="compose-pill compose-pill--model"
+                type="button"
+                aria-label="Select model"
+                title="Select model"
+              >
+                <span class="compose-pill__label">${
+                  activeSession?.model
+                    ? activeSession.model
+                        .replace(/^claude-/, "")
+                        .replace(/-\d{8}$/, "")
+                        .replace(/-/g, " ")
+                        .replace(/\b\w/g, (c) => c.toUpperCase())
+                    : props.thinkingLevel
+                      ? "Opus 4.6"
+                      : "Sonnet 4.5"
+                }</span>
+                ${icons.chevronDown}
+              </button>
+              ${
+                isBusy && canAbort
+                  ? html`
+                  <button
+                    class="compose-send compose-send--stop"
+                    type="button"
+                    aria-label="Stop"
+                    title="Stop"
+                    @click=${props.onAbort}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none" style="width:16px;height:16px"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                  </button>
+                `
+                  : nothing
+              }
+              <button
+                class="compose-send compose-send--primary"
+                type="button"
+                ?disabled=${!props.canSend}
+                aria-label=${isBusy ? "Queue message" : "Send message"}
+                title=${isBusy ? "Queue" : "Send"}
+                @click=${props.onSend}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
