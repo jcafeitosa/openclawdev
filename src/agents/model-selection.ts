@@ -3,10 +3,12 @@ import type { ModelCatalogEntry } from "./model-catalog.js";
 import { resolveAgentModelPrimary } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
+import type { TaskComplexity, TaskType } from "./task-classifier.js";
 
 export type ModelRef = {
   provider: string;
   model: string;
+  accountTag?: string;
 };
 
 export type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -106,16 +108,38 @@ export function parseModelRef(raw: string, defaultProvider: string): ModelRef | 
   if (!trimmed) {
     return null;
   }
-  const slash = trimmed.indexOf("/");
-  if (slash === -1) {
-    return normalizeModelRef(defaultProvider, trimmed);
+
+  // Extract @accountTag before provider/model parsing.
+  // The tag appears after the model name, so look for '@' that is NOT part of the provider/model path.
+  // Strategy: find the last '@' that comes after the '/' (or the first '@' if no '/').
+  let remainder: string;
+  let accountTag: string | undefined;
+
+  const slashIdx = trimmed.indexOf("/");
+  // Look for '@' in the model portion (after slash, or entire string if no slash)
+  const modelPortion = slashIdx === -1 ? trimmed : trimmed.slice(slashIdx + 1);
+  const atIdx = modelPortion.indexOf("@");
+  if (atIdx !== -1) {
+    const rawTag = modelPortion.slice(atIdx + 1).trim();
+    accountTag = rawTag.length > 0 ? rawTag : undefined;
+    const modelWithoutTag = modelPortion.slice(0, atIdx);
+    remainder = slashIdx === -1 ? modelWithoutTag : trimmed.slice(0, slashIdx + 1) + modelWithoutTag;
+  } else {
+    remainder = trimmed;
   }
-  const providerRaw = trimmed.slice(0, slash).trim();
-  const model = trimmed.slice(slash + 1).trim();
+
+  const slash = remainder.indexOf("/");
+  if (slash === -1) {
+    const ref = normalizeModelRef(defaultProvider, remainder);
+    return { ...ref, accountTag };
+  }
+  const providerRaw = remainder.slice(0, slash).trim();
+  const model = remainder.slice(slash + 1).trim();
   if (!providerRaw || !model) {
     return null;
   }
-  return normalizeModelRef(providerRaw, model);
+  const ref = normalizeModelRef(providerRaw, model);
+  return { ...ref, accountTag };
 }
 
 export function resolveAllowlistModelKey(raw: string, defaultProvider: string): string | null {
@@ -463,4 +487,100 @@ export function resolveHooksGmailModel(params: {
   });
 
   return resolved?.ref ?? null;
+}
+
+/**
+ * Resolve the best model reference for a given task type.
+ * Uses codingModel for coding, imageModel for vision, falls back to default.
+ */
+/**
+ * Resolve the coding model from the global codingModel selector.
+ * Falls back to the default model when codingModel is not configured.
+ */
+export function resolveCodingModelForAgent(params: {
+  cfg: OpenClawConfig;
+}): ModelRef {
+  return resolveModelForTaskType({ cfg: params.cfg, taskType: "coding" });
+}
+
+export function resolveModelForTaskType(params: {
+  cfg: OpenClawConfig;
+  taskType: TaskType;
+}): ModelRef {
+  const { cfg, taskType } = params;
+  const defaults = cfg.agents?.defaults ?? {};
+  const defaultProvider = DEFAULT_PROVIDER;
+
+  let raw: string | undefined;
+
+  if (taskType === "coding" || taskType === "tools") {
+    const codingModel = defaults.codingModel;
+    raw = typeof codingModel === "string" ? codingModel : codingModel?.primary;
+  } else if (taskType === "vision") {
+    const imageModel = defaults.imageModel;
+    raw = typeof imageModel === "string" ? imageModel : imageModel?.primary;
+  }
+
+  if (raw) {
+    const ref = parseModelRef(raw, defaultProvider);
+    if (ref) return ref;
+  }
+
+  // Fall back to default model
+  const defaultModel = defaults.model;
+  const defaultRaw =
+    typeof defaultModel === "string" ? defaultModel : (defaultModel?.primary ?? DEFAULT_MODEL);
+  return parseModelRef(defaultRaw, defaultProvider) ?? { provider: defaultProvider, model: DEFAULT_MODEL };
+}
+
+/**
+ * Resolve the best model for a task, considering both task type and complexity.
+ * Task-type routing (coding, vision) takes precedence over complexity routing.
+ */
+export function resolveModelForTaskIntent(params: {
+  cfg: OpenClawConfig;
+  taskType: TaskType;
+  complexity: TaskComplexity;
+}): { ref: ModelRef; reason: "taskType" | "complexity" | "default" } {
+  const { cfg, taskType, complexity } = params;
+  const defaults = cfg.agents?.defaults ?? {};
+  const defaultProvider = DEFAULT_PROVIDER;
+
+  // 1. Task-type routing has priority (coding, vision)
+  if (taskType === "coding" || taskType === "tools") {
+    const codingModel = defaults.codingModel;
+    const raw = typeof codingModel === "string" ? codingModel : codingModel?.primary;
+    if (raw) {
+      const ref = parseModelRef(raw, defaultProvider);
+      if (ref) return { ref, reason: "taskType" };
+    }
+  }
+
+  if (taskType === "vision") {
+    const imageModel = defaults.imageModel;
+    const raw = typeof imageModel === "string" ? imageModel : imageModel?.primary;
+    if (raw) {
+      const ref = parseModelRef(raw, defaultProvider);
+      if (ref) return { ref, reason: "taskType" };
+    }
+  }
+
+  // 2. Complexity-based routing (if enabled)
+  const byComplexity = defaults.modelByComplexity;
+  if (byComplexity?.enabled) {
+    const complexityKey = complexity as keyof typeof byComplexity;
+    const raw = byComplexity[complexityKey];
+    if (typeof raw === "string") {
+      const ref = parseModelRef(raw, defaultProvider);
+      if (ref) return { ref, reason: "complexity" };
+    }
+  }
+
+  // 3. Default model
+  const defaultModel = defaults.model;
+  const defaultRaw =
+    typeof defaultModel === "string" ? defaultModel : (defaultModel?.primary ?? DEFAULT_MODEL);
+  const ref =
+    parseModelRef(defaultRaw, defaultProvider) ?? { provider: defaultProvider, model: DEFAULT_MODEL };
+  return { ref, reason: "default" };
 }
