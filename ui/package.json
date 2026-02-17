@@ -4,12 +4,9 @@
   "type": "module",
   "scripts": {
     "build": "astro build",
-    "build:vite": "vite build",
     "check": "astro check",
     "dev": "astro dev",
-    "dev:vite": "vite",
     "preview": "astro preview",
-    "preview:vite": "vite preview",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
