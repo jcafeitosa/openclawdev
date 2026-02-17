@@ -1,9 +1,4 @@
 import fs from "node:fs/promises";
-import type {
-  CommandHandler,
-  CommandHandlerResult,
-  HandleCommandsParams,
-} from "./commands-types.js";
 import { logVerbose } from "../../globals.js";
 import { createInternalHookEvent, triggerInternalHook } from "../../hooks/internal-hooks.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
@@ -12,20 +7,27 @@ import { shouldHandleTextCommands } from "../commands-registry.js";
 import { handleAllowlistCommand } from "./commands-allowlist.js";
 import { handleApproveCommand } from "./commands-approve.js";
 import { handleBashCommand } from "./commands-bash.js";
+import { handleBookmarkCreateCommand, handleBookmarkListCommand } from "./commands-bookmarks.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
+import { handleCopyCommand } from "./commands-copy.js";
 import { handleFastCommand } from "./commands-fast.js";
+import { handleForkCommand } from "./commands-fork.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
+  handleExportSessionCommand,
   handleHelpCommand,
   handleStatusCommand,
   handleWhoamiCommand,
 } from "./commands-info.js";
 import { handleInitCommand } from "./commands-init.js";
+import { handleMeshCommand } from "./commands-mesh.js";
 import { handleModelsCommand } from "./commands-models.js";
 import { handlePlanCommand } from "./commands-plan.js";
 import { handlePluginCommand } from "./commands-plugin.js";
+import { handleReloadCommand } from "./commands-reload.js";
+import { handleSessionNameCommand } from "./commands-session-name.js";
 import {
   handleAbortTrigger,
   handleActivationCommand,
@@ -34,8 +36,15 @@ import {
   handleStopCommand,
   handleUsageCommand,
 } from "./commands-session.js";
+import { handleShareSessionCommand } from "./commands-share-session.js";
 import { handleSubagentsCommand } from "./commands-subagents.js";
+import { handleTemplateExpansion, handleTemplatesCommand } from "./commands-templates.js";
 import { handleTtsCommands } from "./commands-tts.js";
+import type {
+  CommandHandler,
+  CommandHandlerResult,
+  HandleCommandsParams,
+} from "./commands-types.js";
 import { routeReply } from "./route-reply.js";
 
 let HANDLERS: CommandHandler[] | null = null;
@@ -51,14 +60,14 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleUsageCommand,
       handleRestartCommand,
       handleTtsCommands,
-      handleFastCommand,
-      handleInitCommand,
       handleHelpCommand,
       handleCommandsListCommand,
       handleStatusCommand,
+      handleMeshCommand,
       handleAllowlistCommand,
       handleApproveCommand,
       handleContextCommand,
+      handleExportSessionCommand,
       handleWhoamiCommand,
       handleSubagentsCommand,
       handleConfigCommand,
@@ -66,8 +75,21 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleModelsCommand,
       handleStopCommand,
       handleCompactCommand,
+      handleBookmarkCreateCommand,
+      handleBookmarkListCommand,
       handleAbortTrigger,
+      handleFastCommand,
       handlePlanCommand,
+      handleInitCommand,
+      handleShareSessionCommand,
+      handleSessionNameCommand,
+      handleCopyCommand,
+      handleReloadCommand,
+      handleForkCommand,
+      // Template expansion must come after all built-in command handlers so
+      // it only fires when no other handler claims the slash command.
+      handleTemplatesCommand,
+      handleTemplateExpansion,
     ];
   }
   const resetMatch = params.command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);

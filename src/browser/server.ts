@@ -1,6 +1,5 @@
 import type { Server } from "node:http";
 import express from "express";
-import type { BrowserRouteRegistrar } from "./routes/types.js";
 import { loadConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { resolveBrowserConfig, resolveProfile } from "./config.js";
@@ -8,6 +7,7 @@ import { ensureBrowserControlAuth, resolveBrowserControlAuth } from "./control-a
 import { ensureChromeExtensionRelayServer } from "./extension-relay.js";
 import { isPwAiLoaded } from "./pw-ai-state.js";
 import { registerBrowserRoutes } from "./routes/index.js";
+import type { BrowserRouteRegistrar } from "./routes/types.js";
 import {
   type BrowserServerState,
   createBrowserRouteContext,
@@ -19,8 +19,14 @@ import {
 } from "./server-middleware.js";
 
 let state: BrowserServerState | null = null;
+let currentBrowserAuth: { token?: string; password?: string } = {};
 const log = createSubsystemLogger("browser");
 const logServer = log.child("server");
+
+/** Returns the active browser control server auth config (useful for tests). */
+export function getBrowserControlServerAuth(): { token?: string; password?: string } {
+  return currentBrowserAuth;
+}
 
 export async function startBrowserControlServerFromConfig(): Promise<BrowserServerState | null> {
   if (state) {
@@ -43,6 +49,9 @@ export async function startBrowserControlServerFromConfig(): Promise<BrowserServ
   } catch (err) {
     logServer.warn(`failed to auto-configure browser auth: ${String(err)}`);
   }
+
+  // Persist for test helpers / introspection
+  currentBrowserAuth = browserAuth;
 
   const app = express();
   installBrowserCommonMiddleware(app);
@@ -123,6 +132,7 @@ export async function stopBrowserControlServer(): Promise<void> {
     });
   }
   state = null;
+  currentBrowserAuth = {};
 
   // Optional: avoid importing heavy Playwright bridge when this process never used it.
   if (isPwAiLoaded()) {

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.openclaw.memory-maintenance-weekly</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/juliocezar/Desenvolvimento/openclawdev/scripts/memory-maintenance.sh</string>
+        <string>weekly</string>
+    </array>
+    
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>1</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>/tmp/openclaw/memory-maintenance/weekly.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/tmp/openclaw/memory-maintenance/weekly.err</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/juliocezar/.bun/bin</string>
+    </dict>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/juliocezar/Desenvolvimento/openclawdev</string>
+    
+    <key>RunAtLoad</key>
+    <false/>
+    
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>

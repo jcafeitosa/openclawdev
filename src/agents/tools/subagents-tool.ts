@@ -1,9 +1,8 @@
-import { Type } from "@sinclair/typebox";
 import crypto from "node:crypto";
-import type { SessionEntry } from "../../config/sessions.js";
-import type { AnyAgentTool } from "./common.js";
+import { Type } from "@sinclair/typebox";
 import { clearSessionQueues } from "../../auto-reply/reply/queue.js";
 import { loadConfig } from "../../config/config.js";
+import type { SessionEntry } from "../../config/sessions.js";
 import { loadSessionStore, resolveStorePath, updateSessionStore } from "../../config/sessions.js";
 import { callGateway } from "../../gateway/call.js";
 import { logVerbose } from "../../globals.js";
@@ -21,7 +20,6 @@ import {
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
 import { abortEmbeddedPiRun } from "../pi-embedded.js";
-import { onProgress, aggregateProgress, type ProgressEvent } from "../progress-stream.js";
 import { optionalStringEnum } from "../schema/typebox.js";
 import { getSubagentDepthFromSessionStore } from "../subagent-depth.js";
 import {
@@ -32,10 +30,11 @@ import {
   replaceSubagentRunAfterSteer,
   type SubagentRunRecord,
 } from "../subagent-registry.js";
+import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
 
-const SUBAGENT_ACTIONS = ["list", "kill", "steer", "progress"] as const;
+const SUBAGENT_ACTIONS = ["list", "kill", "steer"] as const;
 type SubagentAction = (typeof SUBAGENT_ACTIONS)[number];
 
 const DEFAULT_RECENT_MINUTES = 30;
@@ -51,7 +50,6 @@ const SubagentsToolSchema = Type.Object({
   target: Type.Optional(Type.String()),
   message: Type.Optional(Type.String()),
   recentMinutes: Type.Optional(Type.Number({ minimum: 1 })),
-  listenDurationMs: Type.Optional(Type.Number({ minimum: 100 })),
 });
 
 type SessionEntryResolution = {
@@ -415,71 +413,43 @@ export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAge
         const cache = new Map<string, Record<string, SessionEntry>>();
 
         let index = 1;
+        const buildListEntry = (entry: SubagentRunRecord, runtimeMs: number) => {
+          const sessionEntry = resolveSessionEntryForKey({
+            cfg,
+            key: entry.childSessionKey,
+            cache,
+          }).entry;
+          const totalTokens = resolveTotalTokens(sessionEntry);
+          const usageText = formatTokenUsageDisplay(sessionEntry);
+          const status = resolveRunStatus(entry);
+          const runtime = formatDurationCompact(runtimeMs);
+          const label = truncateLine(resolveRunLabel(entry), 48);
+          const task = truncateLine(entry.task.trim(), 72);
+          const line = `${index}. ${label} (${resolveModelDisplay(sessionEntry, entry.model)}, ${runtime}${usageText ? `, ${usageText}` : ""}) ${status}${task.toLowerCase() !== label.toLowerCase() ? ` - ${task}` : ""}`;
+          const baseView = {
+            index,
+            runId: entry.runId,
+            sessionKey: entry.childSessionKey,
+            label,
+            task,
+            status,
+            runtime,
+            runtimeMs,
+            model: resolveModelRef(sessionEntry) || entry.model,
+            totalTokens,
+            startedAt: entry.startedAt,
+          };
+          index += 1;
+          return { line, view: entry.endedAt ? { ...baseView, endedAt: entry.endedAt } : baseView };
+        };
         const active = runs
           .filter((entry) => !entry.endedAt)
-          .map((entry) => {
-            const sessionEntry = resolveSessionEntryForKey({
-              cfg,
-              key: entry.childSessionKey,
-              cache,
-            }).entry;
-            const totalTokens = resolveTotalTokens(sessionEntry);
-            const usageText = formatTokenUsageDisplay(sessionEntry);
-            const status = resolveRunStatus(entry);
-            const runtime = formatDurationCompact(now - (entry.startedAt ?? entry.createdAt));
-            const label = truncateLine(resolveRunLabel(entry), 48);
-            const task = truncateLine(entry.task.trim(), 72);
-            const line = `${index}. ${label} (${resolveModelDisplay(sessionEntry, entry.model)}, ${runtime}${usageText ? `, ${usageText}` : ""}) ${status}${task.toLowerCase() !== label.toLowerCase() ? ` - ${task}` : ""}`;
-            const view = {
-              index,
-              runId: entry.runId,
-              sessionKey: entry.childSessionKey,
-              label,
-              task,
-              status,
-              runtime,
-              runtimeMs: now - (entry.startedAt ?? entry.createdAt),
-              model: resolveModelRef(sessionEntry) || entry.model,
-              totalTokens,
-              startedAt: entry.startedAt,
-            };
-            index += 1;
-            return { line, view };
-          });
+          .map((entry) => buildListEntry(entry, now - (entry.startedAt ?? entry.createdAt)));
         const recent = runs
           .filter((entry) => !!entry.endedAt && (entry.endedAt ?? 0) >= recentCutoff)
-          .map((entry) => {
-            const sessionEntry = resolveSessionEntryForKey({
-              cfg,
-              key: entry.childSessionKey,
-              cache,
-            }).entry;
-            const totalTokens = resolveTotalTokens(sessionEntry);
-            const usageText = formatTokenUsageDisplay(sessionEntry);
-            const status = resolveRunStatus(entry);
-            const runtime = formatDurationCompact(
-              (entry.endedAt ?? now) - (entry.startedAt ?? entry.createdAt),
-            );
-            const label = truncateLine(resolveRunLabel(entry), 48);
-            const task = truncateLine(entry.task.trim(), 72);
-            const line = `${index}. ${label} (${resolveModelDisplay(sessionEntry, entry.model)}, ${runtime}${usageText ? `, ${usageText}` : ""}) ${status}${task.toLowerCase() !== label.toLowerCase() ? ` - ${task}` : ""}`;
-            const view = {
-              index,
-              runId: entry.runId,
-              sessionKey: entry.childSessionKey,
-              label,
-              task,
-              status,
-              runtime,
-              runtimeMs: (entry.endedAt ?? now) - (entry.startedAt ?? entry.createdAt),
-              model: resolveModelRef(sessionEntry) || entry.model,
-              totalTokens,
-              startedAt: entry.startedAt,
-              endedAt: entry.endedAt,
-            };
-            index += 1;
-            return { line, view };
-          });
+          .map((entry) =>
+            buildListEntry(entry, (entry.endedAt ?? now) - (entry.startedAt ?? entry.createdAt)),
+          );
 
         const text = buildListText({ active, recent, recentMinutes });
         return jsonResult({
@@ -748,38 +718,6 @@ export function createSubagentsTool(opts?: { agentSessionKey?: string }): AnyAge
           text: `steered ${resolveRunLabel(resolved.entry)}.`,
         });
       }
-
-      if (action === "progress") {
-        const listenDurationMs = readNumberParam(params, "listenDurationMs") ?? 5000;
-        const maxDuration = Math.min(Math.max(100, Math.floor(listenDurationMs)), 30000);
-
-        const progressEvents: ProgressEvent[] = [];
-        const unsubscribe = onProgress(requester.requesterSessionKey, (event) => {
-          progressEvents.push(event);
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, maxDuration));
-        unsubscribe();
-
-        const aggregated = aggregateProgress(progressEvents);
-        const activeCount = runs.filter((entry) => !entry.endedAt).length;
-
-        return jsonResult({
-          status: "ok",
-          action: "progress",
-          requesterSessionKey: requester.requesterSessionKey,
-          listenedMs: maxDuration,
-          eventsCollected: progressEvents.length,
-          activeSubagents: activeCount,
-          aggregated: {
-            overall: aggregated.overall,
-            summary: aggregated.summary,
-            byAgent: aggregated.byAgent,
-          },
-          events: progressEvents.slice(-10), // Last 10 events for brevity
-        });
-      }
-
       return jsonResult({
         status: "error",
         error: "Unsupported action.",

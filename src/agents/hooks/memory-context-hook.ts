@@ -61,6 +61,11 @@ export function shouldUseMemoryContext(params: {
     return false;
   }
 
+  // Skip for temporary sub-agents (optional, can be changed)
+  // if (params.isSubagent) {
+  //   return false;
+  // }
+
   // Default: use memory
   return true;
 }

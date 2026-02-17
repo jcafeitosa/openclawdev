@@ -11,13 +11,19 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js";
 import type { AnyAgentTool } from "../tools/common.js";
-import type { McpServerConfig, McpConfig, McpToolDefinition } from "./types.js";
 import { mcpToolsToAgentTools } from "./tool-bridge.js";
+import type { McpServerConfig, McpConfig, McpToolDefinition } from "./types.js";
 
 interface ActiveClient {
   client: Client;
-  transport: StdioClientTransport | SSEClientTransport;
+  transport:
+    | StdioClientTransport
+    | SSEClientTransport
+    | StreamableHTTPClientTransport
+    | WebSocketClientTransport;
   tools: McpToolDefinition[];
 }
 
@@ -52,7 +58,11 @@ export class McpClientManager {
   }
 
   private async connectServer(name: string, config: McpServerConfig): Promise<void> {
-    let transport: StdioClientTransport | SSEClientTransport;
+    let transport:
+      | StdioClientTransport
+      | SSEClientTransport
+      | StreamableHTTPClientTransport
+      | WebSocketClientTransport;
 
     if (config.type === "stdio" || !config.type) {
       if (!config.command) {
@@ -68,15 +78,32 @@ export class McpClientManager {
       transport = new StdioClientTransport({
         command: config.command,
         args: config.args ?? [],
-        env: { ...cleanEnv, ...(config.env ?? {}) },
+        env: { ...cleanEnv, ...config.env },
       });
     } else if (config.type === "sse") {
       if (!config.url) {
         throw new Error(`MCP server "${name}": url required for SSE transport`);
       }
       transport = new SSEClientTransport(new URL(config.url));
+    } else if (config.type === "http") {
+      if (!config.url) {
+        throw new Error(`MCP server "${name}": url required for HTTP (Streamable HTTP) transport`);
+      }
+      const headers: Record<string, string> = {};
+      if (config.env?.GITHUB_PERSONAL_ACCESS_TOKEN) {
+        headers["Authorization"] = `Bearer ${config.env.GITHUB_PERSONAL_ACCESS_TOKEN}`;
+      }
+      transport = new StreamableHTTPClientTransport(new URL(config.url), {
+        requestInit: Object.keys(headers).length > 0 ? { headers } : undefined,
+      });
+    } else if (config.type === "websocket") {
+      if (!config.url) {
+        throw new Error(`MCP server "${name}": url required for WebSocket transport`);
+      }
+      transport = new WebSocketClientTransport(new URL(config.url));
     } else {
-      throw new Error(`MCP server "${name}": unsupported transport type "${config.type}"`);
+      const _exhaustiveCheck: never = config.type;
+      throw new Error(`MCP server "${name}": unsupported transport type`);
     }
 
     const client = new Client({ name: "openclaw", version: "1.0.0" }, { capabilities: {} });
@@ -105,7 +132,9 @@ export class McpClientManager {
     const allTools: AnyAgentTool[] = [];
 
     for (const [serverName, active] of this.clients.entries()) {
-      if (active.tools.length === 0) continue;
+      if (active.tools.length === 0) {
+        continue;
+      }
 
       const callFn = async (
         _serverName: string,

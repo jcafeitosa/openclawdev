@@ -1,11 +1,11 @@
+import { listChannelDocks } from "../channels/dock.js";
+import { getActivePluginRegistry } from "../plugins/runtime.js";
+import { COMMAND_ARG_FORMATTERS } from "./commands-args.js";
 import type {
   ChatCommandDefinition,
   CommandCategory,
   CommandScope,
 } from "./commands-registry.types.js";
-import { listChannelDocks } from "../channels/dock.js";
-import { getActivePluginRegistry } from "../plugins/runtime.js";
-import { COMMAND_ARG_FORMATTERS } from "./commands-args.js";
 import { listThinkingLevels } from "./thinking.js";
 
 type DefineChatCommandInput = {
@@ -173,6 +173,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "status",
     }),
     defineChatCommand({
+      key: "mesh",
+      nativeName: "mesh",
+      description: "Plan and run multi-step workflows.",
+      textAlias: "/mesh",
+      category: "tools",
+      argsParsing: "none",
+      acceptsArgs: true,
+    }),
+    defineChatCommand({
       key: "allowlist",
       description: "List/add/remove allowlist entries.",
       textAlias: "/allowlist",
@@ -195,6 +204,22 @@ function buildChatCommands(): ChatCommandDefinition[] {
       textAlias: "/context",
       acceptsArgs: true,
       category: "status",
+    }),
+    defineChatCommand({
+      key: "export-session",
+      nativeName: "export_session",
+      description: "Export current session to HTML file with full system prompt.",
+      textAliases: ["/export-session", "/export"],
+      acceptsArgs: true,
+      category: "status",
+      args: [
+        {
+          name: "path",
+          description: "Output path (default: workspace)",
+          type: "string",
+          required: false,
+        },
+      ],
     }),
     defineChatCommand({
       key: "tts",
@@ -249,15 +274,15 @@ function buildChatCommands(): ChatCommandDefinition[] {
     defineChatCommand({
       key: "subagents",
       nativeName: "subagents",
-      description: "List, kill, log, or steer subagent runs for this session.",
+      description: "List, kill, log, spawn, or steer subagent runs for this session.",
       textAlias: "/subagents",
       category: "management",
       args: [
         {
           name: "action",
-          description: "list | kill | log | info | send | steer",
+          description: "list | kill | log | info | send | steer | spawn",
           type: "string",
-          choices: ["list", "kill", "log", "info", "send", "steer"],
+          choices: ["list", "kill", "log", "info", "send", "steer", "spawn"],
         },
         {
           name: "target",
@@ -443,12 +468,6 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "session",
     }),
     defineChatCommand({
-      key: "init",
-      description: "Initialize CLAUDE.md memory file in the workspace.",
-      textAlias: "/init",
-      category: "session",
-    }),
-    defineChatCommand({
       key: "compact",
       nativeName: "compact",
       description: "Compact the session context.",
@@ -462,6 +481,27 @@ function buildChatCommands(): ChatCommandDefinition[] {
           captureRemaining: true,
         },
       ],
+    }),
+    defineChatCommand({
+      key: "bookmark",
+      description: "Bookmark the current conversation point.",
+      textAlias: "/bookmark",
+      acceptsArgs: true,
+      category: "session",
+      args: [
+        {
+          name: "label",
+          description: "Optional label for the bookmark",
+          type: "string",
+          captureRemaining: true,
+        },
+      ],
+    }),
+    defineChatCommand({
+      key: "bookmarks",
+      description: "List all bookmarks for the current session.",
+      textAlias: "/bookmarks",
+      category: "session",
     }),
     defineChatCommand({
       key: "think",
@@ -535,12 +575,31 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "options",
       args: [
         {
-          name: "options",
-          description: "host=... security=... ask=... node=...",
+          name: "host",
+          description: "sandbox, gateway, or node",
+          type: "string",
+          choices: ["sandbox", "gateway", "node"],
+        },
+        {
+          name: "security",
+          description: "deny, allowlist, or full",
+          type: "string",
+          choices: ["deny", "allowlist", "full"],
+        },
+        {
+          name: "ask",
+          description: "off, on-miss, or always",
+          type: "string",
+          choices: ["off", "on-miss", "always"],
+        },
+        {
+          name: "node",
+          description: "Node id or name",
           type: "string",
         },
       ],
       argsParsing: "none",
+      formatArgs: COMMAND_ARG_FORMATTERS.exec,
     }),
     defineChatCommand({
       key: "model",
@@ -614,23 +673,56 @@ function buildChatCommands(): ChatCommandDefinition[] {
       ],
     }),
     defineChatCommand({
-      key: "fast",
-      nativeName: "fast",
-      description: "Toggle fast mode for faster responses.",
-      textAlias: "/fast",
-      category: "options",
+      key: "share",
+      description: "Share current session as a public GitHub Gist.",
+      textAlias: "/share",
+      category: "session",
     }),
     defineChatCommand({
-      key: "plan",
-      description: "Manage execution plans.",
-      textAlias: "/plan",
+      key: "templates",
+      description: "List available prompt templates.",
+      textAlias: "/templates",
+      category: "session",
+    }),
+    defineChatCommand({
+      key: "name",
+      description: "Get or set the session display name.",
+      textAlias: "/name",
+      category: "session",
       acceptsArgs: true,
-      category: "tools",
       args: [
         {
-          name: "command",
-          description: "list or blank for list",
+          name: "name",
+          description: "Display name for this session",
           type: "string",
+          captureRemaining: true,
+        },
+      ],
+    }),
+    defineChatCommand({
+      key: "copy",
+      description: "Copy the last assistant message to clipboard.",
+      textAlias: "/copy",
+      category: "session",
+    }),
+    defineChatCommand({
+      key: "reload",
+      description: "Reload skills, extensions, and templates.",
+      textAlias: "/reload",
+      category: "tools",
+    }),
+    defineChatCommand({
+      key: "fork",
+      description: "Record a fork of the current session.",
+      textAlias: "/fork",
+      category: "session",
+      acceptsArgs: true,
+      args: [
+        {
+          name: "name",
+          description: "Optional name for this fork",
+          type: "string",
+          captureRemaining: true,
         },
       ],
     }),

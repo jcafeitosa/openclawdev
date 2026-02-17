@@ -9,9 +9,6 @@
  */
 
 import type { OpenClawConfig } from "../config/config.js";
-import type { ModelRef } from "../providers/core/types.js";
-import type { ModelCatalogEntry } from "./model-catalog.js";
-import type { TaskComplexity, TaskType } from "./task-classifier.js";
 import {
   findCapableModels,
   inferModelCapabilities,
@@ -20,8 +17,11 @@ import {
 } from "../providers/core/capabilities.js";
 import { isProviderHealthy } from "../providers/core/health.js";
 import { parseModelRef } from "../providers/core/normalization.js";
+import type { ModelRef } from "../providers/core/types.js";
 import { resolveAgentConfig } from "./agent-scope.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
+import type { ModelCatalogEntry } from "./model-catalog.js";
+import type { TaskComplexity, TaskType } from "./task-classifier.js";
 
 /**
  * Selection mode for models in a pool.
@@ -246,8 +246,9 @@ export function resolveModelFromPool(params: {
       return selectBestFitFromPool({ pool, catalog, context });
 
     case "agent-choice":
-      // For now, agent-choice falls back to best-fit
-      // TODO: Expose pool options to agent via tool
+      // Agent can choose from pool options via agent UI/tool (future: implement model-pool-options tool)
+      // For now, falls back to best-fit selection
+      // FUTURE: Expose pool options to agent via dedicated tool for manual selection
       return selectBestFitFromPool({ pool, catalog, context });
 
     default:

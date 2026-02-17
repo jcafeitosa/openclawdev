@@ -1,13 +1,13 @@
 import fs from "node:fs";
-import type { OpenClawConfig } from "../config/config.js";
 import { listAgentIds, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { buildWorkspaceSkillCommandSpecs, type SkillCommandSpec } from "../agents/skills.js";
+import type { OpenClawConfig } from "../config/config.js";
+
+export type { SkillCommandSpec };
 import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
 import { listChatCommands } from "./commands-registry.js";
 
-export type { SkillCommandSpec } from "../agents/skills.js";
-
-function resolveReservedCommandNames(): Set<string> {
+export function listReservedChatSlashCommandNames(extraNames: string[] = []): Set<string> {
   const reserved = new Set<string>();
   for (const command of listChatCommands()) {
     if (command.nativeName) {
@@ -19,6 +19,12 @@ function resolveReservedCommandNames(): Set<string> {
         continue;
       }
       reserved.add(trimmed.slice(1).toLowerCase());
+    }
+  }
+  for (const name of extraNames) {
+    const trimmed = name.trim().toLowerCase();
+    if (trimmed) {
+      reserved.add(trimmed);
     }
   }
   return reserved;
@@ -33,17 +39,16 @@ export function listSkillCommandsForWorkspace(params: {
     config: params.cfg,
     skillFilter: params.skillFilter,
     eligibility: { remote: getRemoteSkillEligibility() },
-    reservedNames: resolveReservedCommandNames(),
+    reservedNames: listReservedChatSlashCommandNames(),
   });
 }
 
 export function listSkillCommandsForAgents(params: {
   cfg: OpenClawConfig;
   agentIds?: string[];
-  /** When true, deduplicate commands by name (first occurrence wins). */
   uniqueOnly?: boolean;
 }): SkillCommandSpec[] {
-  const used = resolveReservedCommandNames();
+  const used = listReservedChatSlashCommandNames();
   const entries: SkillCommandSpec[] = [];
   const agentIds = params.agentIds ?? listAgentIds(params.cfg);
   // Track visited workspace dirs to avoid registering duplicate commands
@@ -69,17 +74,6 @@ export function listSkillCommandsForAgents(params: {
       used.add(command.name.toLowerCase());
       entries.push(command);
     }
-  }
-  if (params.uniqueOnly) {
-    const seen = new Set<string>();
-    return entries.filter((entry) => {
-      const key = entry.name.toLowerCase();
-      if (seen.has(key)) {
-        return false;
-      }
-      seen.add(key);
-      return true;
-    });
   }
   return entries;
 }

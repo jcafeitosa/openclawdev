@@ -1,38 +1,28 @@
+import { createOpenClawTools } from "../../agents/openclaw-tools.js";
 import type { SkillCommandSpec } from "../../agents/skills.js";
+import { getChannelDock } from "../../channels/dock.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { SessionEntry } from "../../config/sessions.js";
+import { logVerbose } from "../../globals.js";
+import { resolveGatewayMessageChannel } from "../../utils/message-channel.js";
+import {
+  listReservedChatSlashCommandNames,
+  listSkillCommandsForWorkspace,
+  resolveSkillCommandInvocation,
+} from "../skill-commands.js";
 import type { MsgContext, TemplateContext } from "../templating.js";
 import type { ElevatedLevel, ReasoningLevel, ThinkLevel, VerboseLevel } from "../thinking.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
-import type { InlineDirectives } from "./directive-handling.js";
-import type { createModelSelectionState } from "./model-selection.js";
-import type { TypingController } from "./typing.js";
-import { createOpenClawTools } from "../../agents/openclaw-tools.js";
-import { getChannelDock } from "../../channels/dock.js";
-import { logVerbose } from "../../globals.js";
-import { resolveGatewayMessageChannel } from "../../utils/message-channel.js";
-import { listChatCommands } from "../commands-registry.js";
-import { listSkillCommandsForWorkspace, resolveSkillCommandInvocation } from "../skill-commands.js";
 import { getAbortMemory } from "./abort.js";
 import { buildStatusReply, handleCommands } from "./commands.js";
+import type { InlineDirectives } from "./directive-handling.js";
 import { isDirectiveOnly } from "./directive-handling.js";
+import type { createModelSelectionState } from "./model-selection.js";
 import { extractInlineSimpleCommand } from "./reply-inline.js";
+import type { TypingController } from "./typing.js";
 
 const builtinSlashCommands = (() => {
-  const reserved = new Set<string>();
-  for (const command of listChatCommands()) {
-    if (command.nativeName) {
-      reserved.add(command.nativeName.toLowerCase());
-    }
-    for (const alias of command.textAliases) {
-      const trimmed = alias.trim();
-      if (!trimmed.startsWith("/")) {
-        continue;
-      }
-      reserved.add(trimmed.slice(1).toLowerCase());
-    }
-  }
-  for (const name of [
+  return listReservedChatSlashCommandNames([
     "think",
     "verbose",
     "reasoning",
@@ -41,10 +31,7 @@ const builtinSlashCommands = (() => {
     "model",
     "status",
     "queue",
-  ]) {
-    reserved.add(name);
-  }
-  return reserved;
+  ]);
 })();
 
 function resolveSlashCommandName(commandBodyNormalized: string): string | null {
@@ -393,6 +380,18 @@ export async function handleInlineActions(params: {
   if (!commandResult.shouldContinue) {
     typing.cleanup();
     return { kind: "reply", reply: commandResult.reply };
+  }
+
+  // Template expansion: replace the inbound body so the agent receives the
+  // template content instead of the raw "/template-name" slash command.
+  if (commandResult.expandedBody !== undefined) {
+    const expanded = commandResult.expandedBody;
+    ctx.Body = expanded;
+    ctx.BodyForAgent = expanded;
+    sessionCtx.Body = expanded;
+    sessionCtx.BodyForAgent = expanded;
+    sessionCtx.BodyStripped = expanded;
+    cleanedBody = expanded;
   }
 
   return {

@@ -1,6 +1,7 @@
 import { loadConfig } from "../config/config.js";
 import { callGateway } from "../gateway/call.js";
 import { onAgentEvent } from "../infra/agent-events.js";
+import { defaultRuntime } from "../runtime.js";
 import { type DeliveryContext, normalizeDeliveryContext } from "../utils/delivery-context.js";
 import { resetAnnounceQueuesForTests } from "./subagent-announce-queue.js";
 import { runSubagentAnnounceFlow, type SubagentRunOutcome } from "./subagent-announce.js";
@@ -11,12 +12,12 @@ import {
 import { resolveAgentTimeoutMs } from "./timeout.js";
 
 export type SubagentUsage = {
-  inputTokens?: number;
-  outputTokens?: number;
-  toolCalls?: number;
+  inputTokens: number;
+  outputTokens: number;
+  toolCalls: number;
 };
 
-export type SubagentProgress = {
+export type SubagentProgressRecord = {
   percent: number;
   status: string;
   detail?: string;
@@ -42,8 +43,14 @@ export type SubagentRunRecord = {
   cleanupCompletedAt?: number;
   cleanupHandled?: boolean;
   suppressAnnounceReason?: "steer-restart" | "killed";
+  /** Number of times announce delivery has been attempted and returned false (deferred). */
+  announceRetryCount?: number;
+  /** Timestamp of the last announce retry attempt (for backoff). */
+  lastAnnounceRetryAt?: number;
+  /** Real-time progress reported by the subagent. */
+  progress?: SubagentProgressRecord;
+  /** Token and tool usage accumulated during the run. */
   usage?: SubagentUsage;
-  progress?: SubagentProgress;
 };
 
 const subagentRuns = new Map<string, SubagentRunRecord>();
@@ -53,6 +60,27 @@ let listenerStop: (() => void) | null = null;
 // Use var to avoid TDZ when init runs across circular imports during bootstrap.
 var restoreAttempted = false;
 const SUBAGENT_ANNOUNCE_TIMEOUT_MS = 120_000;
+/**
+ * Maximum number of announce delivery attempts before giving up.
+ * Prevents infinite retry loops when `runSubagentAnnounceFlow` repeatedly
+ * returns `false` due to stale state or transient conditions (#18264).
+ */
+const MAX_ANNOUNCE_RETRY_COUNT = 3;
+/**
+ * Announce entries older than this are force-expired even if delivery never
+ * succeeded. Guards against stale registry entries surviving gateway restarts.
+ */
+const ANNOUNCE_EXPIRY_MS = 5 * 60_000; // 5 minutes
+
+function logAnnounceGiveUp(entry: SubagentRunRecord, reason: "retry-limit" | "expiry") {
+  const retryCount = entry.announceRetryCount ?? 0;
+  const endedAgoMs =
+    typeof entry.endedAt === "number" ? Math.max(0, Date.now() - entry.endedAt) : undefined;
+  const endedAgoLabel = endedAgoMs != null ? `${Math.round(endedAgoMs / 1000)}s` : "n/a";
+  defaultRuntime.log(
+    `[warn] Subagent announce give up (${reason}) run=${entry.runId} child=${entry.childSessionKey} requester=${entry.requesterSessionKey} retries=${retryCount} endedAgo=${endedAgoLabel}`,
+  );
+}
 
 function persistSubagentRuns() {
   try {
@@ -102,6 +130,19 @@ function resumeSubagentRun(runId: string) {
     return;
   }
   if (entry.cleanupCompletedAt) {
+    return;
+  }
+  // Skip entries that have exhausted their retry budget or expired (#18264).
+  if ((entry.announceRetryCount ?? 0) >= MAX_ANNOUNCE_RETRY_COUNT) {
+    logAnnounceGiveUp(entry, "retry-limit");
+    entry.cleanupCompletedAt = Date.now();
+    persistSubagentRuns();
+    return;
+  }
+  if (typeof entry.endedAt === "number" && Date.now() - entry.endedAt > ANNOUNCE_EXPIRY_MS) {
+    logAnnounceGiveUp(entry, "expiry");
+    entry.cleanupCompletedAt = Date.now();
+    persistSubagentRuns();
     return;
   }
 
@@ -271,6 +312,22 @@ function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didA
     return;
   }
   if (!didAnnounce) {
+    const now = Date.now();
+    const retryCount = (entry.announceRetryCount ?? 0) + 1;
+    entry.announceRetryCount = retryCount;
+    entry.lastAnnounceRetryAt = now;
+
+    // Check if the announce has exceeded retry limits or expired (#18264).
+    const endedAgo = typeof entry.endedAt === "number" ? now - entry.endedAt : 0;
+    if (retryCount >= MAX_ANNOUNCE_RETRY_COUNT || endedAgo > ANNOUNCE_EXPIRY_MS) {
+      // Give up: mark as completed to break the infinite retry loop.
+      logAnnounceGiveUp(entry, retryCount >= MAX_ANNOUNCE_RETRY_COUNT ? "retry-limit" : "expiry");
+      entry.cleanupCompletedAt = now;
+      persistSubagentRuns();
+      retryDeferredCompletedAnnounces(runId);
+      return;
+    }
+
     // Allow retry on the next wake if announce was deferred or failed.
     entry.cleanupHandled = false;
     resumedRuns.delete(runId);
@@ -289,6 +346,7 @@ function finalizeSubagentCleanup(runId: string, cleanup: "delete" | "keep", didA
 }
 
 function retryDeferredCompletedAnnounces(excludeRunId?: string) {
+  const now = Date.now();
   for (const [runId, entry] of subagentRuns.entries()) {
     if (excludeRunId && runId === excludeRunId) {
       continue;
@@ -300,6 +358,14 @@ function retryDeferredCompletedAnnounces(excludeRunId?: string) {
       continue;
     }
     if (suppressAnnounceForSteerRestart(entry)) {
+      continue;
+    }
+    // Force-expire announces that have been pending too long (#18264).
+    const endedAgo = now - (entry.endedAt ?? now);
+    if (endedAgo > ANNOUNCE_EXPIRY_MS) {
+      logAnnounceGiveUp(entry, "expiry");
+      entry.cleanupCompletedAt = now;
+      persistSubagentRuns();
       continue;
     }
     resumedRuns.delete(runId);
@@ -402,6 +468,8 @@ export function replaceSubagentRunAfterSteer(params: {
     cleanupCompletedAt: undefined,
     cleanupHandled: false,
     suppressAnnounceReason: undefined,
+    announceRetryCount: undefined,
+    lastAnnounceRetryAt: undefined,
     archiveAtMs,
     runTimeoutSeconds,
   };
@@ -517,6 +585,31 @@ async function waitForSubagentCompletion(runId: string, waitTimeoutMs: number) {
   } catch {
     // ignore
   }
+}
+
+export function getSubagentRunById(runId: string): SubagentRunRecord | undefined {
+  const key = runId.trim();
+  if (!key) {
+    return undefined;
+  }
+  return subagentRuns.get(key);
+}
+
+export function getSubagentRunBySessionKey(childSessionKey: string): SubagentRunRecord | undefined {
+  const key = childSessionKey.trim();
+  if (!key) {
+    return undefined;
+  }
+  let best: SubagentRunRecord | undefined;
+  for (const entry of subagentRuns.values()) {
+    if (entry.childSessionKey !== key) {
+      continue;
+    }
+    if (!best || entry.createdAt > best.createdAt) {
+      best = entry;
+    }
+  }
+  return best;
 }
 
 export function resetSubagentRegistryForTests(opts?: { persist?: boolean }) {
@@ -673,11 +766,6 @@ export function listSubagentRunsForRequester(requesterSessionKey: string): Subag
   return [...subagentRuns.values()].filter((entry) => entry.requesterSessionKey === key);
 }
 
-/** Return all tracked subagent runs (merges in-memory + disk state). */
-export function listAllSubagentRuns(): SubagentRunRecord[] {
-  return [...getRunsSnapshotForRead().values()];
-}
-
 export function countActiveRunsForSession(requesterSessionKey: string): number {
   const key = requesterSessionKey.trim();
   if (!key) {
@@ -758,27 +846,89 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
   return descendants;
 }
 
-export function getSubagentRunBySessionKey(sessionKey: string): SubagentRunRecord | undefined {
-  const runIds = findRunIdsByChildSessionKey(sessionKey);
-  if (runIds.length === 0) {
-    return undefined;
-  }
-  return subagentRuns.get(runIds[0]);
+export function listAllSubagentRuns(): SubagentRunRecord[] {
+  return [...getRunsSnapshotForRead().values()];
 }
 
-export function getSubagentRunById(runId: string): SubagentRunRecord | undefined {
-  return subagentRuns.get(runId);
-}
+// --- Continuity Watchdog ---
+
+/** Track progress updates per subagent run. */
+type SubagentProgress = {
+  percent: number;
+  status: string;
+  updatedAt: number;
+};
+
+const progressMap = new Map<string, SubagentProgress>();
+const lastNudgeMap = new Map<string, number>();
+
+const WATCHDOG_STALL_THRESHOLD_MS = 5 * 60_000; // 5 minutes with no progress
+const WATCHDOG_NUDGE_COOLDOWN_MS = 5 * 60_000; // Don't nudge same run within 5 minutes
 
 export function updateSubagentProgress(
-  sessionKey: string,
-  progress: { percent: number; status: string; detail?: string },
-): void {
-  const runIds = findRunIdsByChildSessionKey(sessionKey);
-  for (const runId of runIds) {
-    const entry = subagentRuns.get(runId);
-    if (entry) {
-      entry.progress = { ...progress, lastUpdate: Date.now() };
+  runId: string,
+  update: { percent: number; status: string; detail?: string },
+) {
+  const now = Date.now();
+  progressMap.set(runId, {
+    percent: update.percent,
+    status: update.status,
+    updatedAt: now,
+  });
+  const entry = subagentRuns.get(runId);
+  if (entry) {
+    entry.progress = {
+      percent: update.percent,
+      status: update.status,
+      detail: update.detail,
+      lastUpdate: now,
+    };
+  }
+}
+
+/**
+ * Run the continuity watchdog: detects stalled subagents and injects a nudge
+ * message into their session to prompt progress.
+ */
+export async function runContinuityWatchdogForTests(now: number) {
+  for (const [runId, entry] of subagentRuns.entries()) {
+    // Skip completed runs.
+    if (entry.endedAt) {
+      continue;
+    }
+
+    const startedAt = entry.startedAt ?? entry.createdAt;
+    const elapsed = now - startedAt;
+    if (elapsed < WATCHDOG_STALL_THRESHOLD_MS) {
+      continue;
+    }
+
+    // Check for recent progress.
+    const progress = progressMap.get(runId);
+    if (progress && now - progress.updatedAt < WATCHDOG_STALL_THRESHOLD_MS) {
+      continue;
+    }
+
+    // Respect cooldown.
+    const lastNudge = lastNudgeMap.get(runId);
+    if (lastNudge && now - lastNudge < WATCHDOG_NUDGE_COOLDOWN_MS) {
+      continue;
+    }
+
+    // Nudge the stalled subagent.
+    lastNudgeMap.set(runId, now);
+    try {
+      await callGateway({
+        method: "chat.inject",
+        params: {
+          sessionKey: entry.childSessionKey,
+          message: `[Continuity check] Sua tarefa "${entry.task}" parece estar parada. Reporte status ou prossiga para a proxima tarefa. Se concluiu, solicite dispensa.`,
+          senderAgentId: entry.requesterDisplayKey,
+        },
+        timeoutMs: 5000,
+      });
+    } catch {
+      // best-effort
     }
   }
 }

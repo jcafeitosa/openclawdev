@@ -1,7 +1,7 @@
 import type { OpenClawConfig } from "../config/config.js";
-import type { FailoverReason } from "./pi-embedded-helpers.js";
 import {
   ensureAuthProfileStore,
+  getSoonestCooldownExpiry,
   isProfileInCooldown,
   resolveAuthProfileOrder,
 } from "./auth-profiles.js";
@@ -20,7 +20,96 @@ import {
   resolveConfiguredModelRef,
   resolveModelRefFromString,
 } from "./model-selection.js";
+import type { FailoverReason } from "./pi-embedded-helpers.js";
 import { isLikelyContextOverflowError } from "./pi-embedded-helpers.js";
+
+/* ---------------------------------------------------------------------------
+ * Per-model cooldown tracking (fork-only).
+ * ------------------------------------------------------------------------- */
+
+type ModelCooldownEntry = {
+  provider: string;
+  model: string;
+  key: string;
+  cooldownUntilMs: number;
+  reason: string;
+  failureCount: number;
+};
+
+export type ModelCooldownSnapshot = {
+  provider: string;
+  model: string;
+  key: string;
+  untilMs: number;
+  remainingMs: number;
+  failures: number;
+  reason: string;
+};
+
+const modelCooldowns = new Map<string, ModelCooldownEntry>();
+
+function makeModelCooldownKey(provider: string, model: string): string {
+  return `${provider}/${model}`;
+}
+
+export function isModelCoolingDown(
+  modelRef: { provider: string; model: string },
+  now?: number,
+): boolean {
+  const currentTime = now ?? Date.now();
+  const key = makeModelCooldownKey(modelRef.provider, modelRef.model);
+  const entry = modelCooldowns.get(key);
+  if (!entry) {
+    return false;
+  }
+  if (currentTime >= entry.cooldownUntilMs) {
+    modelCooldowns.delete(key);
+    return false;
+  }
+  return true;
+}
+
+export function setModelCooldown(params: {
+  provider: string;
+  model: string;
+  durationMs: number;
+  reason: string;
+  failureCount?: number;
+}): void {
+  const key = makeModelCooldownKey(params.provider, params.model);
+  modelCooldowns.set(key, {
+    provider: params.provider,
+    model: params.model,
+    key,
+    cooldownUntilMs: Date.now() + params.durationMs,
+    reason: params.reason,
+    failureCount: params.failureCount ?? 1,
+  });
+}
+
+export function getModelCooldownSnapshot(): ModelCooldownSnapshot[] {
+  const now = Date.now();
+  return [...modelCooldowns.values()]
+    .map((entry) => ({
+      provider: entry.provider,
+      model: entry.model,
+      key: entry.key,
+      untilMs: entry.cooldownUntilMs,
+      remainingMs: Math.max(0, entry.cooldownUntilMs - now),
+      failures: entry.failureCount,
+      reason: entry.reason,
+    }))
+    .filter((s) => s.remainingMs > 0);
+}
+
+/** Reset cooldown state for tests. */
+export function resetModelCooldownsForTests(): void {
+  modelCooldowns.clear();
+}
+
+/* ---------------------------------------------------------------------------
+ * Model fallback types and helpers.
+ * ------------------------------------------------------------------------- */
 
 type ModelCandidate = {
   provider: string;
@@ -217,6 +306,50 @@ function resolveFallbackCandidates(params: {
   return candidates;
 }
 
+const lastProbeAttempt = new Map<string, number>();
+const MIN_PROBE_INTERVAL_MS = 30_000; // 30 seconds between probes per key
+const PROBE_MARGIN_MS = 2 * 60 * 1000;
+const PROBE_SCOPE_DELIMITER = "::";
+
+function resolveProbeThrottleKey(provider: string, agentDir?: string): string {
+  const scope = String(agentDir ?? "").trim();
+  return scope ? `${scope}${PROBE_SCOPE_DELIMITER}${provider}` : provider;
+}
+
+function shouldProbePrimaryDuringCooldown(params: {
+  isPrimary: boolean;
+  hasFallbackCandidates: boolean;
+  now: number;
+  throttleKey: string;
+  authStore: ReturnType<typeof ensureAuthProfileStore>;
+  profileIds: string[];
+}): boolean {
+  if (!params.isPrimary || !params.hasFallbackCandidates) {
+    return false;
+  }
+
+  const lastProbe = lastProbeAttempt.get(params.throttleKey) ?? 0;
+  if (params.now - lastProbe < MIN_PROBE_INTERVAL_MS) {
+    return false;
+  }
+
+  const soonest = getSoonestCooldownExpiry(params.authStore, params.profileIds);
+  if (soonest === null || !Number.isFinite(soonest)) {
+    return true;
+  }
+
+  // Probe when cooldown already expired or within the configured margin.
+  return params.now >= soonest - PROBE_MARGIN_MS;
+}
+
+/** @internal – exposed for unit tests only */
+export const _probeThrottleInternals = {
+  lastProbeAttempt,
+  MIN_PROBE_INTERVAL_MS,
+  PROBE_MARGIN_MS,
+  resolveProbeThrottleKey,
+} as const;
+
 export async function runWithModelFallback<T>(params: {
   cfg: OpenClawConfig | undefined;
   provider: string;
@@ -239,6 +372,8 @@ export async function runWithModelFallback<T>(params: {
   const attempts: FallbackAttempt[] = [];
   let lastError: unknown;
 
+  const hasFallbackCandidates = candidates.length > 1;
+
   for (let i = 0; i < candidates.length; i += 1) {
     const candidate = candidates[i];
     if (authStore) {
@@ -250,14 +385,34 @@ export async function runWithModelFallback<T>(params: {
       const isAnyProfileAvailable = profileIds.some((id) => !isProfileInCooldown(authStore, id));
 
       if (profileIds.length > 0 && !isAnyProfileAvailable) {
-        // All profiles for this provider are in cooldown; skip without attempting
-        attempts.push({
-          provider: candidate.provider,
-          model: candidate.model,
-          error: `Provider ${candidate.provider} is in cooldown (all profiles unavailable)`,
-          reason: "rate_limit",
+        // All profiles for this provider are in cooldown.
+        // For the primary model (i === 0), probe it if the soonest cooldown
+        // expiry is close or already past. This avoids staying on a fallback
+        // model long after the real rate-limit window clears.
+        const now = Date.now();
+        const probeThrottleKey = resolveProbeThrottleKey(candidate.provider, params.agentDir);
+        const shouldProbe = shouldProbePrimaryDuringCooldown({
+          isPrimary: i === 0,
+          hasFallbackCandidates,
+          now,
+          throttleKey: probeThrottleKey,
+          authStore,
+          profileIds,
         });
-        continue;
+        if (!shouldProbe) {
+          // Skip without attempting
+          attempts.push({
+            provider: candidate.provider,
+            model: candidate.model,
+            error: `Provider ${candidate.provider} is in cooldown (all profiles unavailable)`,
+            reason: "rate_limit",
+          });
+          continue;
+        }
+        // Primary model probe: attempt it despite cooldown to detect recovery.
+        // If it fails, the error is caught below and we fall through to the
+        // next candidate as usual.
+        lastProbeAttempt.set(probeThrottleKey, now);
       }
     }
     try {
@@ -390,83 +545,4 @@ export async function runWithImageModelFallback<T>(params: {
   throw new Error(`All image models failed (${attempts.length || candidates.length}): ${summary}`, {
     cause: lastError instanceof Error ? lastError : undefined,
   });
-}
-
-// ---------------------------------------------------------------------------
-// Per-model cooldown tracking (in-memory)
-// ---------------------------------------------------------------------------
-
-type ModelCooldownEntry = {
-  untilMs: number;
-  reason: string;
-  failures: number;
-};
-
-/** In-memory cooldown map keyed by `provider/model`. */
-const modelCooldowns = new Map<string, ModelCooldownEntry>();
-
-/**
- * Check whether a specific model is currently in cooldown.
- */
-export function isModelCoolingDown(
-  ref: { provider: string; model: string },
-  now?: number,
-): boolean {
-  const key = modelKey(ref.provider, ref.model);
-  const entry = modelCooldowns.get(key);
-  if (!entry) {
-    return false;
-  }
-  const ts = now ?? Date.now();
-  if (ts >= entry.untilMs) {
-    modelCooldowns.delete(key);
-    return false;
-  }
-  return true;
-}
-
-/**
- * Return a snapshot of all models currently in cooldown.
- * Expired entries are pruned during iteration.
- */
-export function getModelCooldownSnapshot(): {
-  key: string;
-  provider: string;
-  model: string;
-  untilMs: number;
-  remainingMs: number;
-  failures: number;
-  reason: string;
-}[] {
-  const now = Date.now();
-  const results: {
-    key: string;
-    provider: string;
-    model: string;
-    untilMs: number;
-    remainingMs: number;
-    failures: number;
-    reason: string;
-  }[] = [];
-
-  for (const [key, entry] of modelCooldowns) {
-    if (now >= entry.untilMs) {
-      modelCooldowns.delete(key);
-      continue;
-    }
-    const slashIndex = key.indexOf("/");
-    const provider = slashIndex >= 0 ? key.slice(0, slashIndex) : key;
-    const model = slashIndex >= 0 ? key.slice(slashIndex + 1) : key;
-    results.push({
-      key,
-      provider,
-      model,
-      untilMs: entry.untilMs,
-      remainingMs: entry.untilMs - now,
-      failures: entry.failures,
-      reason: entry.reason,
-    });
-  }
-
-  return results;
 }

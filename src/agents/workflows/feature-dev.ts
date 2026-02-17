@@ -36,7 +36,7 @@ export interface FeatureDevState {
 
 // --- Prompts (Ported from Claude Code) ---
 
-const PROMPTS = {
+const _PROMPTS = {
   EXPLORER: `You are an expert code analyst specializing in tracing and understanding feature implementations across codebases.
 
 ## Core Mission
@@ -127,8 +127,10 @@ export class FeatureDevWorkflow {
         return this.runSummary();
       case "COMPLETED":
         return this.state;
-      default:
-        throw new Error(`Unknown phase: ${this.state.currentPhase}`);
+      default: {
+        const _exhaustiveCheck: never = this.state.currentPhase;
+        throw new Error("Unknown phase");
+      }
     }
   }
 
@@ -210,7 +212,7 @@ Instructions:
 
   private async runExploration(): Promise<FeatureDevState> {
     // Spawn Explorer Agent
-    const sessionKey = await this.orchestrator.spawnImplementationTeam({
+    const _sessionKey = await this.orchestrator.spawnImplementationTeam({
       debateSessionKey: "feature-dev-exploration", // Placeholder
       implementationAgents: [{ id: "code-explorer", role: "Explorer" }],
       label: `Exploration: ${this.state.featureRequest}`,

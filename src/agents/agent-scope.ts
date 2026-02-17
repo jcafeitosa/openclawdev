@@ -1,35 +1,19 @@
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
-import type { AgentRole } from "../config/types.agents.js";
 import { resolveStateDir } from "../config/paths.js";
+import type { AgentRole } from "../config/types.agents.js";
 import {
   DEFAULT_AGENT_ID,
   normalizeAgentId,
   parseAgentSessionKey,
 } from "../routing/session-key.js";
 import { resolveUserPath } from "../utils.js";
+import { normalizeSkillFilter } from "./skills/filter.js";
 import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 
-/** Numeric rank for each agent role (higher = more authority). */
-export const AGENT_ROLE_RANK: Record<AgentRole, number> = {
-  worker: 0,
-  specialist: 1,
-  lead: 2,
-  orchestrator: 3,
-};
-
 type AgentEntry = NonNullable<NonNullable<OpenClawConfig["agents"]>["list"]>[number];
-
-/** Resolve the hierarchy role for a given agent (falls back to defaults or "specialist"). */
-export function resolveAgentRole(cfg: OpenClawConfig, agentId: string): AgentRole {
-  const entry = resolveAgentEntry(cfg, normalizeAgentId(agentId));
-  if (entry?.role) {
-    return entry.role;
-  }
-  return cfg.agents?.defaults?.role ?? "specialist";
-}
 
 type ResolvedAgentConfig = {
   name?: string;
@@ -46,8 +30,8 @@ type ResolvedAgentConfig = {
   subagents?: AgentEntry["subagents"];
   sandbox?: AgentEntry["sandbox"];
   tools?: AgentEntry["tools"];
-  expertise?: string[];
   role?: string;
+  expertise?: string[];
 };
 
 let defaultAgentWarned = false;
@@ -129,7 +113,10 @@ export function resolveAgentConfig(
     name: typeof entry.name === "string" ? entry.name : undefined,
     workspace: typeof entry.workspace === "string" ? entry.workspace : undefined,
     agentDir: typeof entry.agentDir === "string" ? entry.agentDir : undefined,
-    persona: typeof entry.persona === "string" ? entry.persona : undefined,
+    persona:
+      typeof (entry as Record<string, unknown>).persona === "string"
+        ? ((entry as Record<string, unknown>).persona as string)
+        : undefined,
     model:
       typeof entry.model === "string" || (entry.model && typeof entry.model === "object")
         ? entry.model
@@ -143,6 +130,13 @@ export function resolveAgentConfig(
     subagents: typeof entry.subagents === "object" && entry.subagents ? entry.subagents : undefined,
     sandbox: entry.sandbox,
     tools: entry.tools,
+    role:
+      typeof (entry as Record<string, unknown>).role === "string"
+        ? ((entry as Record<string, unknown>).role as string)
+        : undefined,
+    expertise: Array.isArray((entry as Record<string, unknown>).expertise)
+      ? ((entry as Record<string, unknown>).expertise as string[])
+      : undefined,
   };
 }
 
@@ -150,12 +144,7 @@ export function resolveAgentSkillsFilter(
   cfg: OpenClawConfig,
   agentId: string,
 ): string[] | undefined {
-  const raw = resolveAgentConfig(cfg, agentId)?.skills;
-  if (!raw) {
-    return undefined;
-  }
-  const normalized = raw.map((entry) => String(entry).trim()).filter(Boolean);
-  return normalized.length > 0 ? normalized : [];
+  return normalizeSkillFilter(resolveAgentConfig(cfg, agentId)?.skills);
 }
 
 export function resolveAgentModelPrimary(cfg: OpenClawConfig, agentId: string): string | undefined {
@@ -229,7 +218,43 @@ export function resolveAgentDir(cfg: OpenClawConfig, agentId: string) {
   return path.join(root, "agents", id, "agent");
 }
 
-export function canSpawnRole(_requesterRole: string, _targetRole: string): boolean {
-  // Permissive — role hierarchy checks are handled elsewhere in the pipeline.
-  return true;
+/* ---------------------------------------------------------------------------
+ * Agent hierarchy roles (fork-only: delegation + collaboration support).
+ * ------------------------------------------------------------------------- */
+
+/** Numeric rank per role — higher = more authority. */
+export const AGENT_ROLE_RANK: Record<AgentRole, number> = {
+  worker: 0,
+  specialist: 1,
+  lead: 2,
+  orchestrator: 3,
+} as const;
+
+const VALID_ROLES = new Set<string>(Object.keys(AGENT_ROLE_RANK));
+
+/** Resolve the hierarchy role for a given agent (defaults to "specialist"). */
+export function resolveAgentRole(cfg: OpenClawConfig, agentId: string): AgentRole {
+  const entry = resolveAgentEntry(cfg, normalizeAgentId(agentId));
+  const raw = (entry as Record<string, unknown> | undefined)?.role;
+  if (typeof raw === "string" && VALID_ROLES.has(raw)) {
+    return raw as AgentRole;
+  }
+  // Defaults role from agents.defaults.role
+  const defaultRole = (cfg.agents?.defaults as Record<string, unknown> | undefined)?.role;
+  if (typeof defaultRole === "string" && VALID_ROLES.has(defaultRole)) {
+    return defaultRole as AgentRole;
+  }
+  return "specialist";
+}
+
+/** Whether `spawnerRole` is allowed to spawn agents with `targetRole`. */
+export function canSpawnRole(spawnerRole: AgentRole, targetRole: AgentRole): boolean {
+  return AGENT_ROLE_RANK[spawnerRole] >= AGENT_ROLE_RANK[targetRole];
+}
+
+/** Resolve delegation direction between two roles (always allowed; direction indicates flow). */
+export function canDelegate(fromRole: AgentRole, toRole: AgentRole): "downward" | "upward" {
+  const fromRank = AGENT_ROLE_RANK[fromRole];
+  const toRank = AGENT_ROLE_RANK[toRole];
+  return fromRank >= toRank ? "downward" : "upward";
 }

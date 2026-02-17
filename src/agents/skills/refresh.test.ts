@@ -15,8 +15,10 @@ vi.mock("chokidar", () => {
 
 describe("ensureSkillsWatcher", () => {
   it("ignores node_modules, dist, .git, and Python venvs by default", async () => {
+    process.env.OPENCLAW_SKILLS_WATCH_IN_TESTS = "1";
     const mod = await import("./refresh.js");
     mod.ensureSkillsWatcher({ workspaceDir: "/tmp/workspace" });
+    delete process.env.OPENCLAW_SKILLS_WATCH_IN_TESTS;
 
     expect(watchMock).toHaveBeenCalledTimes(1);
     const targets = watchMock.mock.calls[0]?.[0] as string[];

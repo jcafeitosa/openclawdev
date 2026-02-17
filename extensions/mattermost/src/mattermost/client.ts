@@ -97,7 +97,17 @@ export function createMattermostClient(params: {
         `Mattermost API ${res.status} ${res.statusText}: ${detail || "unknown error"}`,
       );
     }
-    return (await res.json()) as T;
+
+    if (res.status === 204) {
+      return undefined as T;
+    }
+
+    const contentType = res.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      return (await res.json()) as T;
+    }
+
+    return (await res.text()) as T;
   };
 
   return { baseUrl, apiBaseUrl, token, request };
@@ -178,6 +188,56 @@ export async function createMattermostPost(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function updateMattermostPost(
+  client: MattermostClient,
+  params: { postId: string; message: string },
+): Promise<MattermostPost> {
+  return await client.request<MattermostPost>(`/posts/${params.postId}/patch`, {
+    method: "PUT",
+    body: JSON.stringify({ message: params.message }),
+  });
+}
+
+export async function deleteMattermostPost(
+  client: MattermostClient,
+  postId: string,
+): Promise<void> {
+  await client.request<Record<string, unknown>>(`/posts/${postId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function reactMattermostPost(
+  client: MattermostClient,
+  params: { userId: string; postId: string; emojiName: string },
+): Promise<void> {
+  await client.request<Record<string, unknown>>("/reactions", {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: params.userId,
+      post_id: params.postId,
+      emoji_name: params.emojiName,
+    }),
+  });
+}
+
+export async function unreactMattermostPost(
+  client: MattermostClient,
+  params: { userId: string; postId: string; emojiName: string },
+): Promise<void> {
+  await client.request<Record<string, unknown>>(
+    `/users/${params.userId}/posts/${params.postId}/reactions/${encodeURIComponent(params.emojiName)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function getMattermostPost(
+  client: MattermostClient,
+  postId: string,
+): Promise<MattermostPost> {
+  return await client.request<MattermostPost>(`/posts/${postId}`);
 }
 
 export async function uploadMattermostFile(
