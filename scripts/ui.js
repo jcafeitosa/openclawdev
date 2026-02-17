@@ -82,6 +82,7 @@ function depsInstalled(kind) {
   try {
     const require = createRequire(path.join(uiDir, "package.json"));
     require.resolve("vite");
+    require.resolve("astro");
     require.resolve("dompurify");
     if (kind === "test") {
       require.resolve("vitest");

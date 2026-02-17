@@ -23,6 +23,7 @@ import {
   type HelloOk,
   PROTOCOL_VERSION,
   type RequestFrame,
+  type ResponseFrame,
   validateEventFrame,
   validateRequestFrame,
   validateResponseFrame,
@@ -306,21 +307,22 @@ export class GatewayClient {
         return;
       }
       if (validateResponseFrame(parsed)) {
-        const pending = this.pending.get(parsed.id);
+        const res = parsed;
+        const pending = this.pending.get(res.id);
         if (!pending) {
           return;
         }
         // If the payload is an ack with status accepted, keep waiting for final.
-        const payload = parsed.payload as { status?: unknown } | undefined;
+        const payload = res.payload as { status?: unknown } | undefined;
         const status = payload?.status;
         if (pending.expectFinal && status === "accepted") {
           return;
         }
-        this.pending.delete(parsed.id);
-        if (parsed.ok) {
-          pending.resolve(parsed.payload);
+        this.pending.delete(res.id);
+        if (res.ok) {
+          pending.resolve(res.payload);
         } else {
-          pending.reject(new Error(parsed.error?.message ?? "unknown error"));
+          pending.reject(new Error(res.error?.message ?? "unknown error"));
         }
       }
     } catch (err) {

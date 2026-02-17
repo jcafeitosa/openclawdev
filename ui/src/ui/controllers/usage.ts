@@ -84,6 +84,38 @@ export async function loadSessionTimeSeries(state: UsageState, sessionKey: strin
   }
 }
 
+export type UsagePollHost = UsageState;
+
+let usagePollInterval: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Start polling usage data every 30 seconds.
+ */
+export function startUsagePolling(host: UsagePollHost): void {
+  stopUsagePolling();
+
+  // Initial load
+  void loadUsage(host);
+
+  // Poll every 30 seconds
+  usagePollInterval = setInterval(() => {
+    if (!host.connected) {
+      return;
+    }
+    void loadUsage(host);
+  }, 30_000);
+}
+
+/**
+ * Stop polling usage data.
+ */
+export function stopUsagePolling(): void {
+  if (usagePollInterval != null) {
+    clearInterval(usagePollInterval);
+    usagePollInterval = null;
+  }
+}
+
 export async function loadSessionLogs(state: UsageState, sessionKey: string) {
   if (!state.client || !state.connected) {
     return;

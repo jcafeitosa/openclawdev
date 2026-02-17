@@ -296,8 +296,10 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     const delegMetrics = agentId ? getAgentDelegationMetrics(agentId) : undefined;
     let interactionCount = 0;
     if (run.usage) {
-      interactionCount += run.usage.toolCalls;
-      interactionCount += Math.floor((run.usage.inputTokens + run.usage.outputTokens) / 10_000);
+      interactionCount += run.usage.toolCalls ?? 0;
+      interactionCount += Math.floor(
+        ((run.usage.inputTokens ?? 0) + (run.usage.outputTokens ?? 0)) / 10_000,
+      );
     }
     if (delegMetrics) {
       interactionCount += delegMetrics.sent + delegMetrics.received;

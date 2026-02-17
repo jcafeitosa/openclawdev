@@ -7,8 +7,11 @@
 
 import type { ProviderHealthMetrics } from "../../providers/core/types.js";
 import type { GatewayRequestHandlers } from "./types.js";
+import { normalizeProviderId } from "../../agents/model-selection.js";
 import { detectProviders } from "../../commands/providers/index.js";
 import { getProviderById } from "../../commands/providers/registry.js";
+import { loadConfig } from "../../config/config.js";
+import { resolvePluginProviders } from "../../plugins/providers.js";
 import {
   getAllProviderHealth,
   getProviderHealth,
@@ -109,6 +112,25 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
       // Get runtime health metrics (populated by actual API calls)
       const runtimeHealth = getAllProviderHealth();
 
+      // Build set of provider IDs that have an OAuth plugin actually loaded
+      // (plugin must be enabled + registered, not just declared in the registry)
+      const oauthPluginProviders = new Set<string>();
+      try {
+        const cfg = loadConfig();
+        const plugins = resolvePluginProviders({ config: cfg });
+        for (const p of plugins) {
+          const hasOAuthMethod = p.auth.some((m) => m.kind === "oauth" || m.kind === "device_code");
+          if (hasOAuthMethod) {
+            oauthPluginProviders.add(normalizeProviderId(p.id));
+            for (const alias of p.aliases ?? []) {
+              oauthPluginProviders.add(normalizeProviderId(alias));
+            }
+          }
+        }
+      } catch {
+        // Non-fatal: fall back to registry-only check
+      }
+
       const providers = detected.map((det) => {
         const runtime: ProviderHealthMetrics | undefined = runtimeHealth.get(det.id);
         const registry = getProviderById(det.id);
@@ -132,9 +154,11 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
         const cooldownEndsAtMs = isoToMs(det.cooldownEndsAt);
 
         // Determine OAuth availability: provider supports oauth AND the
-        // gateway can initiate the flow (i.e. non-CLI auth modes include oauth).
+        // gateway has the OAuth plugin loaded and enabled for this provider.
         const registryAuthModes = registry?.authModes ?? [];
-        const oauthAvailable = registryAuthModes.includes("oauth");
+        const registrySupportsOAuth = registryAuthModes.includes("oauth");
+        const oauthAvailable =
+          registrySupportsOAuth && oauthPluginProviders.has(normalizeProviderId(det.id));
 
         return {
           id: det.id,

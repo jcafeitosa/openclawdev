@@ -6,12 +6,10 @@
 import { StoreController } from "@nanostores/lit";
 import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import type { AgentResourcesResult } from "../controllers/agent-resources.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
   AgentIdentityResult,
-  AgentHierarchyResult,
   ChannelsStatusSnapshot,
   CronJob,
   CronStatus,
@@ -56,11 +54,6 @@ export class AgentsIsland extends LitElement {
   @state() private agentSkillsReport: SkillStatusReport | null = null;
   @state() private agentSkillsError: string | null = null;
   @state() private agentSkillsAgentId: string | null = null;
-  @state() private agentResourcesData: AgentResourcesResult | null = null;
-  @state() private agentResourcesLoading = false;
-  @state() private agentHierarchyLoading = false;
-  @state() private agentHierarchyError: string | null = null;
-  @state() private agentHierarchyData: AgentHierarchyResult | null = null;
   @state() private skillsFilter = "";
 
   protected createRenderRoot() {
@@ -194,19 +187,6 @@ export class AgentsIsland extends LitElement {
     }
   }
 
-  private async loadHierarchy() {
-    this.agentHierarchyLoading = true;
-    this.agentHierarchyError = null;
-    try {
-      const res = await gateway.call<AgentHierarchyResult>("agents.hierarchy");
-      this.agentHierarchyData = res;
-    } catch (err) {
-      this.agentHierarchyError = err instanceof Error ? err.message : String(err);
-    } finally {
-      this.agentHierarchyLoading = false;
-    }
-  }
-
   private async handleToolsProfileChange(
     agentId: string,
     profile: string | null,
@@ -307,11 +287,6 @@ export class AgentsIsland extends LitElement {
       agentSkillsReport: this.agentSkillsReport,
       agentSkillsError: this.agentSkillsError,
       agentSkillsAgentId: this.agentSkillsAgentId,
-      agentResourcesData: this.agentResourcesData,
-      agentResourcesLoading: this.agentResourcesLoading,
-      agentHierarchyLoading: this.agentHierarchyLoading,
-      agentHierarchyError: this.agentHierarchyError,
-      agentHierarchyData: this.agentHierarchyData,
       skillsFilter: this.skillsFilter,
       onRefresh: () => void this.loadAgents(),
       onSelectAgent: (agentId: string) => {
@@ -331,8 +306,6 @@ export class AgentsIsland extends LitElement {
           void this.loadCron();
         } else if (panel === "skills") {
           void this.loadSkills();
-        } else if (panel === "hierarchy") {
-          void this.loadHierarchy();
         }
       },
       onLoadFiles: (agentId: string) => void this.loadFiles(agentId),
@@ -368,10 +341,6 @@ export class AgentsIsland extends LitElement {
         void this.handleSkillToggle(agentId, skillName, enabled),
       onAgentSkillsClear: (agentId) => void this.handleSkillsClear(agentId),
       onAgentSkillsDisableAll: (agentId) => void this.handleSkillsDisableAll(agentId),
-      onHierarchyRefresh: () => void this.loadHierarchy(),
-      onHierarchyNodeClick: (sessionKey: string) => {
-        window.location.href = `/sessions?key=${encodeURIComponent(sessionKey)}`;
-      },
     };
 
     return html`${renderAgents(props)}`;

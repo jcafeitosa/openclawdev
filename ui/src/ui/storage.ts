@@ -20,6 +20,11 @@ export function loadSettings(): UiSettings {
     if (typeof globalThis.location === "undefined") {
       return "ws://localhost:18789";
     }
+    // In Astro dev mode the page is served by Vite (e.g. :5173/:5174) while
+    // the gateway WebSocket runs on its own port. Point there directly.
+    if (import.meta.env.DEV) {
+      return "ws://127.0.0.1:18789";
+    }
     const proto = location.protocol === "https:" ? "wss" : "ws";
     return `${proto}://${location.host}`;
   })();

@@ -14,6 +14,7 @@ import type { EmbeddedPiCompactResult } from "./types.js";
 import { resolveHeartbeatPrompt } from "../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../infra/machine-name.js";
+import { loadClaudeMdMemory } from "../../memory/claude-md-loader.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import { type enqueueCommand, enqueueCommandInLane } from "../../process/command-queue.js";
 import { isCronSessionKey, isSubagentSessionKey } from "../../routing/session-key.js";
@@ -31,6 +32,7 @@ import { listChannelSupportedActions, resolveChannelMessageToolHints } from "../
 import { formatUserTime, resolveUserTimeFormat, resolveUserTimezone } from "../date-time.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
 import { resolveOpenClawDocsPath } from "../docs-path.js";
+import { buildMemoryContext, shouldUseMemoryContext } from "../hooks/memory-context-hook.js";
 import { getApiKeyForModel, resolveModelAuthMode } from "../model-auth.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import {
@@ -476,11 +478,22 @@ export async function compactEmbeddedPiSessionDirect(
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
     const projectsRootDir = resolveProjectsRootDir(params.config);
     const projectNamingConvention = resolveProjectNamingConvention(params.config);
+    const claudeMdMemory = loadClaudeMdMemory({
+      workspaceDir: effectiveWorkspace,
+      currentDir: effectiveWorkspace,
+    });
+    const combinedExtraPrompt =
+      [params.extraSystemPrompt, claudeMdMemory].filter(Boolean).join("\n\n") || undefined;
+
+    // Agent memory context - skip during compaction (no user message context available)
+    // Memory will be used in normal runs (attempt.ts)
+    const agentMemoryContext = "";
+
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
       defaultThinkLevel: params.thinkLevel,
       reasoningLevel: params.reasoningLevel ?? "off",
-      extraSystemPrompt: params.extraSystemPrompt,
+      extraSystemPrompt: combinedExtraPrompt,
       ownerNumbers: params.ownerNumbers,
       reasoningTagHint,
       heartbeatPrompt: isDefaultAgent
@@ -489,8 +502,6 @@ export async function compactEmbeddedPiSessionDirect(
       skillsPrompt,
       docsPath: docsPath ?? undefined,
       ttsHint,
-      projectsRootDir,
-      projectNamingConvention,
       promptMode,
       runtimeInfo,
       reactionGuidance,
@@ -503,6 +514,7 @@ export async function compactEmbeddedPiSessionDirect(
       userTimeFormat,
       contextFiles,
       memoryCitationsMode: params.config?.memory?.citations,
+      agentMemoryContext,
     });
     const systemPromptOverride = createSystemPromptOverride(appendPrompt);
 

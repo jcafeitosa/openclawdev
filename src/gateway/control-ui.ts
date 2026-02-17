@@ -352,6 +352,19 @@ export function handleControlUiHttpRequest(
     return true;
   }
 
+  // MPA directory route: /chat → /chat/index.html (Astro generates subdirectories)
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+    const dirIndexPath = path.join(filePath, "index.html");
+    if (fs.existsSync(dirIndexPath) && fs.statSync(dirIndexPath).isFile()) {
+      serveIndexHtml(res, dirIndexPath, {
+        basePath,
+        config: opts?.config,
+        agentId: opts?.agentId,
+      });
+      return true;
+    }
+  }
+
   // SPA fallback (client-side router): serve index.html for unknown paths.
   const indexPath = path.join(root, "index.html");
   if (fs.existsSync(indexPath)) {

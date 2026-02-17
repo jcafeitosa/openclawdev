@@ -2,6 +2,7 @@ import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-met
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
+import { authHandlers } from "./server-methods/auth.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
@@ -14,6 +15,9 @@ import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
 import { modelsHandlers } from "./server-methods/models.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
+import { providersHealthHandlers } from "./server-methods/providers-health.js";
+import { providersHandlers } from "./server-methods/providers.js";
+import { securityHandlers } from "./server-methods/security.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
@@ -78,6 +82,21 @@ const READ_METHODS = new Set([
   "chat.history",
   "config.get",
   "talk.config",
+  "providers.health",
+  "providers.health.check",
+  "providers.health.ranked",
+  "providers.list",
+  "providers.usage",
+  "auth.listProviders",
+  "auth.checkOAuth",
+  "security.events.query",
+  "security.events.stats",
+  "security.alerts",
+  "security.blocked",
+  "security.session",
+  "security.ip",
+  "security.audit",
+  "security.summary",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -161,7 +180,11 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method === "sessions.patch" ||
     method === "sessions.reset" ||
     method === "sessions.delete" ||
-    method === "sessions.compact"
+    method === "sessions.compact" ||
+    method === "auth.setKey" ||
+    method === "auth.startOAuth" ||
+    method === "auth.submitOAuthCode" ||
+    method === "auth.removeCredential"
   ) {
     return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
   }
@@ -194,6 +217,10 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...browserHandlers,
+  ...providersHandlers,
+  ...providersHealthHandlers,
+  ...authHandlers,
+  ...securityHandlers,
 };
 
 export async function handleGatewayRequest(

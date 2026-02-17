@@ -5,6 +5,8 @@ import { buildWorkspaceSkillCommandSpecs, type SkillCommandSpec } from "../agent
 import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
 import { listChatCommands } from "./commands-registry.js";
 
+export type { SkillCommandSpec } from "../agents/skills.js";
+
 function resolveReservedCommandNames(): Set<string> {
   const reserved = new Set<string>();
   for (const command of listChatCommands()) {
@@ -38,6 +40,8 @@ export function listSkillCommandsForWorkspace(params: {
 export function listSkillCommandsForAgents(params: {
   cfg: OpenClawConfig;
   agentIds?: string[];
+  /** When true, deduplicate commands by name (first occurrence wins). */
+  uniqueOnly?: boolean;
 }): SkillCommandSpec[] {
   const used = resolveReservedCommandNames();
   const entries: SkillCommandSpec[] = [];
@@ -65,6 +69,17 @@ export function listSkillCommandsForAgents(params: {
       used.add(command.name.toLowerCase());
       entries.push(command);
     }
+  }
+  if (params.uniqueOnly) {
+    const seen = new Set<string>();
+    return entries.filter((entry) => {
+      const key = entry.name.toLowerCase();
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
   }
   return entries;
 }

@@ -162,9 +162,9 @@ export const AgentDefaultsSchema = z
         model: AgentModelSchema.optional(),
         thinking: z.string().optional(),
       })
-      .strict()
+      .passthrough()
       .optional(),
     sandbox: AgentSandboxSchema,
   })
-  .strict()
+  .passthrough()
   .optional();

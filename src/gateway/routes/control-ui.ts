@@ -24,11 +24,32 @@ import {
   normalizeControlUiBasePath,
   resolveAssistantAvatarUrl,
 } from "../control-ui-shared.js";
-import { getNodeRequest } from "../elysia-node-compat.js";
+import { getNodeRequest, getRequestIp } from "../elysia-node-compat.js";
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/** Web-Standard fallback for isLocalDirectRequest when Node req is unavailable. */
+function isLocalWebRequest(request: Request): boolean {
+  const host = request.headers.get("host") ?? "";
+  const hostname = host.split(":")[0] ?? "";
+  const hostIsLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  if (!hostIsLocal) {
+    return false;
+  }
+  const hasForwarded = Boolean(
+    request.headers.get("x-forwarded-for") ||
+    request.headers.get("x-real-ip") ||
+    request.headers.get("x-forwarded-host"),
+  );
+  if (hasForwarded) {
+    return false;
+  }
+  const ip = getRequestIp(request) ?? "";
+  const isLoopback = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
+  return isLoopback || !ip;
+}
 
 function contentTypeForExt(ext: string): string {
   switch (ext) {
@@ -309,7 +330,10 @@ function maybeRedirectToTokenizedUi(
 
   const trustedProxies = cfg.gateway?.trustedProxies ?? [];
   const nodeReq = getNodeRequest(request);
-  if (!isLocalDirectRequest(nodeReq, trustedProxies)) {
+  const isLocal = nodeReq
+    ? isLocalDirectRequest(nodeReq, trustedProxies)
+    : isLocalWebRequest(request);
+  if (!isLocal) {
     return null;
   }
 
@@ -399,6 +423,14 @@ function serveSpaRequest(
       });
     }
     return serveStaticFile(filePath);
+  }
+
+  // MPA directory route: /chat → /chat/index.html (Astro generates subdirectories)
+  if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
+    const dirIndexPath = path.join(filePath, "index.html");
+    if (fs.existsSync(dirIndexPath) && fs.statSync(dirIndexPath).isFile()) {
+      return serveIndexHtml(request, dirIndexPath, basePath);
+    }
   }
 
   // SPA fallback: serve index.html for unknown paths (client-side router)

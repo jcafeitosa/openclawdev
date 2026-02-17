@@ -54,10 +54,8 @@ async function ensureMermaidLoaded(): Promise<typeof import("mermaid").default> 
         securityLevel: "strict",
         fontFamily: "inherit",
       });
-
-      console.log("✅ Mermaid lazy-loaded and initialized");
     } catch (error) {
-      console.error("❌ Mermaid lazy load failed:", error);
+      // Mermaid lazy load failed — rethrow so callers can handle gracefully
       throw error;
     }
   })();
@@ -130,7 +128,7 @@ async function renderMermaidDiagram(code: string): Promise<string> {
 
     return svg;
   } catch (error) {
-    console.error("❌ Mermaid rendering failed:", error);
+    // Mermaid rendering failed — rethrow so callers can show fallback
     throw error;
   }
 }
@@ -164,7 +162,6 @@ export function resetMermaidMetrics(): void {
  */
 export function clearMermaidCache(): void {
   mermaidCache.clear();
-  console.log("🧹 Mermaid cache cleared");
 }
 
 const allowedTags = [
@@ -390,7 +387,7 @@ export async function toSanitizedMarkdownHtml(markdown: string): Promise<string>
           replacement: `<div class="mermaid-diagram">${svg}</div>`,
         };
       } catch (error) {
-        console.error("Mermaid rendering error:", error);
+        // Mermaid rendering error — show raw code as fallback
         return {
           placeholder: match[0],
           replacement: `<pre class="mermaid-error"><code>${escapeHtml(code)}</code></pre>`,

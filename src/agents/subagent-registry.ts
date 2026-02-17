@@ -10,6 +10,19 @@ import {
 } from "./subagent-registry.store.js";
 import { resolveAgentTimeoutMs } from "./timeout.js";
 
+export type SubagentUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  toolCalls?: number;
+};
+
+export type SubagentProgress = {
+  percent: number;
+  status: string;
+  detail?: string;
+  lastUpdate: number;
+};
+
 export type SubagentRunRecord = {
   runId: string;
   childSessionKey: string;
@@ -29,6 +42,8 @@ export type SubagentRunRecord = {
   cleanupCompletedAt?: number;
   cleanupHandled?: boolean;
   suppressAnnounceReason?: "steer-restart" | "killed";
+  usage?: SubagentUsage;
+  progress?: SubagentProgress;
 };
 
 const subagentRuns = new Map<string, SubagentRunRecord>();
@@ -658,6 +673,11 @@ export function listSubagentRunsForRequester(requesterSessionKey: string): Subag
   return [...subagentRuns.values()].filter((entry) => entry.requesterSessionKey === key);
 }
 
+/** Return all tracked subagent runs (merges in-memory + disk state). */
+export function listAllSubagentRuns(): SubagentRunRecord[] {
+  return [...getRunsSnapshotForRead().values()];
+}
+
 export function countActiveRunsForSession(requesterSessionKey: string): number {
   const key = requesterSessionKey.trim();
   if (!key) {
@@ -736,6 +756,31 @@ export function listDescendantRunsForRequester(rootSessionKey: string): Subagent
     }
   }
   return descendants;
+}
+
+export function getSubagentRunBySessionKey(sessionKey: string): SubagentRunRecord | undefined {
+  const runIds = findRunIdsByChildSessionKey(sessionKey);
+  if (runIds.length === 0) {
+    return undefined;
+  }
+  return subagentRuns.get(runIds[0]);
+}
+
+export function getSubagentRunById(runId: string): SubagentRunRecord | undefined {
+  return subagentRuns.get(runId);
+}
+
+export function updateSubagentProgress(
+  sessionKey: string,
+  progress: { percent: number; status: string; detail?: string },
+): void {
+  const runIds = findRunIdsByChildSessionKey(sessionKey);
+  for (const runId of runIds) {
+    const entry = subagentRuns.get(runId);
+    if (entry) {
+      entry.progress = { ...progress, lastUpdate: Date.now() };
+    }
+  }
 }
 
 export function initSubagentRegistry() {

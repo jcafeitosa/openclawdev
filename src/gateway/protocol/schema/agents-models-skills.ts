@@ -1,209 +1,188 @@
-import { Type } from "@sinclair/typebox";
+import { z } from "zod";
 import { NonEmptyString } from "./primitives.js";
 
-export const ModelChoiceSchema = Type.Object(
-  {
+export const ModelChoiceSchema = z
+  .object({
     id: NonEmptyString,
     name: NonEmptyString,
     provider: NonEmptyString,
-    contextWindow: Type.Optional(Type.Integer({ minimum: 1 })),
-    reasoning: Type.Optional(Type.Boolean()),
-  },
-  { additionalProperties: false },
-);
+    contextWindow: z.number().int().min(1).optional(),
+    reasoning: z.boolean().optional(),
+  })
+  .strict();
 
-export const AgentSummarySchema = Type.Object(
-  {
+export const AgentSummarySchema = z
+  .object({
     id: NonEmptyString,
-    name: Type.Optional(NonEmptyString),
-    identity: Type.Optional(
-      Type.Object(
-        {
-          name: Type.Optional(NonEmptyString),
-          theme: Type.Optional(NonEmptyString),
-          emoji: Type.Optional(NonEmptyString),
-          avatar: Type.Optional(NonEmptyString),
-          avatarUrl: Type.Optional(NonEmptyString),
-        },
-        { additionalProperties: false },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
+    name: NonEmptyString.optional(),
+    identity: z
+      .object({
+        name: NonEmptyString.optional(),
+        theme: NonEmptyString.optional(),
+        emoji: NonEmptyString.optional(),
+        avatar: NonEmptyString.optional(),
+        avatarUrl: NonEmptyString.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
 
-export const AgentsListParamsSchema = Type.Object({}, { additionalProperties: false });
+export const AgentsListParamsSchema = z.object({}).strict();
 
-export const AgentsListResultSchema = Type.Object(
-  {
+export const AgentsListResultSchema = z
+  .object({
     defaultId: NonEmptyString,
     mainKey: NonEmptyString,
-    scope: Type.Union([Type.Literal("per-sender"), Type.Literal("global")]),
-    agents: Type.Array(AgentSummarySchema),
-  },
-  { additionalProperties: false },
-);
+    scope: z.enum(["per-sender", "global"]),
+    agents: z.array(AgentSummarySchema),
+  })
+  .strict();
 
-export const AgentsCreateParamsSchema = Type.Object(
-  {
+export const AgentsCreateParamsSchema = z
+  .object({
     name: NonEmptyString,
     workspace: NonEmptyString,
-    emoji: Type.Optional(Type.String()),
-    avatar: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
+    emoji: z.string().optional(),
+    avatar: z.string().optional(),
+  })
+  .strict();
 
-export const AgentsCreateResultSchema = Type.Object(
-  {
-    ok: Type.Literal(true),
+export const AgentsCreateResultSchema = z
+  .object({
+    ok: z.literal(true),
     agentId: NonEmptyString,
     name: NonEmptyString,
     workspace: NonEmptyString,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const AgentsUpdateParamsSchema = Type.Object(
-  {
+export const AgentsUpdateParamsSchema = z
+  .object({
     agentId: NonEmptyString,
-    name: Type.Optional(NonEmptyString),
-    workspace: Type.Optional(NonEmptyString),
-    model: Type.Optional(NonEmptyString),
-    avatar: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
+    name: NonEmptyString.optional(),
+    workspace: NonEmptyString.optional(),
+    model: NonEmptyString.optional(),
+    avatar: z.string().optional(),
+  })
+  .strict();
 
-export const AgentsUpdateResultSchema = Type.Object(
-  {
-    ok: Type.Literal(true),
+export const AgentsUpdateResultSchema = z
+  .object({
+    ok: z.literal(true),
     agentId: NonEmptyString,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const AgentsDeleteParamsSchema = Type.Object(
-  {
+export const AgentsDeleteParamsSchema = z
+  .object({
     agentId: NonEmptyString,
-    deleteFiles: Type.Optional(Type.Boolean()),
-  },
-  { additionalProperties: false },
-);
+    deleteFiles: z.boolean().optional(),
+  })
+  .strict();
 
-export const AgentsDeleteResultSchema = Type.Object(
-  {
-    ok: Type.Literal(true),
+export const AgentsDeleteResultSchema = z
+  .object({
+    ok: z.literal(true),
     agentId: NonEmptyString,
-    removedBindings: Type.Integer({ minimum: 0 }),
-  },
-  { additionalProperties: false },
-);
+    removedBindings: z.number().int().min(0),
+  })
+  .strict();
 
-export const AgentsFileEntrySchema = Type.Object(
-  {
+export const AgentsFileEntrySchema = z
+  .object({
     name: NonEmptyString,
     path: NonEmptyString,
-    missing: Type.Boolean(),
-    size: Type.Optional(Type.Integer({ minimum: 0 })),
-    updatedAtMs: Type.Optional(Type.Integer({ minimum: 0 })),
-    content: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
+    missing: z.boolean(),
+    size: z.number().int().min(0).optional(),
+    updatedAtMs: z.number().int().min(0).optional(),
+    content: z.string().optional(),
+  })
+  .strict();
 
-export const AgentsFilesListParamsSchema = Type.Object(
-  {
+export const AgentsFilesListParamsSchema = z
+  .object({
     agentId: NonEmptyString,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const AgentsFilesListResultSchema = Type.Object(
-  {
+export const AgentsFilesListResultSchema = z
+  .object({
     agentId: NonEmptyString,
     workspace: NonEmptyString,
-    files: Type.Array(AgentsFileEntrySchema),
-  },
-  { additionalProperties: false },
-);
+    files: z.array(AgentsFileEntrySchema),
+  })
+  .strict();
 
-export const AgentsFilesGetParamsSchema = Type.Object(
-  {
+export const AgentsFilesGetParamsSchema = z
+  .object({
     agentId: NonEmptyString,
     name: NonEmptyString,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const AgentsFilesGetResultSchema = Type.Object(
-  {
+export const AgentsFilesGetResultSchema = z
+  .object({
     agentId: NonEmptyString,
     workspace: NonEmptyString,
     file: AgentsFileEntrySchema,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const AgentsFilesSetParamsSchema = Type.Object(
-  {
+export const AgentsFilesSetParamsSchema = z
+  .object({
     agentId: NonEmptyString,
     name: NonEmptyString,
-    content: Type.String(),
-  },
-  { additionalProperties: false },
-);
+    content: z.string(),
+  })
+  .strict();
 
-export const AgentsFilesSetResultSchema = Type.Object(
-  {
-    ok: Type.Literal(true),
+export const AgentsFilesSetResultSchema = z
+  .object({
+    ok: z.literal(true),
     agentId: NonEmptyString,
     workspace: NonEmptyString,
     file: AgentsFileEntrySchema,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const ModelsListParamsSchema = Type.Object({}, { additionalProperties: false });
+export const ModelsListParamsSchema = z.object({}).strict();
 
-export const ModelsListResultSchema = Type.Object(
-  {
-    models: Type.Array(ModelChoiceSchema),
-  },
-  { additionalProperties: false },
-);
+export const ModelsCooldownsParamsSchema = z.object({}).strict();
 
-export const SkillsStatusParamsSchema = Type.Object(
-  {
-    agentId: Type.Optional(NonEmptyString),
-  },
-  { additionalProperties: false },
-);
+export const ModelsListResultSchema = z
+  .object({
+    models: z.array(ModelChoiceSchema),
+  })
+  .strict();
 
-export const SkillsBinsParamsSchema = Type.Object({}, { additionalProperties: false });
+export const SkillsStatusParamsSchema = z
+  .object({
+    agentId: NonEmptyString.optional(),
+  })
+  .strict();
 
-export const SkillsBinsResultSchema = Type.Object(
-  {
-    bins: Type.Array(NonEmptyString),
-  },
-  { additionalProperties: false },
-);
+export const SkillsBinsParamsSchema = z.object({}).strict();
 
-export const SkillsInstallParamsSchema = Type.Object(
-  {
+export const SkillsBinsResultSchema = z
+  .object({
+    bins: z.array(NonEmptyString),
+  })
+  .strict();
+
+export const SkillsInstallParamsSchema = z
+  .object({
     name: NonEmptyString,
     installId: NonEmptyString,
-    timeoutMs: Type.Optional(Type.Integer({ minimum: 1000 })),
-  },
-  { additionalProperties: false },
-);
+    timeoutMs: z.number().int().min(1000).optional(),
+  })
+  .strict();
 
-export const SkillsUpdateParamsSchema = Type.Object(
-  {
+export const SkillsUpdateParamsSchema = z
+  .object({
     skillKey: NonEmptyString,
-    enabled: Type.Optional(Type.Boolean()),
-    apiKey: Type.Optional(Type.String()),
-    env: Type.Optional(Type.Record(NonEmptyString, Type.String())),
-  },
-  { additionalProperties: false },
-);
+    enabled: z.boolean().optional(),
+    apiKey: z.string().optional(),
+    env: z.record(NonEmptyString, z.string()).optional(),
+  })
+  .strict();

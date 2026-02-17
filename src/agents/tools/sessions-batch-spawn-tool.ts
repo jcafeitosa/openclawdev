@@ -17,6 +17,7 @@ import {
   resolveAgentConfig,
   resolveAgentRole,
 } from "../agent-scope.js";
+import { getAgentWorkload } from "../capabilities-registry.js";
 import { registerDelegation } from "../delegation-registry.js";
 import { AGENT_LANE_SUBAGENT } from "../lanes.js";
 import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
@@ -41,7 +42,7 @@ const SessionsBatchSpawnToolSchema = zodToToolJsonSchema(
     tasks: z.array(batchTaskShape),
     waitMode: z.enum(["all", "any", "none"]).optional(),
     runTimeoutSeconds: z.number().min(0).optional(),
-    cleanup: z.enum(["delete", "keep", "idle"]).optional(),
+    cleanup: z.enum(["delete", "keep"]).optional(),
   }),
 );
 
@@ -93,7 +94,7 @@ async function spawnSingleTask(params: {
   alias: string;
   mainKey: string;
   runTimeoutSeconds: number;
-  cleanup: "delete" | "keep" | "idle";
+  cleanup: "delete" | "keep";
   groupId?: string | null;
   groupChannel?: string | null;
   groupSpace?: string | null;
@@ -185,7 +186,6 @@ async function spawnSingleTask(params: {
     childSessionKey,
     label,
     task: task.task,
-    cleanup,
   });
 
   const childIdem = crypto.randomUUID();
@@ -372,9 +372,7 @@ export function createSessionsBatchSpawnTool(opts?: {
           ? params.waitMode
           : "all";
       const cleanup =
-        params.cleanup === "keep" || params.cleanup === "delete" || params.cleanup === "idle"
-          ? params.cleanup
-          : "idle";
+        params.cleanup === "keep" || params.cleanup === "delete" ? params.cleanup : "keep";
       const runTimeoutSeconds =
         typeof params.runTimeoutSeconds === "number" && Number.isFinite(params.runTimeoutSeconds)
           ? Math.max(0, Math.floor(params.runTimeoutSeconds))
@@ -418,6 +416,21 @@ export function createSessionsBatchSpawnTool(opts?: {
         threadId: opts?.agentThreadId,
       });
 
+      // Load balancing: check agent workload before spawning
+      const MAX_AGENT_CONCURRENT = 5;
+      const workloadWarnings: { agentId: string; warning: string }[] = [];
+      for (const task of tasks) {
+        if (task.agentId) {
+          const workload = getAgentWorkload(task.agentId);
+          if (workload.totalLoad >= MAX_AGENT_CONCURRENT) {
+            workloadWarnings.push({
+              agentId: task.agentId,
+              warning: `Agent at capacity (load: ${workload.totalLoad.toFixed(1)}, active: ${workload.activeTasks}, spawns: ${workload.activeSpawns})`,
+            });
+          }
+        }
+      }
+
       // Spawn all tasks concurrently
       const spawnPromises = tasks.map((task) =>
         spawnSingleTask({
@@ -441,6 +454,7 @@ export function createSessionsBatchSpawnTool(opts?: {
 
       const spawned: SpawnedTask[] = [];
       const errors: { agentId: string; error: string }[] = [];
+      const warnings = workloadWarnings;
 
       for (let i = 0; i < spawnResults.length; i++) {
         const result = spawnResults[i];
@@ -465,6 +479,7 @@ export function createSessionsBatchSpawnTool(opts?: {
             status: "pending",
           })),
           errors: errors.length > 0 ? errors : undefined,
+          warnings: warnings.length > 0 ? warnings : undefined,
         });
       }
 
@@ -500,6 +515,7 @@ export function createSessionsBatchSpawnTool(opts?: {
           error: r.error,
         })),
         errors: errors.length > 0 ? errors : undefined,
+        warnings: warnings.length > 0 ? warnings : undefined,
       });
     },
   };

@@ -269,13 +269,10 @@ async function persistTrustAdjustments(
   }
 
   for (const adj of adjustments) {
-    // TODO: await service.updateRelationship(adj.agent1, adj.agent2, {
-    //   trustDelta: adj.delta,
-    //   interactionType: 'collaboration',
-    // });
-    console.debug(
-      `[humanization:collab] Trust adjustment: ${adj.agent1}<->${adj.agent2} delta=${adj.delta > 0 ? "+" : ""}${adj.delta}`,
-    );
+    await service.updateRelationship(adj.agent1, adj.agent2, {
+      trustDelta: adj.delta,
+      interactionType: "collaboration",
+    });
   }
 }
 
@@ -285,7 +282,7 @@ async function recordConflict(event: CollaborationEvent): Promise<void> {
     return;
   }
 
-  const _conflict: Omit<ConflictHistory, "id"> = {
+  const conflict: Omit<ConflictHistory, "id"> = {
     agentId: event.agentId,
     otherAgentId: event.involvedAgents[0],
     conflictType: "design", // Collaboration challenges are typically design disagreements
@@ -293,11 +290,7 @@ async function recordConflict(event: CollaborationEvent): Promise<void> {
     resolution: "waiting", // Will be updated when decision is finalized
   };
 
-  // TODO: await service.recordConflict(conflict);
-  console.debug(
-    `[humanization:collab] Conflict recorded: ${event.agentId} challenged ${event.involvedAgents.join(", ")} ` +
-      `in session ${event.sessionKey}`,
-  );
+  await service.recordConflict(conflict);
 }
 
 async function persistChemistryUpdate(
@@ -308,9 +301,5 @@ async function persistChemistryUpdate(
     return;
   }
 
-  // TODO: await service.updateChemistry(update);
-  console.debug(
-    `[humanization:collab] Chemistry update: ${update.agent1}<->${update.agent2} ` +
-      `score=${(update.score * 100).toFixed(0)}% worksWell=${update.worksWell}`,
-  );
+  await service.updateChemistry(update);
 }

@@ -9,6 +9,7 @@ import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
 import { MAX_IMAGE_BYTES } from "../../../media/constants.js";
+import { loadClaudeMdMemory } from "../../../memory/claude-md-loader.js";
 import { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import {
   isCronSessionKey,
@@ -33,6 +34,7 @@ import {
 } from "../../channel-tools.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
+import { buildMemoryContext, shouldUseMemoryContext } from "../../hooks/memory-context-hook.js";
 import { resolveModelAuthMode } from "../../model-auth.js";
 import { resolveDefaultModelForAgent } from "../../model-selection.js";
 import { createOllamaStreamFn, OLLAMA_NATIVE_BASE_URL } from "../../ollama-stream.js";
@@ -426,11 +428,36 @@ export async function runEmbeddedAttempt(
     });
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
 
+    const claudeMdMemory = loadClaudeMdMemory({
+      workspaceDir: effectiveWorkspace,
+      currentDir: effectiveWorkspace,
+    });
+    const combinedExtraPrompt =
+      [params.extraSystemPrompt, claudeMdMemory].filter(Boolean).join("\n\n") || undefined;
+
+    // Build agent memory context (semantic memory system)
+    let agentMemoryContext = "";
+    const agentId = runtimeInfo.agentId || "unknown";
+    if (shouldUseMemoryContext({ agentId })) {
+      try {
+        agentMemoryContext = await buildMemoryContext({
+          agentId,
+          currentMessage: params.prompt,
+          maxTokens: 1500,
+        });
+      } catch (error) {
+        // Non-blocking: if memory context fails, continue without it
+        log.trace(`[${agentId}] Memory context build failed, continuing:`, {
+          error: String(error),
+        });
+      }
+    }
+
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,
       defaultThinkLevel: params.thinkLevel,
       reasoningLevel: params.reasoningLevel ?? "off",
-      extraSystemPrompt: params.extraSystemPrompt,
+      extraSystemPrompt: combinedExtraPrompt,
       ownerNumbers: params.ownerNumbers,
       reasoningTagHint,
       heartbeatPrompt: isDefaultAgent
@@ -452,6 +479,7 @@ export async function runEmbeddedAttempt(
       userTimeFormat,
       contextFiles,
       memoryCitationsMode: params.config?.memory?.citations,
+      agentMemoryContext,
     });
     const systemPromptReport = buildSystemPromptReport({
       source: "run",

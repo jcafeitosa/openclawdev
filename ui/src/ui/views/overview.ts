@@ -128,6 +128,70 @@ export function renderOverview(props: OverviewProps) {
   })();
 
   return html`
+    ${
+      props.connected
+        ? html`
+            <div
+              class="welcome-banner"
+              style="
+                background: linear-gradient(135deg, var(--accent-subtle) 0%, transparent 100%);
+                border-left: 4px solid var(--accent);
+                padding: 16px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+              "
+            >
+              <div style="display: flex; align-items: center; gap: 12px">
+                <svg
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  fill="none"
+                  stroke-width="2"
+                  style="width: 24px; height: 24px; color: var(--accent); flex-shrink: 0"
+                >
+                  <path d="M9 12l2 2 4-4m7 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <div style="font-weight: 600">Gateway Connected</div>
+                  <div class="muted" style="font-size: 0.9em">
+                    Your gateway is healthy and ready to handle requests.
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+        : html`
+            <div
+              class="welcome-banner"
+              style="
+                background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, transparent 100%);
+                border-left: 4px solid #ef4444;
+                padding: 16px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+              "
+            >
+              <div style="display: flex; align-items: center; gap: 12px">
+                <svg
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  fill="none"
+                  stroke-width="2"
+                  style="width: 24px; height: 24px; color: #ef4444; flex-shrink: 0"
+                >
+                  <path d="M12 8v4m0 4v.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <div style="font-weight: 600">Gateway Disconnected</div>
+                  <div class="muted" style="font-size: 0.9em">
+                    Configure your gateway connection below to get started.
+                  </div>
+                </div>
+              </div>
+            </div>
+          `
+    }
+
     <section class="grid grid-cols-2">
       <div class="card">
         <div class="card-title">Gateway Access</div>
@@ -238,52 +302,77 @@ export function renderOverview(props: OverviewProps) {
             <section class="card" style="margin-top: 18px;">
               <div class="card-title">System Info</div>
               <div class="card-sub">Gateway runtime infrastructure and configuration.</div>
-              <div class="stat-grid" style="margin-top: 16px;">
-                <div class="stat">
-                  <div class="stat-label">Version</div>
-                  <div class="stat-value">${props.systemInfo.version}</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-label">PID</div>
-                  <div class="stat-value mono">${props.systemInfo.pid}</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-label">Host</div>
-                  <div class="stat-value">${props.systemInfo.host}</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-label">Model</div>
-                  <div class="stat-value mono" style="font-size: 0.85em;">${props.systemInfo.model}</div>
-                </div>
-                <div class="stat">
-                  <div class="stat-label">Storage</div>
-                  <div class="stat-value ${props.systemInfo.storage.backend === "postgresql" ? "ok" : props.systemInfo.storage.backend === "sqlite" ? "warn" : ""}">
-                    ${props.systemInfo.storage.backend}
+
+              <div style="margin-top: 16px;">
+                <div style="margin-bottom: 20px;">
+                  <div style="font-size: 0.85em; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Build & Identity</div>
+                  <div class="stat-grid">
+                    <div class="stat">
+                      <div class="stat-label">Version</div>
+                      <div class="stat-value">${props.systemInfo.version}</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">Host</div>
+                      <div class="stat-value">${props.systemInfo.host}</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">PID</div>
+                      <div class="stat-value mono">${props.systemInfo.pid}</div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">Model</div>
+                      <div class="stat-value mono" style="font-size: 0.85em;">${props.systemInfo.model}</div>
+                    </div>
                   </div>
                 </div>
-                <div class="stat">
-                  <div class="stat-label">Cache</div>
-                  <div class="stat-value ${props.systemInfo.cache.backend === "redis" ? "ok" : ""}">
-                    ${props.systemInfo.cache.backend}${props.systemInfo.cache.host ? html` <span class="muted" style="font-size: 0.85em;">(${props.systemInfo.cache.host}:${props.systemInfo.cache.port})</span>` : nothing}
+
+                <div style="margin-bottom: 20px;">
+                  <div style="font-size: 0.85em; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Infrastructure</div>
+                  <div class="stat-grid">
+                    <div class="stat">
+                      <div class="stat-label">Storage</div>
+                      <div class="stat-value ${props.systemInfo.storage.backend === "postgresql" ? "ok" : props.systemInfo.storage.backend === "sqlite" ? "warn" : ""}">
+                        ${props.systemInfo.storage.backend}
+                      </div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">Cache</div>
+                      <div class="stat-value ${props.systemInfo.cache.backend === "redis" ? "ok" : ""}">
+                        ${props.systemInfo.cache.backend}${props.systemInfo.cache.host ? html` <span class="muted" style="font-size: 0.85em;">(${props.systemInfo.cache.host}:${props.systemInfo.cache.port})</span>` : nothing}
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div class="stat">
-                  <div class="stat-label">Runtime</div>
-                  <div class="stat-value mono" style="font-size: 0.85em;">
-                    ${props.systemInfo.platform}/${props.systemInfo.arch} · Node ${props.systemInfo.nodeVersion}
-                  </div>
-                </div>
-                <div class="stat">
-                  <div class="stat-label">Browser</div>
-                  <div class="stat-value">
-                    ${props.systemInfo.browserProfiles != null ? html`${props.systemInfo.browserProfiles} profile${props.systemInfo.browserProfiles !== 1 ? "s" : ""}` : "Disabled"}
+
+                <div>
+                  <div style="font-size: 0.85em; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">Runtime</div>
+                  <div class="stat-grid">
+                    <div class="stat">
+                      <div class="stat-label">Platform</div>
+                      <div class="stat-value mono" style="font-size: 0.85em;">
+                        ${props.systemInfo.platform}/${props.systemInfo.arch}
+                      </div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">Node Version</div>
+                      <div class="stat-value mono" style="font-size: 0.85em;">
+                        ${props.systemInfo.nodeVersion}
+                      </div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">Browser Profiles</div>
+                      <div class="stat-value">
+                        ${props.systemInfo.browserProfiles != null ? html`${props.systemInfo.browserProfiles} profile${props.systemInfo.browserProfiles !== 1 ? "s" : ""}` : "Disabled"}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
+
               ${
                 props.systemInfo.logFile
                   ? html`
-                      <div class="muted" style="margin-top: 10px; font-size: 0.85em;">
+                      <div class="muted" style="margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); font-size: 0.85em;">
                         Log: <span class="mono">${props.systemInfo.logFile}</span>
                       </div>
                     `
@@ -295,42 +384,209 @@ export function renderOverview(props: OverviewProps) {
     }
 
     <section class="grid grid-cols-3" style="margin-top: 18px;">
-      <div class="card stat-card">
-        <div class="stat-label">Instances</div>
-        <div class="stat-value">${props.presenceCount}</div>
-        <div class="muted">Presence beacons in the last 5 minutes.</div>
+      <div class="card stat-card" style="border-left: 3px solid var(--accent);">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+          <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: var(--accent); flex-shrink: 0;">
+            <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <div class="stat-label">Instances</div>
+        </div>
+        <div class="stat-value" style="color: var(--accent);">${props.presenceCount}</div>
+        <div class="muted" style="font-size: 0.85em;">Presence beacons in the last 5 minutes.</div>
       </div>
-      <div class="card stat-card">
-        <div class="stat-label">Sessions</div>
-        <div class="stat-value">${props.sessionsCount ?? "n/a"}</div>
-        <div class="muted">Recent session keys tracked by the gateway.</div>
+      <div class="card stat-card" style="border-left: 3px solid #8b5cf6;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+          <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: #8b5cf6; flex-shrink: 0;">
+            <path d="M12 8c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm0 2c-2.21 0-4 1.79-4 4v2h8v-2c0-2.21-1.79-4-4-4zm6 6v-2c0-1.657-1.343-3-3-3h-.5M7.5 11c-1.657 0-3 1.343-3 3v2h1.5v-2c0-1.657 1.343-3 3-3H7.5z" />
+            <path d="M21 20H3v2h18v-2z" />
+          </svg>
+          <div class="stat-label">Sessions</div>
+        </div>
+        <div class="stat-value" style="color: #8b5cf6;">${props.sessionsCount ?? "n/a"}</div>
+        <div class="muted" style="font-size: 0.85em;">Recent session keys tracked by the gateway.</div>
       </div>
-      <div class="card stat-card">
-        <div class="stat-label">Cron</div>
-        <div class="stat-value">
+      <div class="card stat-card" style="border-left: 3px solid #06b6d4;">
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+          <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: #06b6d4; flex-shrink: 0;">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+          <div class="stat-label">Cron</div>
+        </div>
+        <div class="stat-value" style="color: #06b6d4;">
           ${props.cronEnabled == null ? "n/a" : props.cronEnabled ? "Enabled" : "Disabled"}
         </div>
-        <div class="muted">Next wake ${formatNextRun(props.cronNext)}</div>
+        <div class="muted" style="font-size: 0.85em;">Next wake ${formatNextRun(props.cronNext)}</div>
       </div>
     </section>
 
-    <section class="card" style="margin-top: 18px;">
-      <div class="card-title">Notes</div>
-      <div class="card-sub">Quick reminders for remote control setups.</div>
-      <div class="note-grid" style="margin-top: 14px;">
-        <div>
-          <div class="note-title">Tailscale serve</div>
-          <div class="muted">
+    ${
+      props.connected
+        ? html`
+            <section style="margin-top: 18px">
+              <div
+                style="
+                  font-size: 0.85em;
+                  font-weight: 600;
+                  color: var(--text-secondary);
+                  text-transform: uppercase;
+                  letter-spacing: 0.5px;
+                  margin-bottom: 12px;
+                "
+              >
+                Quick Actions
+              </div>
+              <div class="grid grid-cols-2" style="gap: 12px">
+                <button
+                  class="btn"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    padding: 12px 16px;
+                    background: var(--accent-subtle);
+                    color: var(--accent);
+                    border: 1px solid var(--accent);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-width="2"
+                    style="width: 18px; height: 18px"
+                  >
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  New Session
+                </button>
+                <button
+                  class="btn"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    padding: 12px 16px;
+                    background: var(--accent-subtle);
+                    color: var(--accent);
+                    border: 1px solid var(--accent);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-width="2"
+                    style="width: 18px; height: 18px"
+                  >
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M9 12l2 2 4-4" />
+                  </svg>
+                  Check Status
+                </button>
+                <button
+                  class="btn"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    padding: 12px 16px;
+                    background: var(--accent-subtle);
+                    color: var(--accent);
+                    border: 1px solid var(--accent);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-width="2"
+                    style="width: 18px; height: 18px"
+                  >
+                    <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  View Logs
+                </button>
+                <button
+                  class="btn"
+                  style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    padding: 12px 16px;
+                    background: var(--accent-subtle);
+                    color: var(--accent);
+                    border: 1px solid var(--accent);
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-weight: 500;
+                  "
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    fill="none"
+                    stroke-width="2"
+                    style="width: 18px; height: 18px"
+                  >
+                    <path
+                      d="M10.5 1.5H21a2 2 0 012 2v19a2 2 0 01-2 2H3a2 2 0 01-2-2V3.5a2 2 0 012-2h7M6 5h12M6 9h12m-7 8v-5m0 5v5m0-5h-2m2 0h2"
+                    />
+                  </svg>
+                  Documentation
+                </button>
+              </div>
+            </section>
+          `
+        : nothing
+    }
+
+    <section style="margin-top: 18px;">
+      <div style="font-weight: 600; font-size: 1.1em; margin-bottom: 8px;">Notes & Tips</div>
+      <div class="muted" style="margin-bottom: 14px;">Quick reminders for remote control setups.</div>
+      <div class="grid grid-cols-3" style="gap: 14px;">
+        <div style="border: 1px solid var(--border); border-left: 3px solid #f59e0b; border-radius: 8px; padding: 16px; background: rgba(245, 158, 11, 0.02);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 18px; height: 18px; color: #f59e0b; flex-shrink: 0;">
+              <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.658 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+            <div class="note-title" style="color: #f59e0b; font-weight: 600;">Tailscale Serve</div>
+          </div>
+          <div class="muted" style="font-size: 0.9em;">
             Prefer serve mode to keep the gateway on loopback with tailnet auth.
           </div>
         </div>
-        <div>
-          <div class="note-title">Session hygiene</div>
-          <div class="muted">Use /new or sessions.patch to reset context.</div>
+        <div style="border: 1px solid var(--border); border-left: 3px solid #10b981; border-radius: 8px; padding: 16px; background: rgba(16, 185, 129, 0.02);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 18px; height: 18px; color: #10b981; flex-shrink: 0;">
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div class="note-title" style="color: #10b981; font-weight: 600;">Session Hygiene</div>
+          </div>
+          <div class="muted" style="font-size: 0.9em;">Use /new or sessions.patch to reset context between runs.</div>
         </div>
-        <div>
-          <div class="note-title">Cron reminders</div>
-          <div class="muted">Use isolated sessions for recurring runs.</div>
+        <div style="border: 1px solid var(--border); border-left: 3px solid #06b6d4; border-radius: 8px; padding: 16px; background: rgba(6, 182, 212, 0.02);">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 18px; height: 18px; color: #06b6d4; flex-shrink: 0;">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            <div class="note-title" style="color: #06b6d4; font-weight: 600;">Cron Reminders</div>
+          </div>
+          <div class="muted" style="font-size: 0.9em;">Use isolated sessions for recurring or scheduled runs.</div>
         </div>
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, type TemplateResult } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import type { AppViewState } from "./app-view-state.ts";
 import type { ThemeTransitionContext } from "./theme-transition.ts";
@@ -476,5 +476,34 @@ function renderMonitorIcon() {
       <line x1="8" x2="16" y1="21" y2="21"></line>
       <line x1="12" x2="12" y1="17" y2="21"></line>
     </svg>
+  `;
+}
+
+/* ── Empty State ────────────────────────────────────── */
+
+export type EmptyStateProps = {
+  icon: TemplateResult;
+  title: string;
+  subtitle?: string;
+};
+
+export function renderEmptyState(props: EmptyStateProps) {
+  return html`
+    <div class="empty-state">
+      <div class="empty-state__icon">${props.icon}</div>
+      <div class="empty-state__title">${props.title}</div>
+      ${props.subtitle ? html`<div class="empty-state__subtitle">${props.subtitle}</div>` : ""}
+    </div>
+  `;
+}
+
+/* ── Spinner ────────────────────────────────────────── */
+
+export function renderSpinner(label?: string) {
+  return html`
+    <div class="spinner-container">
+      <div class="spinner"></div>
+      ${label ? html`<span class="muted">${label}</span>` : ""}
+    </div>
   `;
 }

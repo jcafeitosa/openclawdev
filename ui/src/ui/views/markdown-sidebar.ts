@@ -30,12 +30,7 @@ export function renderMarkdownSidebar(props: MarkdownSidebarProps) {
               </button>
             `
             : props.content
-              ? html`<div class="sidebar-markdown">${until(
-                  toSanitizedMarkdownHtml(props.content).then((html) => unsafeHTML(html)),
-                  html`
-                    <span>Loading...</span>
-                  `,
-                )}</div>`
+              ? html`<div class="sidebar-markdown">${unsafeHTML(toSanitizedMarkdownHtml(props.content))}</div>`
               : html`
                   <div class="muted">No content available</div>
                 `

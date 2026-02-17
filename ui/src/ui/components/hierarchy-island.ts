@@ -38,7 +38,12 @@ export class HierarchyIsland extends LitElement {
   }
 
   private handleNodeClick(sessionKey: string) {
-    console.log("Node clicked:", sessionKey);
+    const basePath =
+      (typeof globalThis.window !== "undefined"
+        ? (window as { __OPENCLAW_CONTROL_UI_BASE_PATH__?: string })
+            .__OPENCLAW_CONTROL_UI_BASE_PATH__
+        : undefined) || "";
+    window.location.href = `${basePath}/chat?session=${encodeURIComponent(sessionKey)}`;
   }
 
   render() {

@@ -9,7 +9,7 @@ import type {
   CollaborationEdge,
 } from "../types.ts";
 import { renderEmptyState } from "../app-render.helpers.ts";
-import { formatAgo } from "../format.ts";
+import { formatRelativeTimestamp as formatAgo } from "../format.ts";
 import { icons } from "../icons.ts";
 
 /* ═══════════════════════════════════════════════════════════════

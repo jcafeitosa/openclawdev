@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { resolveSessionAgentId } from "../agent-scope.js";
+import { analyzeConvergence, type DebateEntry } from "../debate-convergence.js";
 import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
 import { type AnyAgentTool, jsonResult, readStringArrayParam, readStringParam } from "./common.js";
 import { callGatewayTool } from "./gateway.js";
@@ -15,6 +16,7 @@ const COLLAB_ACTIONS = [
   "dispute.escalate",
   "session.get",
   "thread.get",
+  "check_convergence",
   "poll",
   "poll.vote",
   "poll.get",
@@ -40,6 +42,7 @@ const CollaborationToolSchema = zodToToolJsonSchema(
           "dispute.escalate: escalate a dispute to the immediate superior in the hierarchy. " +
           "session.get: read full session state. " +
           "thread.get: read a specific decision thread. " +
+          "check_convergence: analyze debate entries to detect consensus and convergence. " +
           "poll: create a quick yes/no or multi-choice poll. " +
           "poll.vote: cast a vote in a poll. " +
           "poll.get: read poll status + tally. " +
@@ -100,6 +103,17 @@ const CollaborationToolSchema = zodToToolJsonSchema(
     inviteAgentId: z
       .string()
       .describe("Agent ID to invite to the session (for session.invite)")
+      .optional(),
+    debateEntries: z
+      .array(
+        z.object({
+          agentId: z.string(),
+          action: z.enum(["propose", "challenge", "agree", "finalize"]),
+          round: z.number(),
+          content: z.string().optional(),
+        }),
+      )
+      .describe("Debate entries for convergence analysis (for check_convergence)")
       .optional(),
   }),
 );
@@ -256,6 +270,35 @@ export function createCollaborationTool(opts?: { agentSessionKey?: string }): An
           },
         );
         return jsonResult(result);
+      }
+
+      if (action === "check_convergence") {
+        const debateEntriesRaw = params.debateEntries;
+        if (!Array.isArray(debateEntriesRaw) || debateEntriesRaw.length === 0) {
+          return jsonResult({
+            status: "error",
+            action: "check_convergence",
+            error: "debateEntries is required and must be a non-empty array",
+          });
+        }
+
+        const debateEntries: DebateEntry[] = debateEntriesRaw.map((entry: unknown) => {
+          const e = entry as Record<string, unknown>;
+          return {
+            agentId: String(e.agentId ?? "unknown"),
+            action: (e.action as "propose" | "challenge" | "agree" | "finalize") ?? "propose",
+            round: typeof e.round === "number" ? e.round : 0,
+            content: typeof e.content === "string" ? e.content : undefined,
+          };
+        });
+
+        const metrics = analyzeConvergence(debateEntries);
+        return jsonResult({
+          status: "ok",
+          action: "check_convergence",
+          metrics,
+          shouldFinalize: metrics.recommendation === "ready_to_finalize",
+        });
       }
 
       if (action === "poll") {

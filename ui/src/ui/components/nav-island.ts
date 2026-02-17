@@ -87,17 +87,70 @@ export class NavIsland extends LitElement {
     this.persistNavState();
   }
 
-  private cycleTheme() {
-    const modes: ThemeMode[] = ["system", "light", "dark"];
-    const current = this.themeCtrl.value;
-    const idx = modes.indexOf(current);
-    const next = modes[(idx + 1) % modes.length];
+  private setTheme(next: ThemeMode) {
     $theme.set(next);
     const resolved = resolveTheme(next);
     $themeResolved.set(resolved);
     applyTheme(resolved);
     const settings = loadSettings();
     saveSettings({ ...settings, theme: next });
+  }
+
+  private renderThemeToggle() {
+    const modes: ThemeMode[] = ["system", "light", "dark"];
+    const index = modes.indexOf(this.themeCtrl.value);
+    return html`
+      <div class="theme-toggle" style="--theme-index: ${index};">
+        <div class="theme-toggle__track" role="group" aria-label="Theme">
+          <span class="theme-toggle__indicator"></span>
+          <button
+            class="theme-toggle__button ${this.themeCtrl.value === "system" ? "active" : ""}"
+            @click=${() => this.setTheme("system")}
+            aria-pressed=${this.themeCtrl.value === "system"}
+            aria-label="System theme"
+            title="System"
+          >
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <rect width="20" height="14" x="2" y="3" rx="2"></rect>
+              <line x1="8" x2="16" y1="21" y2="21"></line>
+              <line x1="12" x2="12" y1="17" y2="21"></line>
+            </svg>
+          </button>
+          <button
+            class="theme-toggle__button ${this.themeCtrl.value === "light" ? "active" : ""}"
+            @click=${() => this.setTheme("light")}
+            aria-pressed=${this.themeCtrl.value === "light"}
+            aria-label="Light theme"
+            title="Light"
+          >
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="4"></circle>
+              <path d="M12 2v2"></path>
+              <path d="M12 20v2"></path>
+              <path d="m4.93 4.93 1.41 1.41"></path>
+              <path d="m17.66 17.66 1.41 1.41"></path>
+              <path d="M2 12h2"></path>
+              <path d="M20 12h2"></path>
+              <path d="m6.34 17.66-1.41 1.41"></path>
+              <path d="m19.07 4.93-1.41 1.41"></path>
+            </svg>
+          </button>
+          <button
+            class="theme-toggle__button ${this.themeCtrl.value === "dark" ? "active" : ""}"
+            @click=${() => this.setTheme("dark")}
+            aria-pressed=${this.themeCtrl.value === "dark"}
+            aria-label="Dark theme"
+            title="Dark"
+          >
+            <svg class="theme-icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    `;
   }
 
   private navigateToTab(tab: Tab, event: MouseEvent) {
@@ -181,14 +234,7 @@ export class NavIsland extends LitElement {
               </div>`
               : nothing
           }
-          <button
-            class="pill pill--interactive"
-            @click=${() => this.cycleTheme()}
-            title="Toggle theme (${this.themeCtrl.value})"
-            aria-label="Toggle theme"
-          >
-            <span>${this.themeResolvedCtrl.value === "dark" ? "\u263E" : "\u2600"}</span>
-          </button>
+          ${this.renderThemeToggle()}
         </div>
       </header>
 
@@ -231,6 +277,33 @@ export class NavIsland extends LitElement {
               <span class="nav-item__text">Docs</span>
             </a>
           </div>
+        </div>
+
+        <!-- Command Palette Hint -->
+        <div style="padding: 8px 12px; margin-top: auto;">
+          <button
+            class="nav-item"
+            style="width: 100%; justify-content: space-between; opacity: 0.7;"
+            @click=${() => {
+              const palette = document.querySelector("command-palette") as
+                | (HTMLElement & { open: () => void })
+                | null;
+              if (palette && typeof palette.open === "function") {
+                palette.open();
+              }
+            }}
+            title="Search commands (${navigator.platform?.includes("Mac") ? "\u2318" : "Ctrl"}+K)"
+          >
+            <span style="display: flex; align-items: center; gap: 10px;">
+              <span class="nav-item__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              </span>
+              <span class="nav-item__text">Search</span>
+            </span>
+            <kbd style="font-size: 10px; font-family: var(--mono); padding: 2px 6px; border-radius: 4px; background: var(--bg-hover); border: 1px solid var(--border); color: var(--muted); line-height: 1.3;">
+              ${navigator.platform?.includes("Mac") ? "\u2318K" : "^K"}
+            </kbd>
+          </button>
         </div>
       </aside>
     `;

@@ -173,8 +173,8 @@ export async function getTwitterDashboardData() {
     const data = {
       profile: {
         followers: Number(profile.followersCount) || 0,
-        followers_growth_24h: 0, // TODO: track over time
-        followers_growth_7d: 0, // TODO: track over time
+        followers_growth_24h: 0,
+        followers_growth_7d: 0,
         following: Number(profile.followingCount) || 0,
         ff_ratio:
           profile.followersCount && profile.followingCount
@@ -184,8 +184,28 @@ export async function getTwitterDashboardData() {
         tweets_last_7d: tweetItems.length, // Approximation
       },
       engagement: {
-        rate_avg_7d: 0, // TODO: calculate from tweets
-        reach_rate: 0, // TODO: calculate impressions/followers
+        rate_avg_7d:
+          tweetItems.length > 0
+            ? tweetItems.reduce((sum: number, t: unknown) => {
+                const tw = t as Record<string, unknown>;
+                const likes = Number(tw.likeCount) || 0;
+                const retweets = Number(tw.retweetCount) || 0;
+                const replies = Number(tw.replyCount) || 0;
+                const views = Number(tw.viewCount) || 0;
+                return sum + (views > 0 ? ((likes + retweets + replies) / views) * 100 : 0);
+              }, 0) / tweetItems.length
+            : 0,
+        reach_rate:
+          (Number(profile.followersCount) || 0) > 0
+            ? (tweetItems.reduce(
+                (sum: number, t: unknown) =>
+                  sum + (Number((t as Record<string, unknown>).viewCount) || 0),
+                0,
+              ) /
+                tweetItems.length /
+                (Number(profile.followersCount) || 1)) *
+              100
+            : 0,
       },
       tweets: tweetItems.slice(0, 10).map((tweet: unknown) => {
         const t = tweet as Record<string, unknown>;
@@ -212,7 +232,34 @@ export async function getTwitterDashboardData() {
               : "0",
         };
       }),
-      alerts: [], // TODO: implement alert logic
+      alerts: (() => {
+        const alertList: Array<{ type: string; message: string }> = [];
+        const avgEngagement =
+          tweetItems.length > 0
+            ? tweetItems.reduce((sum: number, t: unknown) => {
+                const tw = t as Record<string, unknown>;
+                const views = Number(tw.viewCount) || 0;
+                const interactions =
+                  (Number(tw.likeCount) || 0) +
+                  (Number(tw.retweetCount) || 0) +
+                  (Number(tw.replyCount) || 0);
+                return sum + (views > 0 ? interactions / views : 0);
+              }, 0) / tweetItems.length
+            : 0;
+        if (avgEngagement < 0.01) {
+          alertList.push({
+            type: "warning",
+            message: "Engagement rate below 1% - consider varying content strategy",
+          });
+        }
+        if (tweetItems.length < 3) {
+          alertList.push({
+            type: "info",
+            message: "Low posting frequency - aim for 3+ tweets per week",
+          });
+        }
+        return alertList;
+      })(),
       lastUpdated: new Date().toISOString(),
     };
 

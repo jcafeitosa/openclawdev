@@ -53,6 +53,7 @@ export const llmUsage = pgTable(
     index("idx_usage_provider").on(t.providerId, t.time),
     index("idx_usage_model").on(t.modelId, t.time),
     index("idx_usage_agent").on(t.agentId, t.time),
+    index("idx_usage_session").on(t.sessionId, t.time),
   ],
 );
 
@@ -130,7 +131,10 @@ export const agentRelationships = pgTable(
     lastInteraction: timestamp("last_interaction", { withTimezone: true }),
     notes: text("notes"),
   },
-  (t) => [index("idx_relationships_agent_trust").on(t.agentId, t.trustScore)],
+  (t) => [
+    index("idx_relationships_agent_trust").on(t.agentId, t.trustScore),
+    index("idx_relationships_pair").on(t.agentId, t.otherAgentId),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -160,6 +164,7 @@ export const agentReputation = pgTable(
     lastUpdated: timestamp("last_updated", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
+    index("idx_reputation_agent").on(t.agentId),
     index("idx_reputation_reliability").on(t.reliabilityScore),
     index("idx_reputation_quality").on(t.qualityRating),
     index("idx_reputation_trend").on(t.trend),

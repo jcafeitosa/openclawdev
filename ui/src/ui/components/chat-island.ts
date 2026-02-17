@@ -47,17 +47,29 @@ export class ChatIsland extends LitElement {
   @state() private focusMode = false;
   @state() private showThinking = false;
 
+  private gatewayEventUnsub: (() => void) | null = null;
+  /** Guard to discard stale refreshChat() responses after session switch. */
+  private refreshGeneration = 0;
+
   protected createRenderRoot() {
     return this;
   }
 
   connectedCallback() {
     super.connectedCallback();
-    // Listen for chat events from gateway
-    $gatewayEvent.subscribe((evt) => {
+    // Listen for chat events from gateway — filter by active session to prevent
+    // cross-session message leakage (Issue #5).
+    this.gatewayEventUnsub = $gatewayEvent.subscribe((evt) => {
       if (!evt) {
         return;
       }
+      // Only process events for the currently active session
+      const evtSession = (evt.payload as { sessionKey?: string } | undefined)?.sessionKey;
+      const currentSession = this.activeSession.value || "main";
+      if (evtSession && evtSession !== currentSession) {
+        return;
+      }
+
       if (evt.event === "chat.stream") {
         const payload = evt.payload as { text?: string; startedAt?: number } | undefined;
         if (payload?.text !== undefined) {
@@ -77,11 +89,20 @@ export class ChatIsland extends LitElement {
     void this.refreshChat();
   }
 
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.gatewayEventUnsub?.();
+    this.gatewayEventUnsub = null;
+  }
+
   render(): TemplateResult {
     const props: ChatProps = {
       sessionKey: this.activeSession.value || "main",
       onSessionKeyChange: (next: string) => {
         $activeSession.set(next);
+        // Clear stale stream state when switching sessions
+        $chatStream.set(null);
+        $chatStreamStartedAt.set(null);
         void this.refreshChat();
       },
       thinkingLevel: null,
@@ -141,6 +162,9 @@ export class ChatIsland extends LitElement {
   }
 
   private async refreshChat() {
+    // Increment generation to discard stale responses when user switches
+    // sessions rapidly (Issue #2 — race condition).
+    const gen = ++this.refreshGeneration;
     $chatLoading.set(true);
     try {
       const sessionKey = this.activeSession.value || "main";
@@ -148,15 +172,24 @@ export class ChatIsland extends LitElement {
         messages?: unknown[];
         toolMessages?: unknown[];
       }>("chat.history", { sessionKey });
+      // Only apply result if this is still the latest refresh request
+      if (gen !== this.refreshGeneration) {
+        return;
+      }
       $chatMessages.set(result.messages ?? []);
       $chatToolMessages.set(result.toolMessages ?? []);
     } catch (err) {
+      if (gen !== this.refreshGeneration) {
+        return;
+      }
       // Silently handle — gateway may not be ready yet
       if (this.connectedCtrl.value) {
         console.warn("Failed to load chat:", err);
       }
     } finally {
-      $chatLoading.set(false);
+      if (gen === this.refreshGeneration) {
+        $chatLoading.set(false);
+      }
     }
   }
 
@@ -174,9 +207,13 @@ export class ChatIsland extends LitElement {
         message,
         attachments: [...this.chatAttachments.value],
       });
+      // Clear input on successful send — $chatSending will be reset by
+      // the "chat.done" event when the agent finishes its response.
       $chatMessage.set("");
       $chatAttachments.set([]);
     } catch (err) {
+      // On send failure, reset sending state immediately so the user can
+      // retry. The "chat.done" event won't fire since the RPC failed.
       console.error("Failed to send message:", err);
       $chatSending.set(false);
     }

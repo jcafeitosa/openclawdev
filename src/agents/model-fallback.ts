@@ -391,3 +391,82 @@ export async function runWithImageModelFallback<T>(params: {
     cause: lastError instanceof Error ? lastError : undefined,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Per-model cooldown tracking (in-memory)
+// ---------------------------------------------------------------------------
+
+type ModelCooldownEntry = {
+  untilMs: number;
+  reason: string;
+  failures: number;
+};
+
+/** In-memory cooldown map keyed by `provider/model`. */
+const modelCooldowns = new Map<string, ModelCooldownEntry>();
+
+/**
+ * Check whether a specific model is currently in cooldown.
+ */
+export function isModelCoolingDown(
+  ref: { provider: string; model: string },
+  now?: number,
+): boolean {
+  const key = modelKey(ref.provider, ref.model);
+  const entry = modelCooldowns.get(key);
+  if (!entry) {
+    return false;
+  }
+  const ts = now ?? Date.now();
+  if (ts >= entry.untilMs) {
+    modelCooldowns.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Return a snapshot of all models currently in cooldown.
+ * Expired entries are pruned during iteration.
+ */
+export function getModelCooldownSnapshot(): {
+  key: string;
+  provider: string;
+  model: string;
+  untilMs: number;
+  remainingMs: number;
+  failures: number;
+  reason: string;
+}[] {
+  const now = Date.now();
+  const results: {
+    key: string;
+    provider: string;
+    model: string;
+    untilMs: number;
+    remainingMs: number;
+    failures: number;
+    reason: string;
+  }[] = [];
+
+  for (const [key, entry] of modelCooldowns) {
+    if (now >= entry.untilMs) {
+      modelCooldowns.delete(key);
+      continue;
+    }
+    const slashIndex = key.indexOf("/");
+    const provider = slashIndex >= 0 ? key.slice(0, slashIndex) : key;
+    const model = slashIndex >= 0 ? key.slice(slashIndex + 1) : key;
+    results.push({
+      key,
+      provider,
+      model,
+      untilMs: entry.untilMs,
+      remainingMs: entry.untilMs - now,
+      failures: entry.failures,
+      reason: entry.reason,
+    });
+  }
+
+  return results;
+}

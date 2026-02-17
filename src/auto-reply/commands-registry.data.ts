@@ -443,6 +443,12 @@ function buildChatCommands(): ChatCommandDefinition[] {
       category: "session",
     }),
     defineChatCommand({
+      key: "init",
+      description: "Initialize CLAUDE.md memory file in the workspace.",
+      textAlias: "/init",
+      category: "session",
+    }),
+    defineChatCommand({
       key: "compact",
       nativeName: "compact",
       description: "Compact the session context.",
@@ -604,6 +610,27 @@ function buildChatCommands(): ChatCommandDefinition[] {
           description: "Shell command",
           type: "string",
           captureRemaining: true,
+        },
+      ],
+    }),
+    defineChatCommand({
+      key: "fast",
+      nativeName: "fast",
+      description: "Toggle fast mode for faster responses.",
+      textAlias: "/fast",
+      category: "options",
+    }),
+    defineChatCommand({
+      key: "plan",
+      description: "Manage execution plans.",
+      textAlias: "/plan",
+      acceptsArgs: true,
+      category: "tools",
+      args: [
+        {
+          name: "command",
+          description: "list or blank for list",
+          type: "string",
         },
       ],
     }),

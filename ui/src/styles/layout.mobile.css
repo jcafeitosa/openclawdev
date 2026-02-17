@@ -2,17 +2,18 @@
    Mobile Layout
    =========================================== */
 
-/* Tablet: Horizontal nav */
+/* Tablet: Horizontal nav with pill-style improvements */
 @media (max-width: 1100px) {
   .nav {
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
-    gap: 4px;
+    gap: 6px;
     padding: 10px 14px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .nav::-webkit-scrollbar {
@@ -36,11 +37,52 @@
   }
 
   .nav-item {
-    padding: 8px 14px;
+    padding: 10px 16px;
     font-size: 13px;
-    border-radius: var(--radius-md);
+    border-radius: 20px;
     white-space: nowrap;
     flex-shrink: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    transition:
+      background-color 200ms ease,
+      color 200ms ease;
+    position: relative;
+  }
+
+  /* Active state indicator for nav items */
+  .nav-item[aria-current="page"]::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 16px;
+    right: 16px;
+    height: 3px;
+    background-color: currentColor;
+    border-radius: 2px 2px 0 0;
+    opacity: 0.8;
+  }
+}
+
+/* iPad: Enhanced breakpoint for iPad/2-in-1 devices */
+@media (max-width: 768px) {
+  .nav-item {
+    padding: 8px 14px;
+    font-size: 12px;
+    border-radius: 18px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    transition: all 200ms ease;
+  }
+
+  .card {
+    transition: all 200ms ease;
+  }
+
+  .stat {
+    transition: all 200ms ease;
   }
 }
 
@@ -59,6 +101,7 @@
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .brand {
@@ -81,9 +124,13 @@
   }
 
   .topbar-status .pill {
-    padding: 4px 8px;
+    padding: 6px 10px;
     font-size: 11px;
     gap: 4px;
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    border-radius: 16px;
   }
 
   .topbar-status .pill .mono {
@@ -96,10 +143,11 @@
 
   /* Nav */
   .nav {
-    padding: 8px 10px;
-    gap: 4px;
+    padding: 10px 12px;
+    gap: 6px;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .nav::-webkit-scrollbar {
@@ -115,11 +163,28 @@
   }
 
   .nav-item {
-    padding: 6px 10px;
+    padding: 8px 14px;
     font-size: 12px;
-    border-radius: var(--radius-md);
+    border-radius: 18px;
     white-space: nowrap;
     flex-shrink: 0;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Active state indicator for nav items */
+  .nav-item[aria-current="page"]::after {
+    content: "";
+    position: absolute;
+    bottom: 6px;
+    left: 14px;
+    right: 14px;
+    height: 2px;
+    background-color: currentColor;
+    border-radius: 1px;
+    opacity: 0.8;
   }
 
   /* Content */
@@ -128,76 +193,105 @@
   }
 
   .content {
-    padding: 4px 4px 16px;
+    padding: 8px 8px 20px;
     gap: 12px;
+    transition: all 200ms ease;
   }
 
-  /* Cards */
+  /* Cards with better visual separation */
   .card {
     padding: 12px;
     border-radius: var(--radius-md);
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid var(--color-border, transparent);
   }
 
   .card-title {
     font-size: 13px;
   }
 
-  /* Stats */
+  /* Stats: Full-width stacked with larger values */
   .stat-grid {
-    gap: 8px;
-    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    grid-template-columns: 1fr;
   }
 
   .stat {
-    padding: 10px;
+    padding: 14px;
     border-radius: var(--radius-md);
+    transition: all 200ms ease;
+    min-height: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .stat-label {
-    font-size: 11px;
+    font-size: 12px;
+    margin-bottom: 6px;
   }
 
   .stat-value {
-    font-size: 18px;
+    font-size: 24px;
+    font-weight: 600;
   }
 
   /* Notes */
   .note-grid {
     grid-template-columns: 1fr;
-    gap: 8px;
+    gap: 10px;
   }
 
   /* Forms */
   .form-grid {
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 12px;
   }
 
   .field input,
   .field textarea,
   .field select {
-    padding: 8px 10px;
+    padding: 12px;
     border-radius: var(--radius-md);
-    font-size: 14px;
+    font-size: 16px;
+    min-height: 44px;
+    transition: all 200ms ease;
   }
 
-  /* Buttons */
+  .field textarea {
+    min-height: 88px;
+  }
+
+  /* Buttons with proper touch targets */
   .btn {
-    padding: 8px 12px;
-    font-size: 12px;
+    padding: 12px 16px;
+    font-size: 14px;
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    transition: all 200ms ease;
   }
 
   /* Pills */
   .pill {
-    padding: 4px 10px;
+    padding: 6px 12px;
     font-size: 12px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    border-radius: 16px;
+    transition: all 200ms ease;
   }
 
-  /* Chat */
+  /* Chat improvements */
   .chat-header {
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    padding-bottom: 8px;
   }
 
   .chat-header__left {
@@ -216,7 +310,10 @@
 
   .chat-thread {
     margin-top: 8px;
-    padding: 12px 8px;
+    padding: 12px 12px;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .chat-msg {
@@ -224,31 +321,67 @@
   }
 
   .chat-bubble {
-    padding: 8px 12px;
+    padding: 10px 14px;
     border-radius: var(--radius-md);
+    transition: all 200ms ease;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
   }
 
+  /* Better compose area with bottom sheet pattern */
   .chat-compose {
+    gap: 10px;
+    padding: 12px;
+    background-color: var(--color-bg, transparent);
+    border-top: 1px solid var(--color-border, transparent);
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    transition: all 200ms ease;
+  }
+
+  .chat-compose__field {
+    display: flex;
     gap: 8px;
+    align-items: flex-end;
+    flex: 1;
   }
 
   .chat-compose__field textarea {
-    min-height: 60px;
-    padding: 8px 10px;
+    min-height: 44px;
+    padding: 10px 12px;
     border-radius: var(--radius-md);
     font-size: 14px;
+    resize: vertical;
+    max-height: 120px;
+    transition: all 200ms ease;
+    flex: 1;
+  }
+
+  .chat-compose .btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* Log stream */
   .log-stream {
     border-radius: var(--radius-md);
     max-height: 380px;
+    border: 1px solid var(--color-border, transparent);
   }
 
   .log-row {
     grid-template-columns: 1fr;
     gap: 4px;
-    padding: 8px;
+    padding: 10px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
   }
 
   .log-time {
@@ -267,10 +400,14 @@
     font-size: 12px;
   }
 
-  /* Lists */
+  /* Lists with proper touch targets */
   .list-item {
-    padding: 10px;
+    padding: 12px;
     border-radius: var(--radius-md);
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    transition: all 200ms ease;
   }
 
   .list-title {
@@ -283,9 +420,10 @@
 
   /* Code blocks */
   .code-block {
-    padding: 8px;
+    padding: 10px;
     border-radius: var(--radius-md);
     font-size: 11px;
+    border: 1px solid var(--color-border, transparent);
   }
 
   /* Theme toggle */
@@ -304,11 +442,11 @@
 /* Small mobile */
 @media (max-width: 400px) {
   .shell {
-    --shell-pad: 4px;
+    --shell-pad: 6px;
   }
 
   .topbar {
-    padding: 8px 10px;
+    padding: 10px 12px;
   }
 
   .brand-title {
@@ -316,49 +454,84 @@
   }
 
   .nav {
-    padding: 6px 8px;
+    padding: 8px 10px;
+    gap: 4px;
   }
 
   .nav-item {
-    padding: 6px 8px;
+    padding: 8px 12px;
     font-size: 11px;
+    min-height: 44px;
+    border-radius: 16px;
   }
 
   .content {
-    padding: 4px 4px 12px;
+    padding: 8px 8px 16px;
     gap: 10px;
   }
 
   .card {
-    padding: 10px;
+    padding: 12px;
+    border-radius: var(--radius-md);
   }
 
   .stat {
-    padding: 8px;
+    padding: 12px;
+    min-height: 72px;
+  }
+
+  .stat-label {
+    font-size: 11px;
   }
 
   .stat-value {
-    font-size: 16px;
+    font-size: 20px;
   }
 
   .chat-bubble {
-    padding: 8px 10px;
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+
+  .chat-compose {
+    padding: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
 
   .chat-compose__field textarea {
-    min-height: 52px;
-    padding: 8px 10px;
+    min-height: 44px;
+    padding: 10px 12px;
     font-size: 13px;
   }
 
   .btn {
-    padding: 6px 10px;
-    font-size: 11px;
+    padding: 10px 14px;
+    font-size: 12px;
+    min-height: 44px;
+    min-width: 44px;
   }
 
   .topbar-status .pill {
-    padding: 3px 6px;
+    padding: 6px 10px;
     font-size: 10px;
+    min-height: 32px;
+    border-radius: 16px;
+  }
+
+  .list-item {
+    padding: 12px;
+    min-height: 44px;
+  }
+
+  .field input,
+  .field textarea,
+  .field select {
+    min-height: 44px;
+    padding: 10px 12px;
+  }
+
+  .field textarea {
+    min-height: 88px;
   }
 
   .theme-toggle {

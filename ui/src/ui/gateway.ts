@@ -286,14 +286,41 @@ export class GatewayBrowserClient {
     }
   }
 
+  /** Default RPC timeout — 2 minutes. "connect" handshake uses 30s. */
+  private static readonly RPC_TIMEOUT_MS = 120_000;
+  private static readonly CONNECT_TIMEOUT_MS = 30_000;
+
   request<T = unknown>(method: string, params?: unknown): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("gateway not connected"));
     }
     const id = generateUUID();
     const frame = { type: "req", id, method, params };
+
+    const timeoutMs =
+      method === "connect"
+        ? GatewayBrowserClient.CONNECT_TIMEOUT_MS
+        : GatewayBrowserClient.RPC_TIMEOUT_MS;
+
     const p = new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: (v) => resolve(v as T), reject });
+      // Schedule a timeout to clean up stale pending entries (Issue #6)
+      const timer = window.setTimeout(() => {
+        if (this.pending.has(id)) {
+          this.pending.delete(id);
+          reject(new Error(`RPC "${method}" timed out after ${timeoutMs}ms`));
+        }
+      }, timeoutMs);
+
+      this.pending.set(id, {
+        resolve: (v) => {
+          window.clearTimeout(timer);
+          resolve(v as T);
+        },
+        reject: (err) => {
+          window.clearTimeout(timer);
+          reject(err);
+        },
+      });
     });
     this.ws.send(JSON.stringify(frame));
     return p;

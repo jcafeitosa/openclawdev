@@ -233,6 +233,61 @@ function broadcastChatError(params: {
   params.context.agentRunSeq.delete(params.runId);
 }
 
+/**
+ * Inject a chat message into a session transcript and broadcast to connected clients.
+ * Used by collaboration/delegation modules to post system-like messages into agent sessions.
+ * Fails silently when the session cannot be resolved (non-critical operation).
+ */
+export function injectChatMessage(params: {
+  context: Pick<GatewayRequestContext, "broadcast" | "nodeSendToSession" | "agentRunSeq">;
+  sessionKey: string;
+  message: string;
+  label?: string;
+  senderIdentity?: {
+    agentId: string;
+    name: string;
+    emoji?: string;
+    avatar?: string;
+  };
+}): void {
+  const { cfg, storePath, entry } = loadSessionEntry(params.sessionKey);
+  const sessionId = entry?.sessionId;
+  if (!sessionId || !storePath) {
+    return;
+  }
+
+  const agentId = resolveSessionAgentId({ sessionKey: params.sessionKey, config: cfg });
+
+  const appended = appendAssistantTranscriptMessage({
+    message: params.message,
+    label: params.label,
+    sessionId,
+    storePath,
+    sessionFile: entry?.sessionFile,
+    agentId,
+    createIfMissing: false,
+  });
+  if (!appended.ok || !appended.messageId || !appended.message) {
+    return;
+  }
+
+  const chatPayload: Record<string, unknown> = {
+    runId: `inject-${appended.messageId}`,
+    sessionKey: params.sessionKey,
+    seq: 0,
+    state: "final" as const,
+    message: appended.message,
+  };
+  if (params.senderIdentity) {
+    chatPayload.senderAgentId = params.senderIdentity.agentId;
+    chatPayload.senderName = params.senderIdentity.name;
+    chatPayload.senderEmoji = params.senderIdentity.emoji;
+    chatPayload.senderAvatar = params.senderIdentity.avatar;
+  }
+  params.context.broadcast("chat", chatPayload);
+  params.context.nodeSendToSession(params.sessionKey, "chat", chatPayload);
+}
+
 export const chatHandlers: GatewayRequestHandlers = {
   "chat.history": async ({ params, respond, context }) => {
     if (!validateChatHistoryParams(params)) {

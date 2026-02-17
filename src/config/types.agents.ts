@@ -9,6 +9,9 @@ import type {
 } from "./types.sandbox.js";
 import type { AgentToolsConfig, MemorySearchConfig } from "./types.tools.js";
 
+/** Hierarchy role for agents in delegation and team coordination. */
+export type AgentRole = "orchestrator" | "lead" | "specialist" | "worker";
+
 export type AgentModelConfig =
   | string
   | {
@@ -25,6 +28,16 @@ export type AgentConfig = {
   workspace?: string;
   agentDir?: string;
   model?: AgentModelConfig;
+  /** Hierarchy role for this agent (default resolved from agents.defaults.role). */
+  role?: AgentRole;
+  /** Persona key or path used to override the default SOUL.md content. */
+  persona?: string;
+  /** Declared capabilities for smart agent routing (e.g. ["code", "testing", "api-design"]). */
+  capabilities?: string[];
+  /** Domain expertise tags (e.g. ["typescript", "react", "postgres"]). */
+  expertise?: string[];
+  /** Availability mode: "auto" (default, eligible for routing) or "manual" (explicit selection only). */
+  availability?: "auto" | "manual";
   /** Optional allowlist of skills for this agent (omit = all skills; empty = none). */
   skills?: string[];
   memorySearch?: MemorySearchConfig;

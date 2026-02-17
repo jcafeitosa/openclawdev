@@ -9,7 +9,7 @@ const openaiCodexAuthPlugin = {
   name: "OpenAI Codex OAuth",
   description: "OAuth flow for OpenAI Codex (ChatGPT Plus/Pro subscription)",
   configSchema: emptyPluginConfigSchema(),
-  register(api) {
+  register(api: any) {
     api.registerProvider({
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
@@ -21,7 +21,7 @@ const openaiCodexAuthPlugin = {
           label: "OpenAI Codex OAuth",
           hint: "Sign in with ChatGPT Plus/Pro",
           kind: "oauth",
-          run: async (ctx) => {
+          run: async (ctx: any) => {
             const spin = ctx.prompter.progress("Starting OpenAI Codex OAuth...");
             try {
               const { onAuth, onPrompt } = ctx.oauth.createVpsAwareHandlers({

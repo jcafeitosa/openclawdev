@@ -22,11 +22,83 @@ import type { AgentHumanizationProfile, EnergyState } from "../models/types.js";
  */
 export interface HumanizationServiceLike {
   getAgentProfile(agentId: string): Promise<AgentHumanizationProfile>;
-  // Future methods will be added here as managers are built:
-  // updateEnergyState(agentId, delta): Promise<void>;
-  // recordDecision(log: DecisionLog): Promise<void>;
-  // updateReputation(agentId, delta): Promise<void>;
-  // etc.
+
+  // Decision & energy management
+  recordDecision(log: {
+    time: Date;
+    agentId: string;
+    decisionType: string;
+    decisionQuality: string;
+    outcome?: string;
+    confidenceLevel?: number;
+    impactScore?: number | string | undefined;
+    context?: Record<string, unknown>;
+  }): Promise<void>;
+
+  updateEnergyState(agentId: string, delta: { energyLevel: number }): Promise<void>;
+
+  updateReputationIncremental(agentId: string, outcome: string): Promise<void>;
+
+  // Mistake & intuition tracking
+  recordMistakePattern(
+    agentId: string,
+    pattern: { mistakeType: string; description: string },
+  ): Promise<void>;
+
+  recordIntuitionCandidate(
+    agentId: string,
+    candidate: { patternName: string; patternDescription: string },
+  ): Promise<void>;
+
+  // Track record & learning
+  insertTrackRecord(record: {
+    id: string;
+    agentId: string;
+    taskId: string;
+    taskName?: string;
+    category?: string;
+    plannedDays?: number;
+    actualDays?: number;
+    qualityRating?: string;
+    deliveredStatus?: string;
+    completedAt?: Date;
+    notes?: string;
+  }): Promise<void>;
+
+  recordLearningProgress(progress: {
+    time: Date;
+    agentId: string;
+    skillName: string;
+    proficiency: number;
+    improvementRate?: number;
+    practiceHours: number;
+  }): Promise<void>;
+
+  // Relationships & collaboration
+  updateRelationship(
+    agentId: string,
+    otherAgentId: string,
+    delta: {
+      trustDelta: number;
+      interactionType: string;
+      quality?: string;
+    },
+  ): Promise<void>;
+
+  recordConflict(conflict: {
+    agentId: string;
+    otherAgentId?: string;
+    conflictType: string;
+    description?: string;
+    resolution: string;
+  }): Promise<void>;
+
+  updateChemistry(update: {
+    agent1: string;
+    agent2: string;
+    score: number;
+    worksWell: boolean;
+  }): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

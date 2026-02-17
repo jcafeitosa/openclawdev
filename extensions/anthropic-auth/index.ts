@@ -168,7 +168,7 @@ const anthropicAuthPlugin = {
   name: "Anthropic OAuth",
   description: "OAuth flow for Anthropic (Claude Pro/Max subscription)",
   configSchema: emptyPluginConfigSchema(),
-  register(api) {
+  register(api: any) {
     api.registerProvider({
       id: PROVIDER_ID,
       label: PROVIDER_LABEL,
@@ -180,7 +180,7 @@ const anthropicAuthPlugin = {
           label: "Anthropic OAuth",
           hint: "Sign in with Claude Pro/Max",
           kind: "oauth",
-          run: async (ctx) => {
+          run: async (ctx: any) => {
             const spin = ctx.prompter.progress("Starting Anthropic OAuth...");
             try {
               const result = await loginAnthropic({

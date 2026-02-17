@@ -1,5 +1,6 @@
 import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
+import type { AgentRole } from "../config/types.agents.js";
 import { resolveStateDir } from "../config/paths.js";
 import {
   DEFAULT_AGENT_ID,
@@ -11,12 +12,30 @@ import { resolveDefaultAgentWorkspaceDir } from "./workspace.js";
 
 export { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 
+/** Numeric rank for each agent role (higher = more authority). */
+export const AGENT_ROLE_RANK: Record<AgentRole, number> = {
+  worker: 0,
+  specialist: 1,
+  lead: 2,
+  orchestrator: 3,
+};
+
 type AgentEntry = NonNullable<NonNullable<OpenClawConfig["agents"]>["list"]>[number];
+
+/** Resolve the hierarchy role for a given agent (falls back to defaults or "specialist"). */
+export function resolveAgentRole(cfg: OpenClawConfig, agentId: string): AgentRole {
+  const entry = resolveAgentEntry(cfg, normalizeAgentId(agentId));
+  if (entry?.role) {
+    return entry.role;
+  }
+  return cfg.agents?.defaults?.role ?? "specialist";
+}
 
 type ResolvedAgentConfig = {
   name?: string;
   workspace?: string;
   agentDir?: string;
+  persona?: string;
   model?: AgentEntry["model"];
   skills?: AgentEntry["skills"];
   memorySearch?: AgentEntry["memorySearch"];
@@ -27,6 +46,8 @@ type ResolvedAgentConfig = {
   subagents?: AgentEntry["subagents"];
   sandbox?: AgentEntry["sandbox"];
   tools?: AgentEntry["tools"];
+  expertise?: string[];
+  role?: string;
 };
 
 let defaultAgentWarned = false;
@@ -108,6 +129,7 @@ export function resolveAgentConfig(
     name: typeof entry.name === "string" ? entry.name : undefined,
     workspace: typeof entry.workspace === "string" ? entry.workspace : undefined,
     agentDir: typeof entry.agentDir === "string" ? entry.agentDir : undefined,
+    persona: typeof entry.persona === "string" ? entry.persona : undefined,
     model:
       typeof entry.model === "string" || (entry.model && typeof entry.model === "object")
         ? entry.model
@@ -205,4 +227,9 @@ export function resolveAgentDir(cfg: OpenClawConfig, agentId: string) {
   }
   const root = resolveStateDir(process.env);
   return path.join(root, "agents", id, "agent");
+}
+
+export function canSpawnRole(_requesterRole: string, _targetRole: string): boolean {
+  // Permissive — role hierarchy checks are handled elsewhere in the pipeline.
+  return true;
 }

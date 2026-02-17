@@ -305,7 +305,10 @@ function handleGatewayEventUnsafe(host: GatewayHost, evt: GatewayEventFrame) {
       typeof count === "number"
         ? `Model catalog updated (${count} models available)`
         : "Model catalog updated";
-    (host as unknown as OpenClawApp).showToast("info", msg);
+    const app = host as unknown as OpenClawApp & {
+      showToast?: (level: string, msg: string) => void;
+    };
+    app.showToast?.("info", msg);
     void loadPrimaryModel(host as unknown as Parameters<typeof loadPrimaryModel>[0]);
     void loadModelsCatalog(host as unknown as Parameters<typeof loadModelsCatalog>[0]);
     void loadModelsAvailability(host as unknown as Parameters<typeof loadModelsAvailability>[0]);

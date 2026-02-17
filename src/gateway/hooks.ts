@@ -224,7 +224,7 @@ export type HookAgentPayload = {
   name: string;
   agentId?: string;
   wakeMode: "now" | "next-heartbeat";
-  sessionKey?: string;
+  sessionKey: string;
   deliver: boolean;
   channel: HookMessageChannel;
   to?: string;
@@ -345,7 +345,7 @@ export function normalizeAgentPayload(payload: Record<string, unknown>):
   const wakeMode = payload.wakeMode === "next-heartbeat" ? "next-heartbeat" : "now";
   const sessionKeyRaw = payload.sessionKey;
   const sessionKey =
-    typeof sessionKeyRaw === "string" && sessionKeyRaw.trim() ? sessionKeyRaw.trim() : undefined;
+    typeof sessionKeyRaw === "string" && sessionKeyRaw.trim() ? sessionKeyRaw.trim() : "main";
   const channel = resolveHookChannel(payload.channel);
   if (!channel) {
     return { ok: false, error: getHookChannelError() };

@@ -1,13 +1,15 @@
 /* ===========================================
-   Shell Layout
+   Shell Layout — OpenClaw Pro
+   Enhanced with glassmorphism topbar, animated
+   sidebar, and refined spacing hierarchy.
    =========================================== */
 
 .shell {
   --shell-pad: 16px;
   --shell-gap: 16px;
-  --shell-nav-width: 220px;
+  --shell-nav-width: 240px;
   --shell-topbar-height: 56px;
-  --shell-focus-duration: 200ms;
+  --shell-focus-duration: 250ms;
   --shell-focus-ease: var(--ease-out);
   height: 100vh;
   display: grid;
@@ -17,7 +19,7 @@
     "topbar topbar"
     "nav content";
   gap: 0;
-  animation: dashboard-enter 0.4s var(--ease-out);
+  animation: dashboard-enter 0.5s var(--ease-out);
   transition: grid-template-columns var(--shell-focus-duration) var(--shell-focus-ease);
   overflow: hidden;
 }
@@ -69,7 +71,7 @@
 }
 
 /* ===========================================
-   Topbar
+   Topbar — Glassmorphism with refined spacing
    =========================================== */
 
 .topbar {
@@ -84,7 +86,9 @@
   padding: 0 20px;
   height: var(--shell-topbar-height);
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--chrome);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .topbar-left {
@@ -109,7 +113,7 @@
   height: 20px;
 }
 
-/* Brand */
+/* ── Brand ── */
 .brand {
   display: flex;
   align-items: center;
@@ -120,6 +124,8 @@
   width: 28px;
   height: 28px;
   flex-shrink: 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .brand-logo img {
@@ -135,7 +141,7 @@
 }
 
 .brand-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.1;
@@ -146,12 +152,12 @@
   font-size: 10px;
   font-weight: 500;
   color: var(--muted);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 1;
 }
 
-/* Topbar status */
+/* ── Topbar Status ── */
 .topbar-status {
   display: flex;
   align-items: center;
@@ -165,6 +171,8 @@
   font-weight: 500;
   height: 32px;
   box-sizing: border-box;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 .topbar-status .pill .mono {
@@ -191,7 +199,7 @@
 }
 
 /* ===========================================
-   Navigation Sidebar
+   Navigation Sidebar — Enhanced with indicators
    =========================================== */
 
 .nav {
@@ -200,7 +208,8 @@
   overflow-x: hidden;
   padding: 16px 12px;
   background: var(--bg);
-  scrollbar-width: none; /* Firefox */
+  border-right: 1px solid var(--border);
+  scrollbar-width: none;
   transition:
     width var(--shell-focus-duration) var(--shell-focus-ease),
     padding var(--shell-focus-duration) var(--shell-focus-ease),
@@ -209,7 +218,7 @@
 }
 
 .nav::-webkit-scrollbar {
-  display: none; /* Chrome/Safari */
+  display: none;
 }
 
 .shell--chat-focus .nav {
@@ -231,7 +240,7 @@
   pointer-events: none;
 }
 
-/* Nav collapse toggle */
+/* ── Nav Collapse Toggle ── */
 .nav-collapse-toggle {
   width: 32px;
   height: 32px;
@@ -277,7 +286,7 @@
   color: var(--text);
 }
 
-/* Nav groups */
+/* ── Nav Groups ── */
 .nav-group {
   margin-bottom: 20px;
   display: grid;
@@ -290,14 +299,14 @@
 
 .nav-group__items {
   display: grid;
-  gap: 1px;
+  gap: 2px;
 }
 
 .nav-group--collapsed .nav-group__items {
   display: none;
 }
 
-/* Nav label */
+/* ── Nav Label ── */
 .nav-label {
   display: flex;
   align-items: center;
@@ -306,8 +315,10 @@
   width: 100%;
   padding: 6px 10px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   margin-bottom: 4px;
   background: transparent;
   border: none;
@@ -347,14 +358,14 @@
   transform: rotate(-90deg);
 }
 
-/* Nav items */
+/* ── Nav Items — Enhanced with animated active indicator ── */
 .nav-item {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   background: transparent;
@@ -362,25 +373,26 @@
   cursor: pointer;
   text-decoration: none;
   transition:
-    border-color var(--duration-fast) ease,
-    background var(--duration-fast) ease,
-    color var(--duration-fast) ease;
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .nav-item__icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  opacity: 0.7;
+  opacity: 0.6;
   transition: opacity var(--duration-fast) ease;
 }
 
 .nav-item__icon svg {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.5px;
@@ -404,9 +416,24 @@
   opacity: 1;
 }
 
+/* ── Active nav item — Accent left border + subtle glow ── */
 .nav-item.active {
   color: var(--text-strong);
   background: var(--accent-subtle);
+  border-color: transparent;
+}
+
+.nav-item.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 18px;
+  background: var(--accent);
+  border-radius: 0 var(--radius-full) var(--radius-full) 0;
+  animation: scale-in 0.2s var(--ease-spring);
 }
 
 .nav-item.active .nav-item__icon {
@@ -420,7 +447,7 @@
 
 .content {
   grid-area: content;
-  padding: 12px 16px 32px;
+  padding: 16px 20px 32px;
   display: block;
   min-height: 0;
   overflow-y: auto;
@@ -447,13 +474,13 @@
   margin-top: 0;
 }
 
-/* Content header */
+/* ── Content Header ── */
 .content-header {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 8px;
+  padding: 4px 4px;
   overflow: hidden;
   transform-origin: top center;
   transition:
@@ -473,7 +500,7 @@
 }
 
 .page-title {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.035em;
   line-height: 1.15;
@@ -482,9 +509,9 @@
 
 .page-sub {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
-  margin-top: 6px;
+  margin-top: 4px;
   letter-spacing: -0.01em;
 }
 
@@ -532,7 +559,7 @@
 
 .stat-grid {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
 }
 
@@ -562,7 +589,7 @@
 }
 
 /* ===========================================
-   Responsive - Tablet
+   Responsive — Tablet
    =========================================== */
 
 @media (max-width: 1100px) {

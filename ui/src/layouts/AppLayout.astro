@@ -6,7 +6,9 @@ import '../styles/layout.mobile.css';
 import '../styles/components.css';
 import '../styles/chat.css';
 import '../styles/config.css';
+import '../styles/command-palette.css';
 import { NavIsland } from '../ui/components/nav-island.ts';
+import { CommandPalette } from '../ui/components/command-palette.ts';
 
 interface Props {
   title: string;
@@ -25,5 +27,7 @@ const { title, tab } = Astro.props;
     <main id="main-content" class="content">
       <slot />
     </main>
+
+    <CommandPalette client:only="lit" />
   </div>
 </BaseLayout>

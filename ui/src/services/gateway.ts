@@ -23,9 +23,52 @@ export const $gatewayError = atom<string | null>(null);
 let client: GatewayBrowserClient | null = null;
 let autoConnected = false;
 
+// Ready gate: resolves when the gateway handshake (hello) completes.
+// Islands can await this before sending RPC requests.
+let readyResolve: (() => void) | null = null;
+let readyReject: ((err: Error) => void) | null = null;
+let readyPromise: Promise<void> | null = null;
+let readyTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Max time (ms) to wait for the gateway handshake before rejecting. */
+const READY_TIMEOUT_MS = 30_000;
+
+function resetReadyGate() {
+  // Clean up previous timer
+  if (readyTimer !== null) {
+    clearTimeout(readyTimer);
+    readyTimer = null;
+  }
+  readyPromise = new Promise<void>((resolve, reject) => {
+    readyResolve = resolve;
+    readyReject = reject;
+  });
+  // Timeout: reject the ready gate if handshake takes too long (Issue #4)
+  readyTimer = setTimeout(() => {
+    readyReject?.(new Error(`Gateway handshake timed out after ${READY_TIMEOUT_MS}ms`));
+    readyReject = null;
+    readyResolve = null;
+  }, READY_TIMEOUT_MS);
+}
+
+function resolveReadyGate() {
+  if (readyTimer !== null) {
+    clearTimeout(readyTimer);
+    readyTimer = null;
+  }
+  readyResolve?.();
+  readyResolve = null;
+  readyReject = null;
+}
+
 function resolveWsUrl(settings: UiSettings): string {
   if (settings.gatewayUrl.trim()) {
     return settings.gatewayUrl.trim();
+  }
+  // In Astro dev mode the page is served by Vite (e.g. :5173/:5174) while
+  // the gateway WebSocket runs on its own port. Point there directly.
+  if (import.meta.env.DEV) {
+    return "ws://127.0.0.1:18789";
   }
   const proto = globalThis.location?.protocol === "https:" ? "wss" : "ws";
   return `${proto}://${globalThis.location?.host ?? "localhost:18789"}`;
@@ -43,6 +86,7 @@ function createClient(url: string, token?: string, password?: string): GatewayBr
       $hello.set(hello);
       $connected.set(true);
       $gatewayError.set(null);
+      resolveReadyGate();
     },
     onEvent(evt: GatewayEventFrame) {
       $gatewayEvent.set(evt);
@@ -77,6 +121,7 @@ export const gateway = {
     }
     $connected.set(false);
     $hello.set(null);
+    resetReadyGate();
 
     const settings = loadSettings();
     const wsUrl = url ?? resolveWsUrl(settings);
@@ -101,12 +146,18 @@ export const gateway = {
 
   /**
    * Make an RPC call to the gateway.
-   * Auto-connects if not yet connected.
+   * Auto-connects if not yet connected and waits for the handshake to complete.
    */
   async call<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
     ensureConnected();
     if (!client) {
       throw new Error("Gateway client not initialized");
+    }
+    // Wait for the gateway handshake to complete before sending RPC requests.
+    // This is critical for Astro MPA where each page navigation creates a new
+    // WebSocket connection and islands may call RPC before the connect handshake finishes.
+    if (readyPromise && !$connected.get()) {
+      await readyPromise;
     }
     const result = await client.request(method, params);
     return result as T;

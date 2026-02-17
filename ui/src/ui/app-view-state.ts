@@ -4,6 +4,7 @@ import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
 import type { SkillMessage } from "./controllers/skills.ts";
+import type { SystemInfoResult } from "./controllers/system-info.ts";
 import type { GatewayBrowserClient, GatewayHelloOk } from "./gateway.ts";
 import type { Tab } from "./navigation.ts";
 import type { UiSettings } from "./storage.ts";
@@ -45,6 +46,7 @@ export type AppViewState = {
   theme: ThemeMode;
   themeResolved: "light" | "dark";
   hello: GatewayHelloOk | null;
+  systemInfo: SystemInfoResult | null;
   lastError: string | null;
   eventLog: EventLogEntry[];
   assistantName: string;

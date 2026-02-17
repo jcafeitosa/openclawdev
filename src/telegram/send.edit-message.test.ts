@@ -89,6 +89,22 @@ describe("editMessageTelegram", () => {
     );
   });
 
+  it("suppresses benign 'message is not modified' error", async () => {
+    botApi.editMessageText.mockRejectedValueOnce(
+      new Error(
+        "400: Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message",
+      ),
+    );
+
+    // Should NOT throw — the error is benign (text already matches).
+    await expect(
+      editMessageTelegram("123", 1, "same text", {
+        token: "tok",
+        cfg: {},
+      }),
+    ).resolves.not.toThrow();
+  });
+
   it("disables link previews when linkPreview is false", async () => {
     botApi.editMessageText.mockResolvedValue({ message_id: 1, chat: { id: "123" } });
 

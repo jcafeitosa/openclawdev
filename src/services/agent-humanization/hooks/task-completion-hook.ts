@@ -193,7 +193,7 @@ async function updateTrackRecord(
     ? params.plannedTimeoutSeconds / (60 * 60 * 24)
     : actualDays; // If no planned time, assume planned = actual
 
-  const _record: TrackRecord = {
+  const record: TrackRecord = {
     id: "",
     agentId: params.agentId,
     taskId: params.taskId,
@@ -207,11 +207,9 @@ async function updateTrackRecord(
     notes: params.timedOut ? "Task timed out" : undefined,
   };
 
-  // TODO: await service.insertTrackRecord(record);
-  console.debug(
-    `[humanization:task-completion] Track record: ${params.agentId} task=${params.taskId} ` +
-      `quality=${qualityRating} status=${deliveredStatus} days=${actualDays.toFixed(3)}`,
-  );
+  if (service) {
+    await service.insertTrackRecord(record);
+  }
 }
 
 async function updateRelationshipScores(
@@ -245,17 +243,12 @@ async function updateRelationshipScores(
 
   const delta = qualityDelta[qualityRating] ?? 0;
 
-  // TODO: await service.updateRelationship(params.agentId, params.requesterAgentId, {
-  //   trustDelta: delta,
-  //   interactionType: 'task_completion',
-  //   quality: qualityRating,
-  // });
-
   if (delta !== 0) {
-    console.debug(
-      `[humanization:task-completion] Relationship ${params.agentId}<->${params.requesterAgentId} ` +
-        `trust delta: ${delta > 0 ? "+" : ""}${delta}`,
-    );
+    await service.updateRelationship(params.agentId, params.requesterAgentId, {
+      trustDelta: delta,
+      interactionType: "task_completion",
+      quality: qualityRating,
+    });
   }
 }
 
@@ -285,7 +278,7 @@ async function recordSkillProgression(
   const improvement = qualityToImprovement[qualityRating] ?? 0;
 
   if (improvement > 0) {
-    const _progress: LearningProgress = {
+    const progress: LearningProgress = {
       time: new Date(),
       agentId: params.agentId,
       skillName,
@@ -294,11 +287,7 @@ async function recordSkillProgression(
       practiceHours: (params.completedAt.getTime() - params.spawnedAt.getTime()) / (1000 * 60 * 60),
     };
 
-    // TODO: await service.recordLearningProgress(progress);
-    console.debug(
-      `[humanization:task-completion] Skill progression: ${params.agentId} ` +
-        `skill=${skillName} improvement=${improvement}`,
-    );
+    await service.recordLearningProgress(progress);
   }
 }
 

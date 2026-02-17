@@ -9,7 +9,9 @@
  * All updates are fire-and-forget — this hook must not block the pipeline.
  */
 
+import type { AutoMemoryEntry } from "../../../memory/auto-memory.js";
 import type { EnergyState, DecisionLog } from "../models/types.js";
+import { recordLearning } from "../../../memory/auto-memory.js";
 import {
   isHumanizationEnabled,
   getHumanizationService,
@@ -55,6 +57,8 @@ export interface PostRunHookParams {
   didSendViaMessagingTool?: boolean;
   /** Previous session key — used to detect context switches. */
   previousSessionKey?: string;
+  /** Full session transcript for auto-memory extraction (optional). */
+  transcript?: Array<{ role: string; content: string | Array<{ type: string; text?: string }> }>;
 }
 
 export interface PostRunResult {
@@ -130,6 +134,14 @@ export function postRunHook(params: PostRunHookParams): PostRunResult {
   if (intuitionCandidate) {
     fireAndForget("post-run:intuition-candidate", async () => {
       await recordIntuitionCandidate(params.agentId, intuitionCandidate);
+    });
+  }
+
+  // Record learnings to auto-memory for future reference
+  if (params.sessionKey) {
+    fireAndForget("post-run:auto-memory", () => {
+      recordAutoMemoryLearnings(params, outcome);
+      return Promise.resolve();
     });
   }
 
@@ -347,11 +359,7 @@ async function recordOutcome(
     return;
   }
 
-  // Record decision log entry
-  // This will be implemented when the service has the recordDecision method.
-  // For now, we structure the data so it's ready for persistence.
-
-  const _decisionLog: DecisionLog = {
+  const decisionLog: DecisionLog = {
     time: new Date(),
     agentId: params.agentId,
     decisionType: "autonomous",
@@ -368,30 +376,31 @@ async function recordOutcome(
     },
   };
 
-  // TODO: await service.recordDecision(decisionLog);
-  // TODO: await service.updateEnergyState(params.agentId, { energyLevel });
-  // TODO: await service.updateReputationIncremental(params.agentId, outcome);
-
-  // For now, log so we know it would have been persisted.
-  if (outcome !== "success") {
-    console.debug(
-      `[humanization:post-run] Recorded ${outcome} for ${params.agentId} (energy: ${(energyLevel * 100).toFixed(0)}%)`,
-    );
-  }
+  await Promise.allSettled([
+    service.recordDecision(decisionLog),
+    service.updateEnergyState(params.agentId, { energyLevel }),
+    service.updateReputationIncremental(params.agentId, outcome),
+  ]);
 }
 
 async function recordMistakePattern(agentId: string, errorType: string): Promise<void> {
-  // TODO: Persist to agent_mistake_patterns table
-  console.debug(
-    `[humanization:post-run] Mistake pattern detected for ${agentId}: ${errorType} (3+ occurrences in 24h)`,
-  );
+  const service = getHumanizationService();
+  if (service) {
+    await service.recordMistakePattern(agentId, {
+      mistakeType: errorType,
+      description: `Repeated error pattern: ${errorType} (3+ occurrences in 24h)`,
+    });
+  }
 }
 
 async function recordIntuitionCandidate(agentId: string, approachType: string): Promise<void> {
-  // TODO: Persist to agent_intuition_rules table
-  console.debug(
-    `[humanization:post-run] Intuition rule candidate for ${agentId}: ${approachType} (5+ successes)`,
-  );
+  const service = getHumanizationService();
+  if (service) {
+    await service.recordIntuitionCandidate(agentId, {
+      patternName: approachType,
+      patternDescription: `Successful approach pattern: ${approachType} (5+ successes)`,
+    });
+  }
 }
 
 function outcomeToQuality(outcome: RunOutcome): DecisionLog["decisionQuality"] {
@@ -403,4 +412,110 @@ function outcomeToQuality(outcome: RunOutcome): DecisionLog["decisionQuality"] {
     case "failure":
       return "poor";
   }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-Memory Integration
+// ---------------------------------------------------------------------------
+
+/**
+ * Record learnings from this run to auto-memory for future reference.
+ * Creates entries based on the run outcome and extracted patterns.
+ */
+function recordAutoMemoryLearnings(params: PostRunHookParams, outcome: RunOutcome): void {
+  const timestamp = new Date().toISOString();
+
+  // Always record the outcome as a basic learning
+  const outcomeEntry: AutoMemoryEntry = {
+    timestamp,
+    agentId: params.agentId,
+    sessionKey: params.sessionKey ?? "",
+    category: outcome === "failure" ? "error-pattern" : "success-pattern",
+    summary: buildOutcomeSummary(params, outcome),
+    detail: params.assistantText?.slice(0, 300),
+  };
+
+  recordLearning(outcomeEntry);
+
+  // Record tool usage patterns
+  if (params.toolCallCount && params.toolCallCount > 0) {
+    const toolEntry: AutoMemoryEntry = {
+      timestamp,
+      agentId: params.agentId,
+      sessionKey: params.sessionKey ?? "",
+      category: "tool-usage",
+      summary: `Executed ${params.toolCallCount} tool call(s) ${outcome === "success" ? "successfully" : "with errors"}`,
+      occurrenceCount: params.toolCallCount,
+    };
+    recordLearning(toolEntry);
+  }
+
+  // Record error patterns for failures
+  if (outcome === "failure" && params.errorKind) {
+    const errorEntry: AutoMemoryEntry = {
+      timestamp,
+      agentId: params.agentId,
+      sessionKey: params.sessionKey ?? "",
+      category: "error-pattern",
+      summary: `Error: ${params.errorKind}`,
+      detail: buildErrorDetail(params),
+    };
+    recordLearning(errorEntry);
+  }
+
+  // Record performance insights if available
+  if (params.usage && params.durationMs > 0) {
+    const performanceEntry: AutoMemoryEntry = {
+      timestamp,
+      agentId: params.agentId,
+      sessionKey: params.sessionKey ?? "",
+      category: "optimization",
+      summary: `Completed in ${params.durationMs}ms using ${params.usage.total ?? 0} tokens`,
+      detail: `Input: ${params.usage.input ?? 0}, Output: ${params.usage.output ?? 0}`,
+    };
+    recordLearning(performanceEntry);
+  }
+}
+
+/**
+ * Build a human-readable summary of the run outcome
+ */
+function buildOutcomeSummary(params: PostRunHookParams, outcome: RunOutcome): string {
+  if (outcome === "success") {
+    if (params.toolCallCount && params.toolCallCount > 0) {
+      return `Successfully completed task using ${params.toolCallCount} tool(s)`;
+    }
+    return "Task completed successfully";
+  }
+
+  if (outcome === "failure") {
+    if (params.errorKind) {
+      return `Failed with error: ${params.errorKind}`;
+    }
+    if (params.aborted) {
+      return "Task was aborted by user";
+    }
+    return "Task failed to complete";
+  }
+
+  return "Task partially completed";
+}
+
+/**
+ * Build detailed error information
+ */
+function buildErrorDetail(params: PostRunHookParams): string | undefined {
+  const details = [];
+
+  if (params.errorKind) {
+    details.push(`Error Kind: ${params.errorKind}`);
+  }
+  if (params.hasToolErrors) {
+    details.push("Tool execution errors occurred");
+  }
+  if (params.assistantText?.trim()) {
+    details.push(`Context: ${params.assistantText.slice(0, 200)}`);
+  }
+
+  return details.length > 0 ? details.join(" | ") : undefined;
 }

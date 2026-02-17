@@ -161,11 +161,13 @@ export function hooksRoutes(params: {
             set.status = 400;
             return { ok: false, error: getHookChannelError() };
           }
+          const sessionKey =
+            typeof mapped.action.sessionKey === "string" ? mapped.action.sessionKey : "";
           const runId = dispatchers.dispatchAgentHook({
             message: mapped.action.message,
             name: mapped.action.name ?? "Hook",
             wakeMode: mapped.action.wakeMode,
-            sessionKey: mapped.action.sessionKey ?? "",
+            sessionKey,
             deliver: resolveHookDeliver(mapped.action.deliver),
             channel,
             to: mapped.action.to,

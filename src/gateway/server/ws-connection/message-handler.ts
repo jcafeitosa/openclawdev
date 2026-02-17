@@ -431,6 +431,18 @@ export function attachGatewayWsMessageHandler(params: {
             scopes = [];
             connectParams.scopes = scopes;
           }
+          // When device auth is disabled for control-ui AND shared auth passed,
+          // grant full operator scopes so the dashboard is fully functional.
+          if (allowControlUiBypass && sharedAuthOk) {
+            scopes = [
+              "operator.admin",
+              "operator.read",
+              "operator.write",
+              "operator.approvals",
+              "operator.pairing",
+            ];
+            connectParams.scopes = scopes;
+          }
           const canSkipDevice = sharedAuthOk;
 
           if (isControlUi && !allowControlUiBypass) {

@@ -350,7 +350,13 @@ export const MemorySearchSchema = z
       .strict()
       .optional(),
     provider: z
-      .union([z.literal("openai"), z.literal("local"), z.literal("gemini"), z.literal("voyage")])
+      .union([
+        z.literal("openai"),
+        z.literal("local"),
+        z.literal("gemini"),
+        z.literal("voyage"),
+        z.literal("default"),
+      ])
       .optional(),
     remote: z
       .object({
@@ -449,7 +455,7 @@ export const MemorySearchSchema = z
       .strict()
       .optional(),
   })
-  .strict()
+  .passthrough()
   .optional();
 export { AgentModelSchema };
 export const AgentEntrySchema = z
@@ -482,12 +488,12 @@ export const AgentEntrySchema = z
           .optional(),
         thinking: z.string().optional(),
       })
-      .strict()
+      .passthrough()
       .optional(),
     sandbox: AgentSandboxSchema,
-    tools: AgentToolsSchema,
+    tools: z.any().optional(),
   })
-  .strict();
+  .passthrough();
 
 export const ToolsSchema = z
   .object({

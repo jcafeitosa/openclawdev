@@ -1,4 +1,4 @@
-import type { TSchema } from "@sinclair/typebox";
+import type { z } from "zod";
 import {
   AgentEventSchema,
   AgentIdentityParamsSchema,
@@ -139,7 +139,7 @@ import {
   WizardStepSchema,
 } from "./wizard.js";
 
-export const ProtocolSchemas: Record<string, TSchema> = {
+export const ProtocolSchemas: Record<string, z.ZodType> = {
   ConnectParams: ConnectParamsSchema,
   HelloOk: HelloOkSchema,
   RequestFrame: RequestFrameSchema,

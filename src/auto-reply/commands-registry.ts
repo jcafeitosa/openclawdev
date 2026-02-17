@@ -1,3 +1,4 @@
+import type { SkillCommandSpec } from "../agents/skills.js";
 import type { OpenClawConfig } from "../config/types.js";
 import type {
   ChatCommandDefinition,
@@ -15,7 +16,7 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveConfiguredModelRef } from "../agents/model-selection.js";
 import { escapeRegExp } from "../utils.js";
 import { getChatCommands, getNativeCommandSurfaces } from "./commands-registry.data.js";
-import { listSkillCommandsForAgents, type SkillCommandSpec } from "./skill-commands.js";
+import { listSkillCommandsForAgents } from "./skill-commands.js";
 
 export type {
   ChatCommandDefinition,
@@ -143,8 +144,7 @@ export function listNativeCommandSpecs(params?: {
   cfg?: OpenClawConfig;
 }): NativeCommandSpec[] {
   const skillCommands =
-    params?.skillCommands ??
-    (params?.cfg ? listSkillCommandsForAgents({ cfg: params.cfg, uniqueOnly: true }) : []);
+    params?.skillCommands ?? (params?.cfg ? listSkillCommandsForAgents({ cfg: params.cfg }) : []);
   return listChatCommands({ skillCommands })
     .filter((command) => command.scope !== "text" && command.nativeName)
     .map((command) => ({
@@ -159,8 +159,7 @@ export function listNativeCommandSpecsForConfig(
   cfg: OpenClawConfig,
   params?: { skillCommands?: SkillCommandSpec[]; provider?: string },
 ): NativeCommandSpec[] {
-  const skillCommands =
-    params?.skillCommands ?? listSkillCommandsForAgents({ cfg, uniqueOnly: true });
+  const skillCommands = params?.skillCommands ?? listSkillCommandsForAgents({ cfg });
   return listChatCommandsForConfig(cfg, { skillCommands })
     .filter((command) => command.scope !== "text" && command.nativeName)
     .map((command) => ({

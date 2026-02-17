@@ -218,7 +218,13 @@ export function buildAgentSystemPrompt(params: {
     level: "minimal" | "extensive";
     channel: string;
   };
+  /** Projects root directory (for project-scoped workspace isolation). */
+  projectsRootDir?: string;
+  /** Project naming convention (e.g. "kebab-case", "snake_case"). */
+  projectNamingConvention?: string;
   memoryCitationsMode?: MemoryCitationsMode;
+  /** Agent memory context (from semantic memory system). Pre-built context injected here. */
+  agentMemoryContext?: string;
 }) {
   const coreToolSummaries: Record<string, string> = {
     read: "Read file contents",
@@ -441,6 +447,9 @@ export function buildAgentSystemPrompt(params: {
     "",
     ...skillsSection,
     ...memorySection,
+    // Agent semantic memory context (if provided)
+    params.agentMemoryContext ? params.agentMemoryContext.trim() : "",
+    params.agentMemoryContext ? "" : "",
     // Skip self-update for subagent/none modes
     hasGateway && !isMinimal ? "## OpenClaw Self-Update" : "",
     hasGateway && !isMinimal

@@ -14,6 +14,7 @@ import { handleApproveCommand } from "./commands-approve.js";
 import { handleBashCommand } from "./commands-bash.js";
 import { handleCompactCommand } from "./commands-compact.js";
 import { handleConfigCommand, handleDebugCommand } from "./commands-config.js";
+import { handleFastCommand } from "./commands-fast.js";
 import {
   handleCommandsListCommand,
   handleContextCommand,
@@ -21,7 +22,9 @@ import {
   handleStatusCommand,
   handleWhoamiCommand,
 } from "./commands-info.js";
+import { handleInitCommand } from "./commands-init.js";
 import { handleModelsCommand } from "./commands-models.js";
+import { handlePlanCommand } from "./commands-plan.js";
 import { handlePluginCommand } from "./commands-plugin.js";
 import {
   handleAbortTrigger,
@@ -48,6 +51,8 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleUsageCommand,
       handleRestartCommand,
       handleTtsCommands,
+      handleFastCommand,
+      handleInitCommand,
       handleHelpCommand,
       handleCommandsListCommand,
       handleStatusCommand,
@@ -62,6 +67,7 @@ export async function handleCommands(params: HandleCommandsParams): Promise<Comm
       handleStopCommand,
       handleCompactCommand,
       handleAbortTrigger,
+      handlePlanCommand,
     ];
   }
   const resetMatch = params.command.commandBodyNormalized.match(/^\/(new|reset)(?:\s|$)/);

@@ -88,11 +88,14 @@ export class SessionsIsland extends LitElement {
     }
   }
 
+  @state() private previewData: unknown = null;
+  @state() private previewKey: string | null = null;
+
   private async handlePreview(key: string) {
     try {
       const preview = await gateway.call("sessions.preview", { key });
-      console.log("Session preview:", preview);
-      alert(`Session preview logged to console`);
+      this.previewData = preview;
+      this.previewKey = key;
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     }
@@ -136,9 +139,9 @@ export class SessionsIsland extends LitElement {
       onRefresh: () => void this.loadSessions(),
       onPatch: (key, patch) => void this.handlePatch(key, patch),
       onDelete: (key) => void this.handleDelete(key),
-      onPreview: (key) => void this.handlePreview(key),
-      onReset: (key) => void this.handleReset(key),
-      onCompact: (key) => void this.handleCompact(key),
+      onPreview: (key: string) => void this.handlePreview(key),
+      onReset: (key: string) => void this.handleReset(key),
+      onCompact: (key: string) => void this.handleCompact(key),
     };
 
     return html`${renderSessions(props)}`;

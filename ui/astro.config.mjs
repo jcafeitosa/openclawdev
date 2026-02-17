@@ -27,6 +27,7 @@ export default defineConfig({
   integrations: [lit()],
 
   base,
+  outDir: path.resolve(here, "../dist/control-ui"),
   publicDir: path.resolve(here, "public"),
 
   vite: {
@@ -39,10 +40,6 @@ export default defineConfig({
     optimizeDeps: {
       include: ["lit/directives/repeat.js"],
     },
-  },
-
-  build: {
-    outDir: path.resolve(here, "../dist/control-ui"),
   },
 
   server: {

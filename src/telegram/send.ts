@@ -790,6 +790,11 @@ export async function editMessageTelegram(
         "editMessage-plain",
       );
     }
+    // "message is not modified" is a benign no-op when the text is already identical.
+    // Suppress it instead of propagating an error for a successful state.
+    if (errText.includes("message is not modified")) {
+      return;
+    }
     throw err;
   });
 

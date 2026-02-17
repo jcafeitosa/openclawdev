@@ -388,6 +388,22 @@ export function stripToolMessages(messages: unknown[]): unknown[] {
 }
 
 /**
+ * Check if a label string looks like a valid agent ID (e.g. "backend-architect").
+ * Returns the trimmed candidate or undefined if it doesn't look like an agent ID.
+ */
+export function extractAgentIdCandidate(label: string): string | undefined {
+  const trimmed = label.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  // Agent IDs are lowercase alphanumeric with hyphens, no spaces or special chars.
+  if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(trimmed)) {
+    return trimmed;
+  }
+  return undefined;
+}
+
+/**
  * Sanitize text content to strip tool call markers and thinking tags.
  * This ensures user-facing text doesn't leak internal tool representations.
  */
