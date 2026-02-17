@@ -19,14 +19,22 @@ import type { AgentHumanizationProfile, EnergyState } from "../models/types.js";
  * Minimal contract the hooks need from the humanization service.
  * This avoids a hard import of the HumanizationService class and allows
  * for easy mocking / testing.
+ *
+ * All service methods are optional (using optional chaining in hooks).
+ * This allows for graceful degradation if service is unavailable.
  */
 export interface HumanizationServiceLike {
-  getAgentProfile(agentId: string): Promise<AgentHumanizationProfile>;
-  // Future methods will be added here as managers are built:
-  // updateEnergyState(agentId, delta): Promise<void>;
-  // recordDecision(log: DecisionLog): Promise<void>;
-  // updateReputation(agentId, delta): Promise<void>;
-  // etc.
+  getAgentProfile?(agentId: string): Promise<AgentHumanizationProfile>;
+  insertTrackRecord?(record: unknown): Promise<void>;
+  updateRelationship?(agent1: string, agent2: string, data: unknown): Promise<void>;
+  recordLearningProgress?(progress: unknown): Promise<void>;
+  recordConflict?(conflict: unknown): Promise<void>;
+  updateChemistry?(update: unknown): Promise<void>;
+  recordDecision?(log: unknown): Promise<void>;
+  updateEnergyState?(agentId: string, state: unknown): Promise<void>;
+  updateReputationIncremental?(agentId: string, delta: number): Promise<void>;
+  recordMistakePattern?(agentId: string, errorType: string): Promise<void>;
+  recordIntuitionRule?(agentId: string, approachType: string): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------

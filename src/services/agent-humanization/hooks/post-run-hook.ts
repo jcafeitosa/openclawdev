@@ -369,19 +369,19 @@ async function recordOutcome(
   };
 
   // IMPLEMENTED: Record decision outcomes, energy state, and reputation updates
-  const service = getHumanizationService();
-  if (service) {
+  const svc = getHumanizationService();
+  if (svc) {
     try {
       // Record the decision
-      await service.recordDecision?.(decisionLog);
+      await svc.recordDecision?.(_decisionLog);
 
       // Update agent energy state
-      await service.updateEnergyState?.(params.agentId, { energyLevel });
+      await svc.updateEnergyState?.(params.agentId, { energyLevel });
 
       // Update reputation based on outcome
       const reputationDelta = outcome === "success" ? 0.02 : outcome === "partial" ? 0.005 : -0.01;
-      if (reputationDelta !== 0) {
-        await service.updateReputationIncremental?.(params.agentId, reputationDelta);
+      if (reputationDelta > 0 || reputationDelta < 0) {
+        await svc.updateReputationIncremental?.(params.agentId, reputationDelta);
       }
     } catch (err) {
       // Non-blocking: log but don't throw

@@ -209,7 +209,7 @@ async function updateTrackRecord(
 
   // IMPLEMENTED: Insert track record for task completion metrics
   try {
-    await service.insertTrackRecord?.(record);
+    await service.insertTrackRecord?.(_record);
   } catch (err) {
     // Non-blocking: log but don't throw
     console.warn(
