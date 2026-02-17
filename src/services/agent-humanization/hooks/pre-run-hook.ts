@@ -96,7 +96,18 @@ async function buildEnrichment(
 ): Promise<PreRunEnrichment> {
   const { agentId, sessionKey, targetAgentId, taskContext } = params;
 
-  const profile = await service.getAgentProfile(agentId);
+  // Call optional method safely with optional chaining
+  const profile = await service.getAgentProfile?.(agentId);
+
+  if (!profile) {
+    // Service unavailable or error — return minimal enrichment
+    return {
+      preRunContext: "",
+      matchedRules: [],
+      suggestCompaction: false,
+      relationshipContext: undefined,
+    };
+  }
 
   const sections: string[] = [];
   const matchedRules: IntuitionRule[] = [];
