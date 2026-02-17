@@ -491,7 +491,7 @@ export const AgentEntrySchema = z
       .passthrough()
       .optional(),
     sandbox: AgentSandboxSchema,
-    tools: AgentToolsSchema,
+    tools: z.any().optional(),
   })
   .passthrough();
 
