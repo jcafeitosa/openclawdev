@@ -122,7 +122,7 @@ export const handleShareSessionCommand: CommandHandler = async (params, allowTex
   let gistUrl: string;
   try {
     const output = execSync(
-      `"${ghBin}" gist create --public --filename "openclaw-session.html" "${fileToUpload}"`,
+      `"${ghBin}" gist create --filename "openclaw-session.html" "${fileToUpload}"`,
       { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
     );
     const url = output.trim().split("\n").at(-1)?.trim() ?? "";
