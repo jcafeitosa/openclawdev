@@ -79,6 +79,17 @@ export function syncTelegramMenuCommands(params: {
   commandsToRegister: TelegramMenuCommand[];
 }): void {
   const { bot, runtime, commandsToRegister } = params;
+  // Filter out commands with invalid names before sending to Telegram API.
+  // Telegram only accepts [a-z0-9_]{1,32} for command names.
+  const validCommands = commandsToRegister.filter((cmd) => {
+    if (TELEGRAM_COMMAND_NAME_PATTERN.test(cmd.command)) {
+      return true;
+    }
+    runtime.error?.(
+      `Skipping Telegram command "/${cmd.command}" — name is invalid (must be a-z, 0-9, underscore; max 32 chars).`,
+    );
+    return false;
+  });
   const sync = async () => {
     // Keep delete -> set ordering to avoid stale deletions racing after fresh registrations.
     if (typeof bot.api.deleteMyCommands === "function") {
@@ -89,14 +100,14 @@ export function syncTelegramMenuCommands(params: {
       }).catch(() => {});
     }
 
-    if (commandsToRegister.length === 0) {
+    if (validCommands.length === 0) {
       return;
     }
 
     await withTelegramApiErrorLogging({
       operation: "setMyCommands",
       runtime,
-      fn: () => bot.api.setMyCommands(commandsToRegister),
+      fn: () => bot.api.setMyCommands(validCommands),
     });
   };
 
