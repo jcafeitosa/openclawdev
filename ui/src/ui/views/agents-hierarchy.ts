@@ -8,9 +8,9 @@ import type {
   AgentHierarchyUsage,
   CollaborationEdge,
 } from "../types.ts";
-import { renderEmptyState } from "../app-render.helpers.ts";
 import { formatRelativeTimestamp as formatAgo } from "../format.ts";
 import { icons } from "../icons.ts";
+import { renderEmptyState } from "../render-utils.ts";
 
 /* ═══════════════════════════════════════════════════════════════
    Public API
