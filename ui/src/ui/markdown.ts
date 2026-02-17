@@ -51,6 +51,7 @@ const allowedAttrs = [
 const sanitizeOptions = {
   ALLOWED_TAGS: allowedTags,
   ALLOWED_ATTR: allowedAttrs,
+  ALLOW_DATA_ATTR: true,
   ADD_DATA_URI_TAGS: ["img"],
 };
 
@@ -149,7 +150,7 @@ htmlEscapeRenderer.html = ({ text }: { text: string }) => escapeHtml(text);
 const originalCode = htmlEscapeRenderer.code.bind(htmlEscapeRenderer);
 htmlEscapeRenderer.code = function (token: Parameters<typeof originalCode>[0]) {
   if (token.lang === "mermaid") {
-    const encoded = escapeHtml(token.text);
+    const encoded = encodeMermaidAttr(token.text);
     return `<div class="mermaid-placeholder" data-mermaid-code="${encoded}"></div>`;
   }
   return originalCode(token);
@@ -164,15 +165,18 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** Encode mermaid source for use in an HTML data-attribute value.
+ *  We use URI-encoding (encodeURIComponent) because DOMPurify 3.x strips
+ *  attributes whose decoded value contains `-->` (mutation-XSS guard).
+ *  URI-encoding avoids this entirely since `>` becomes `%3E`. */
+function encodeMermaidAttr(value: string): string {
+  return encodeURIComponent(value);
+}
+
 /* ── Mermaid DOM renderer ────────────────────────────── */
 
-function unescapeHtml(value: string): string {
-  return value
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+function decodeMermaidAttr(value: string): string {
+  return decodeURIComponent(value);
 }
 
 // Lazy-loaded mermaid instance. The library is optional — when it is not
@@ -200,7 +204,7 @@ async function renderMermaidPlaceholder(el: Element): Promise<void> {
   if (!code) {
     return;
   }
-  const decoded = unescapeHtml(code);
+  const decoded = decodeMermaidAttr(code);
   try {
     const mermaidModule = await loadMermaid();
     const mermaid = mermaidModule.default;
