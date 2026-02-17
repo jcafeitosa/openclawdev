@@ -1,0 +1,18 @@
+# OpenClaw Memory System - Automated Maintenance
+# 
+# Installation:
+# 1. Review this file
+# 2. Run: crontab -e
+# 3. Add these lines (adjust paths if needed)
+#
+# IMPORTANT: Adjust timezone if needed (America/Sao_Paulo = BRT)
+# IMPORTANT: Ensure PostgreSQL is accessible without password (trust or .pgpass)
+
+# Daily memory consolidation (23:59 BRT)
+59 23 * * * /Users/juliocezar/Desenvolvimento/openclawdev/scripts/memory-maintenance.sh daily >> /tmp/openclaw/memory-maintenance/cron.log 2>&1
+
+# Weekly memory consolidation + VACUUM (Sunday 01:00 BRT)
+0 1 * * 0 /Users/juliocezar/Desenvolvimento/openclawdev/scripts/memory-maintenance.sh weekly >> /tmp/openclaw/memory-maintenance/cron.log 2>&1
+
+# Alternative: Use launchd on macOS (more reliable than cron)
+# See: scripts/com.openclaw.memory-maintenance.plist
