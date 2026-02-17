@@ -127,8 +127,10 @@ export class FeatureDevWorkflow {
         return this.runSummary();
       case "COMPLETED":
         return this.state;
-      default:
-        throw new Error(`Unknown phase: ${this.state.currentPhase}`);
+      default: {
+        const _exhaustiveCheck: never = this.state.currentPhase;
+        throw new Error("Unknown phase");
+      }
     }
   }
 

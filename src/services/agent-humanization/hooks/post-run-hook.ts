@@ -380,7 +380,7 @@ async function recordOutcome(
 
       // Update reputation based on outcome
       const reputationDelta = outcome === "success" ? 0.02 : outcome === "partial" ? 0.005 : -0.01;
-      if (reputationDelta > 0 || reputationDelta < 0) {
+      if (reputationDelta !== 0) {
         await svc.updateReputationIncremental?.(params.agentId, reputationDelta);
       }
     } catch (err) {
