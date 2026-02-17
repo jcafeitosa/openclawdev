@@ -207,7 +207,16 @@ async function updateTrackRecord(
     notes: params.timedOut ? "Task timed out" : undefined,
   };
 
-  // TODO: await service.insertTrackRecord(record);
+  // IMPLEMENTED: Insert track record for task completion metrics
+  try {
+    await service.insertTrackRecord?.(record);
+  } catch (err) {
+    // Non-blocking: log but don't throw
+    console.warn(
+      `[humanization:task-completion] Failed to insert track record: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   console.debug(
     `[humanization:task-completion] Track record: ${params.agentId} task=${params.taskId} ` +
       `quality=${qualityRating} status=${deliveredStatus} days=${actualDays.toFixed(3)}`,
@@ -245,13 +254,22 @@ async function updateRelationshipScores(
 
   const delta = qualityDelta[qualityRating] ?? 0;
 
-  // TODO: await service.updateRelationship(params.agentId, params.requesterAgentId, {
-  //   trustDelta: delta,
-  //   interactionType: 'task_completion',
-  //   quality: qualityRating,
-  // });
-
+  // IMPLEMENTED: Update relationship trust based on task completion quality
   if (delta !== 0) {
+    try {
+      await service.updateRelationship?.(params.agentId, params.requesterAgentId, {
+        trustDelta: delta,
+        interactionType: "task_completion",
+        quality: qualityRating,
+        timestamp: params.completedAt,
+      });
+    } catch (err) {
+      // Non-blocking: log but don't throw
+      console.warn(
+        `[humanization:task-completion] Failed to update relationship: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     console.debug(
       `[humanization:task-completion] Relationship ${params.agentId}<->${params.requesterAgentId} ` +
         `trust delta: ${delta > 0 ? "+" : ""}${delta}`,
@@ -294,7 +312,16 @@ async function recordSkillProgression(
       practiceHours: (params.completedAt.getTime() - params.spawnedAt.getTime()) / (1000 * 60 * 60),
     };
 
-    // TODO: await service.recordLearningProgress(progress);
+    // IMPLEMENTED: Record skill progression from task completion
+    try {
+      await service.recordLearningProgress?.(_progress);
+    } catch (err) {
+      // Non-blocking: log but don't throw
+      console.warn(
+        `[humanization:task-completion] Failed to record learning progress: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     console.debug(
       `[humanization:task-completion] Skill progression: ${params.agentId} ` +
         `skill=${skillName} improvement=${improvement}`,

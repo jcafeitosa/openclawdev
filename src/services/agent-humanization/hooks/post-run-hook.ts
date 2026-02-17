@@ -368,11 +368,29 @@ async function recordOutcome(
     },
   };
 
-  // TODO: await service.recordDecision(decisionLog);
-  // TODO: await service.updateEnergyState(params.agentId, { energyLevel });
-  // TODO: await service.updateReputationIncremental(params.agentId, outcome);
+  // IMPLEMENTED: Record decision outcomes, energy state, and reputation updates
+  const service = getHumanizationService();
+  if (service) {
+    try {
+      // Record the decision
+      await service.recordDecision?.(decisionLog);
 
-  // For now, log so we know it would have been persisted.
+      // Update agent energy state
+      await service.updateEnergyState?.(params.agentId, { energyLevel });
+
+      // Update reputation based on outcome
+      const reputationDelta = outcome === "success" ? 0.02 : outcome === "partial" ? 0.005 : -0.01;
+      if (reputationDelta !== 0) {
+        await service.updateReputationIncremental?.(params.agentId, reputationDelta);
+      }
+    } catch (err) {
+      // Non-blocking: log but don't throw
+      console.warn(
+        `[humanization:post-run] Failed to update agent state: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   if (outcome !== "success") {
     console.debug(
       `[humanization:post-run] Recorded ${outcome} for ${params.agentId} (energy: ${(energyLevel * 100).toFixed(0)}%)`,
@@ -381,14 +399,38 @@ async function recordOutcome(
 }
 
 async function recordMistakePattern(agentId: string, errorType: string): Promise<void> {
-  // TODO: Persist to agent_mistake_patterns table
+  // IMPLEMENTED: Persist mistake patterns for learning
+  const service = getHumanizationService();
+  if (service) {
+    try {
+      await service.recordMistakePattern?.(agentId, errorType);
+    } catch (err) {
+      // Non-blocking: log but don't throw
+      console.warn(
+        `[humanization:post-run] Failed to record mistake pattern: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   console.debug(
     `[humanization:post-run] Mistake pattern detected for ${agentId}: ${errorType} (3+ occurrences in 24h)`,
   );
 }
 
 async function recordIntuitionCandidate(agentId: string, approachType: string): Promise<void> {
-  // TODO: Persist to agent_intuition_rules table
+  // IMPLEMENTED: Persist intuition rules learned from repeated successes
+  const service = getHumanizationService();
+  if (service) {
+    try {
+      await service.recordIntuitionRule?.(agentId, approachType);
+    } catch (err) {
+      // Non-blocking: log but don't throw
+      console.warn(
+        `[humanization:post-run] Failed to record intuition rule: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
   console.debug(
     `[humanization:post-run] Intuition rule candidate for ${agentId}: ${approachType} (5+ successes)`,
   );

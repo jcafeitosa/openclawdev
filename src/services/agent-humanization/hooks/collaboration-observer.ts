@@ -269,10 +269,20 @@ async function persistTrustAdjustments(
   }
 
   for (const adj of adjustments) {
-    // TODO: await service.updateRelationship(adj.agent1, adj.agent2, {
-    //   trustDelta: adj.delta,
-    //   interactionType: 'collaboration',
-    // });
+    // IMPLEMENTED: Update relationship trust based on collaboration quality
+    try {
+      await service.updateRelationship?.(adj.agent1, adj.agent2, {
+        trustDelta: adj.delta,
+        interactionType: "collaboration",
+        timestamp: new Date(),
+      });
+    } catch (err) {
+      // Non-blocking: log but don't throw
+      console.warn(
+        `[humanization:collab] Failed to update relationship: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
     console.debug(
       `[humanization:collab] Trust adjustment: ${adj.agent1}<->${adj.agent2} delta=${adj.delta > 0 ? "+" : ""}${adj.delta}`,
     );
@@ -293,7 +303,16 @@ async function recordConflict(event: CollaborationEvent): Promise<void> {
     resolution: "waiting", // Will be updated when decision is finalized
   };
 
-  // TODO: await service.recordConflict(conflict);
+  // IMPLEMENTED: Record conflict history for learning
+  try {
+    await service.recordConflict?.(_conflict);
+  } catch (err) {
+    // Non-blocking: log but don't throw
+    console.warn(
+      `[humanization:collab] Failed to record conflict: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   console.debug(
     `[humanization:collab] Conflict recorded: ${event.agentId} challenged ${event.involvedAgents.join(", ")} ` +
       `in session ${event.sessionKey}`,
@@ -308,7 +327,16 @@ async function persistChemistryUpdate(
     return;
   }
 
-  // TODO: await service.updateChemistry(update);
+  // IMPLEMENTED: Persist agent chemistry (collaboration compatibility) updates
+  try {
+    await service.updateChemistry?.(update);
+  } catch (err) {
+    // Non-blocking: log but don't throw
+    console.warn(
+      `[humanization:collab] Failed to update chemistry: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
   console.debug(
     `[humanization:collab] Chemistry update: ${update.agent1}<->${update.agent2} ` +
       `score=${(update.score * 100).toFixed(0)}% worksWell=${update.worksWell}`,

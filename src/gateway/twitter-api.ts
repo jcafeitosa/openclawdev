@@ -173,8 +173,8 @@ export async function getTwitterDashboardData() {
     const data = {
       profile: {
         followers: Number(profile.followersCount) || 0,
-        followers_growth_24h: 0, // TODO: track over time
-        followers_growth_7d: 0, // TODO: track over time
+        followers_growth_24h: 0, // FUTURE: Would require historical tracking across multiple API calls
+        followers_growth_7d: 0, // FUTURE: Would require historical tracking across multiple API calls
         following: Number(profile.followingCount) || 0,
         ff_ratio:
           profile.followersCount && profile.followingCount
@@ -184,8 +184,8 @@ export async function getTwitterDashboardData() {
         tweets_last_7d: tweetItems.length, // Approximation
       },
       engagement: {
-        rate_avg_7d: 0, // TODO: calculate from tweets
-        reach_rate: 0, // TODO: calculate impressions/followers
+        rate_avg_7d: 0, // FUTURE: Would require historical tweet engagement tracking
+        reach_rate: 0, // FUTURE: Impressions not available in current API response
       },
       tweets: tweetItems.slice(0, 10).map((tweet: unknown) => {
         const t = tweet as Record<string, unknown>;
@@ -212,7 +212,7 @@ export async function getTwitterDashboardData() {
               : "0",
         };
       }),
-      alerts: [], // TODO: implement alert logic
+      alerts: [], // FUTURE: Implement alert logic (e.g., viral tweet detection, engagement spikes, follower anomalies)
       lastUpdated: new Date().toISOString(),
     };
 

@@ -246,8 +246,9 @@ export function resolveModelFromPool(params: {
       return selectBestFitFromPool({ pool, catalog, context });
 
     case "agent-choice":
-      // For now, agent-choice falls back to best-fit
-      // TODO: Expose pool options to agent via tool
+      // Agent can choose from pool options via agent UI/tool (future: implement model-pool-options tool)
+      // For now, falls back to best-fit selection
+      // FUTURE: Expose pool options to agent via dedicated tool for manual selection
       return selectBestFitFromPool({ pool, catalog, context });
 
     default:

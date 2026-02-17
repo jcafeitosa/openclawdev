@@ -19,7 +19,11 @@ import type { McpServerConfig, McpConfig, McpToolDefinition } from "./types.js";
 
 interface ActiveClient {
   client: Client;
-  transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport | WebSocketClientTransport;
+  transport:
+    | StdioClientTransport
+    | SSEClientTransport
+    | StreamableHTTPClientTransport
+    | WebSocketClientTransport;
   tools: McpToolDefinition[];
 }
 

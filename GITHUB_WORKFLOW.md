@@ -69,6 +69,7 @@ Don't duplicate work already in progress.
 ### Commit Often, Commit Well
 
 **Conventional Commits format (mandatory):**
+
 ```
 <type>(<scope>): <imperative subject, max 72 chars>
 
@@ -90,6 +91,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 | `security` | Security hardening |
 
 **Examples:**
+
 ```bash
 # ✅ Good
 git commit -m "feat(memory): add decay-based retention scoring
@@ -121,6 +123,7 @@ git push origin feat/your-feature-name
 ### Keep the Working Tree Clean
 
 Never leave files untracked. Either:
+
 - Add them to a commit: `git add . && git commit`
 - Or gitignore them: `echo "pattern" >> .gitignore`
 
@@ -181,6 +184,7 @@ gh pr create \
 ### 3. Fill the PR Template
 
 The template has mandatory sections:
+
 - **Summary**: 2–5 bullets (problem, why, what changed, what didn't)
 - **Change Type**: check all that apply
 - **Security Impact**: answer ALL 5 yes/no questions
@@ -192,6 +196,7 @@ The template has mandatory sections:
 ### 4. Notify the Team
 
 After opening a PR:
+
 ```
 [@main -> @team] 📌 PR opened: #N — "title"
 Files changed: [key files]
@@ -251,6 +256,7 @@ If CI fails → fix immediately, don't wait.
 ## Merging
 
 Only merge when:
+
 1. At least 1 agent approved (LGTM)
 2. All CI checks green
 3. No unresolved comments
@@ -272,6 +278,7 @@ gh pr merge <N> --merge --delete-branch
 ### Filing Issues
 
 Use GitHub issues for:
+
 - Bugs found during work (not just TODO comments in code)
 - Features that are out of scope of current PR
 - Tech debt that needs scheduling
@@ -287,6 +294,7 @@ gh issue create \
 ### Referencing Issues
 
 In commits and PRs:
+
 ```bash
 # Close issue on merge
 git commit -m "fix(auth): resolve token isolation in tests
@@ -316,15 +324,15 @@ git push --force-with-lease origin claude/nice-raman
 
 ## Forbidden Actions 🚫
 
-| Action | Why Forbidden |
-|--------|--------------|
-| `git push --force` (without `--force-with-lease`) | Destroys history |
-| Committing to `main` directly | Always via PR |
-| Merging your own PR without review | Quality gate |
-| `git commit --no-verify` without CTO approval | Bypasses quality gates |
-| Leaving secrets/tokens in code | Security violation |
-| `TODO` comments without linked issue | Tech debt orphan |
-| Pushing `.env` files | Secret exposure |
+| Action                                            | Why Forbidden          |
+| ------------------------------------------------- | ---------------------- |
+| `git push --force` (without `--force-with-lease`) | Destroys history       |
+| Committing to `main` directly                     | Always via PR          |
+| Merging your own PR without review                | Quality gate           |
+| `git commit --no-verify` without CTO approval     | Bypasses quality gates |
+| Leaving secrets/tokens in code                    | Security violation     |
+| `TODO` comments without linked issue              | Tech debt orphan       |
+| Pushing `.env` files                              | Secret exposure        |
 
 ---
 
@@ -375,5 +383,5 @@ gh issue create --title "type: desc" --label bug
 
 ---
 
-*Maintained by @Gustavo (git-specialist). Last updated: 2026-02-17.*  
-*Any questions about GitHub workflow → ping @Gustavo.*
+_Maintained by @Gustavo (git-specialist). Last updated: 2026-02-17._  
+_Any questions about GitHub workflow → ping @Gustavo._

@@ -4,6 +4,7 @@ import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ImageContent } from "@mariozechner/pi-ai";
 import { streamSimple } from "@mariozechner/pi-ai";
 import { createAgentSession, SessionManager, SettingsManager } from "@mariozechner/pi-coding-agent";
+import { resolveFastModeThinkLevel } from "../../../auto-reply/fast-mode.js";
 import { resolveHeartbeatPrompt } from "../../../auto-reply/heartbeat.js";
 import { resolveChannelCapabilities } from "../../../config/channel-capabilities.js";
 import { getMachineDisplayName } from "../../../infra/machine-name.js";
@@ -97,7 +98,6 @@ import {
 } from "../system-prompt.js";
 import { splitSdkTools } from "../tool-split.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
-import { resolveFastModeThinkLevel } from "../../../auto-reply/fast-mode.js";
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
 import {
   selectCompactionTimeoutSnapshot,
@@ -431,7 +431,9 @@ export async function runEmbeddedAttempt(
     });
     const ttsHint = params.config ? buildTtsSystemPromptHint(params.config) : undefined;
 
-    const effectiveThinkLevel = resolveFastModeThinkLevel(params.thinkLevel ?? "auto") as typeof params.thinkLevel;
+    const effectiveThinkLevel = resolveFastModeThinkLevel(
+      params.thinkLevel ?? "auto",
+    ) as typeof params.thinkLevel;
 
     const appendPrompt = buildEmbeddedSystemPrompt({
       workspaceDir: effectiveWorkspace,

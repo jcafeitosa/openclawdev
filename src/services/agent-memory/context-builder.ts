@@ -8,8 +8,8 @@
  * Token savings: 60-80% compared to loading all recent history
  */
 
-import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { getDatabase } from "../../infra/database/client.js";
+import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { memoryManager, type SearchResult } from "./memory-manager.js";
 
 const log = createSubsystemLogger("agent-memory/context");
@@ -199,9 +199,7 @@ export class ContextBuilder {
     let reputation = { reliability: 0.5, quality: "unknown" as string };
     try {
       const db = getDatabase();
-      const rows = await db<
-        Array<{ reliability_score: string; quality_rating: string }>
-      >`
+      const rows = await db<Array<{ reliability_score: string; quality_rating: string }>>`
         SELECT reliability_score, quality_rating
         FROM agent_reputation
         WHERE agent_id = ${agentId}
@@ -230,9 +228,7 @@ export class ContextBuilder {
   private async getCurrentState(_agentId: string): Promise<{ energy: number; focus: number }> {
     try {
       const db = getDatabase();
-      const rows = await db<
-        Array<{ energy_level: string; focus_level: string }>
-      >`
+      const rows = await db<Array<{ energy_level: string; focus_level: string }>>`
         SELECT energy_level, focus_level
         FROM agent_energy_state
         WHERE agent_id = ${_agentId}
