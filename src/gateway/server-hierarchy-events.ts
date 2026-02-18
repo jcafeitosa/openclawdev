@@ -395,28 +395,31 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     });
   }
 
-  // Always include lead/orchestrator agents as permanent roots
+  // Include lead/orchestrator agents as roots ONLY when they have pending
+  // delegations (i.e. they are actively participating).  The default
+  // orchestrator is always shown (added above); all other agents appear
+  // on-demand when spawned, delegated to, or referenced by collaboration edges.
   const allConfiguredAgents = listAgentIds(cfg);
   for (const agentId of allConfiguredAgents) {
     if (agentId === defaultAgentId) {
       continue; // already added above
-    }
-    const agentRole = resolveAgentRole(cfg, agentId);
-    if (agentRole !== "lead" && agentRole !== "orchestrator") {
-      continue; // only include lead/orchestrator agents permanently
     }
     const sessionKey = `agent:${agentId}:main`;
     if (rootSessionKeysUsed.has(sessionKey)) {
       continue; // already exists (from active runs/delegations)
     }
     const delegMetrics = getAgentDelegationMetrics(agentId);
+    if (!hasPendingDelegations(delegMetrics)) {
+      continue; // only include agents that are actively participating
+    }
+    const agentRole = resolveAgentRole(cfg, agentId);
     roots.push({
       sessionKey,
       agentId,
       agentRole,
       label: computeAgentDisplayLabel(cfg, agentId),
       model: resolveAgentModelLabel(cfg, agentId),
-      status: hasPendingDelegations(delegMetrics) ? "running" : "idle",
+      status: "running",
       children: [],
       delegations: delegMetrics,
     });

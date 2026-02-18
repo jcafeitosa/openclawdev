@@ -58,7 +58,7 @@ export class ProvidersIsland extends LitElement {
     try {
       const [healthResult, presenceResult, sessionsResult] = await Promise.all([
         gateway.call<{
-          entries: ProviderHealthEntry[];
+          providers: ProviderHealthEntry[];
           updatedAt?: number;
           modelAllowlist?: string[];
           primaryModel?: string;
@@ -69,7 +69,7 @@ export class ProvidersIsland extends LitElement {
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
       ]);
 
-      this.entries = healthResult.entries ?? [];
+      this.entries = healthResult.providers ?? [];
       this.updatedAt = healthResult.updatedAt ?? Date.now();
       this.modelAllowlist = new Set(healthResult.modelAllowlist ?? []);
       this.primaryModel = healthResult.primaryModel ?? null;
