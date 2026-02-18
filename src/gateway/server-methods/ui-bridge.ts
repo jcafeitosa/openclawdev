@@ -187,7 +187,7 @@ export const uiBridgeHandlers: GatewayRequestHandlers = {
     const handler = (await import("./health.js")).healthHandlers["status"];
     if (handler) {
       await handler({
-        req: { id: 0, method: "status" },
+        req: { type: "req" as const, id: "0", method: "status" },
         params: {},
         client,
         isWebchatConnect: () => false,
@@ -206,7 +206,7 @@ export const uiBridgeHandlers: GatewayRequestHandlers = {
     const handler = (await import("./health.js")).healthHandlers["health"];
     if (handler) {
       await handler({
-        req: { id: 0, method: "health" },
+        req: { type: "req" as const, id: "0", method: "health" },
         params,
         client,
         isWebchatConnect: () => false,
