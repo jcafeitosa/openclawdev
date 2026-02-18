@@ -71,7 +71,7 @@ export function createLineWebhookCallback(
   bot: LineBot,
   channelSecret: string,
   path = "/line/webhook",
-) {
+): { path: string; handler: import("express").RequestHandler } {
   const { handler } = startLineWebhook({
     channelSecret,
     onEvents: bot.handleWebhook,
