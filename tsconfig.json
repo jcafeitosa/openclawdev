@@ -18,12 +18,33 @@
     "target": "es2023",
     "useDefineForClassFields": false,
     "paths": {
-      "*": ["./*"],
+      "vitest": ["./node_modules/vitest"],
+      "vitest/*": ["./node_modules/vitest/*"],
+      "@vitest/*": ["./node_modules/@vitest/*"],
       "openclaw/plugin-sdk": ["./src/plugin-sdk/index.ts"],
       "openclaw/plugin-sdk/*": ["./src/plugin-sdk/*.ts"],
-      "openclaw/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"]
+      "openclaw/plugin-sdk/account-id": ["./src/plugin-sdk/account-id.ts"],
+      "*": ["./*"]
     }
   },
   "include": ["src/**/*", "ui/**/*", "extensions/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "extensions/**/*.test.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.test-*.ts",
+    "**/*.test.*.ts",
+    "**/*.e2e.ts",
+    "**/*.e2e-*.ts",
+    "**/*.e2e.*.ts",
+    "**/test-*",
+    "**/test-utils/**",
+    "**/test-helpers/**",
+    "**/tests/**",
+    "**/__tests__/**",
+    "**/*.config.ts",
+    "**/*.config.js",
+    "**/*.config.mjs",
+    "**/*.test-helpers.ts"
+  ]
 }
