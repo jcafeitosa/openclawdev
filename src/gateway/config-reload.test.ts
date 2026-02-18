@@ -112,6 +112,13 @@ describe("buildGatewayReloadPlan", () => {
     const plan = buildGatewayReloadPlan(["unknownField"]);
     expect(plan.restartGateway).toBe(true);
   });
+
+  it("reinitializes capabilities registry when agents config changes", () => {
+    const plan = buildGatewayReloadPlan(["agents.list"]);
+    expect(plan.restartGateway).toBe(false);
+    expect(plan.reinitCapabilities).toBe(true);
+    expect(plan.hotReasons).toContain("agents.list");
+  });
 });
 
 describe("resolveGatewayReloadSettings", () => {

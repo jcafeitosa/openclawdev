@@ -59,6 +59,8 @@ export type HierarchyNode = {
   usage?: SubagentUsage;
   interactionCount?: number;
   delegations?: DelegationMetrics;
+  capabilities?: string[];
+  expertise?: string[];
   progress?: {
     percent: number;
     status: string;
@@ -160,6 +162,24 @@ function computeAgentDisplayLabel(cfg: ReturnType<typeof loadConfig>, agentId: s
   }
   const configName = resolveAgentConfig(cfg, agentId)?.name;
   return configName || `Agent: ${agentId}`;
+}
+
+/** Resolve capabilities and expertise arrays for an agent from config. */
+function resolveAgentCapabilities(
+  cfg: ReturnType<typeof loadConfig>,
+  agentId: string,
+): { capabilities?: string[]; expertise?: string[] } {
+  const agentCfg = resolveAgentConfig(cfg, agentId);
+  const capabilities = agentCfg?.capabilities;
+  const expertise = agentCfg?.expertise;
+  const result: { capabilities?: string[]; expertise?: string[] } = {};
+  if (capabilities && capabilities.length > 0) {
+    result.capabilities = capabilities;
+  }
+  if (expertise && expertise.length > 0) {
+    result.expertise = expertise;
+  }
+  return result;
 }
 
 /** Recursively collect all agentIds present in a hierarchy tree. */
@@ -305,6 +325,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       interactionCount += delegMetrics.sent + delegMetrics.received;
     }
 
+    const agentCaps = agentId ? resolveAgentCapabilities(cfg, agentId) : {};
     const node: HierarchyNode = {
       sessionKey: run.childSessionKey,
       runId: run.runId,
@@ -321,6 +342,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       usage: run.usage,
       interactionCount,
       delegations: delegMetrics,
+      ...agentCaps,
       progress: run.progress,
     };
 
@@ -357,6 +379,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
         const hasActiveChild = children.some(
           (child) => child.status === "running" || child.status === "pending",
         );
+        const rootCaps = rootAgentId ? resolveAgentCapabilities(cfg, rootAgentId) : {};
         const rootNode: HierarchyNode = {
           sessionKey: parentKey,
           agentId: rootAgentId,
@@ -369,6 +392,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
           // Root session keys are containers for runs; treat them as active only when children are active.
           status: hasActiveChild ? "running" : "idle",
           children,
+          ...rootCaps,
         };
         roots.push(rootNode);
         rootSessionKeysUsed.add(parentKey);
@@ -392,6 +416,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       status: hasPendingDelegations(delegMetrics) ? "running" : "idle",
       children: [],
       delegations: delegMetrics,
+      ...resolveAgentCapabilities(cfg, defaultAgentId),
     });
   }
 
@@ -419,6 +444,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       status: hasPendingDelegations(delegMetrics) ? "running" : "idle",
       children: [],
       delegations: delegMetrics,
+      ...resolveAgentCapabilities(cfg, agentId),
     });
     rootSessionKeysUsed.add(sessionKey);
   }
@@ -607,6 +633,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       endedAt: derivedEndedAt,
       children: [],
       delegations: delegMetrics,
+      ...resolveAgentCapabilities(cfg, agentId),
     });
     rootSessionKeysUsed.add(sessionKey);
     allNodeAgentIds.add(agentId);
