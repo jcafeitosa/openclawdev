@@ -1,0 +1,7 @@
+.astro/
+ui/.astro/
+ui/dist/
+dist/
+vendor/a2ui/renderers/angular/dist/
+node_modules/
+*.d.ts
