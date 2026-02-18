@@ -687,6 +687,10 @@ function renderGraphLegend() {
           <span>error</span>
         </div>
         <div style=${groupStyle}>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6b7280;border:1px solid #4b5563;"></span>
+          <span>pending</span>
+        </div>
+        <div style=${groupStyle}>
           <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#374151;border:1px solid #4b5563;"></span>
           <span>idle</span>
         </div>
@@ -695,20 +699,40 @@ function renderGraphLegend() {
       <div style=${sectionStyle}>
         <span style=${labelStyle}>Edges:</span>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px solid rgba(245,158,11,0.7);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px solid ${EDGE_STYLES.delegation.color};"></span>
           <span>delegation</span>
         </div>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px solid rgba(34,197,94,0.6);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.request.color};"></span>
+          <span>request</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px solid ${EDGE_STYLES.approval.color};"></span>
           <span>approval</span>
         </div>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed rgba(124,58,237,0.5);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.rejection.color};"></span>
+          <span>rejection</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.proposal.color};"></span>
           <span>proposal</span>
         </div>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed rgba(239,68,68,0.5);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.challenge.color};"></span>
           <span>challenge</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.agreement.color};"></span>
+          <span>agreement</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.decision.color};"></span>
+          <span>decision</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:1px dashed ${EDGE_STYLES.clarification.color};"></span>
+          <span>clarification</span>
         </div>
         <div style=${groupStyle}>
           <span style="display:inline-block;width:20px;height:0;border-top:1.5px solid rgba(161,161,170,0.5);"></span>
