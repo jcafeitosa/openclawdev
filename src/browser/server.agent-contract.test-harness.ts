@@ -1,4 +1,4 @@
-import { fetch as realFetch } from "undici";
+const realFetch = globalThis.fetch;
 import {
   getBrowserControlServerBaseUrl,
   installBrowserControlServerHooks,
