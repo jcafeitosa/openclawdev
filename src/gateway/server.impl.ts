@@ -85,6 +85,7 @@ import {
   incrementPresenceVersion,
   refreshGatewayHealthSnapshot,
 } from "./server/health-state.js";
+import { createHookDispatchers } from "./server/hooks.js";
 import { loadGatewayTlsRuntime } from "./server/tls.js";
 
 export { __resetModelCatalogCacheForTest } from "./server-model-catalog.js";
@@ -336,6 +337,8 @@ export async function startGatewayServer(
   if (cfgAtStart.gateway?.tls?.enabled && !gatewayTls.enabled) {
     throw new Error(gatewayTls.error ?? "gateway tls: failed to enable");
   }
+  const hookDispatchers = createHookDispatchers({ deps, logHooks });
+
   const {
     canvasHost,
     httpServer,
@@ -368,6 +371,7 @@ export async function startGatewayServer(
     rateLimiter: authRateLimiter,
     gatewayTls,
     hooksConfig: () => hooksConfig,
+    hookDispatchers,
     pluginRegistry,
     deps,
     canvasRuntime,

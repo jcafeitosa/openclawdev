@@ -12,14 +12,29 @@ import { createHooksRequestHandler } from "../server-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
-export function createGatewayHooksRequestHandler(params: {
+export type HookDispatchers = {
+  dispatchWakeHook: (value: { text: string; mode: "now" | "next-heartbeat" }) => void;
+  dispatchAgentHook: (value: {
+    message: string;
+    name: string;
+    agentId?: string;
+    wakeMode: "now" | "next-heartbeat";
+    sessionKey: string;
+    deliver: boolean;
+    channel: HookMessageChannel;
+    to?: string;
+    model?: string;
+    thinking?: string;
+    timeoutSeconds?: number;
+    allowUnsafeExternalContent?: boolean;
+  }) => string;
+};
+
+export function createHookDispatchers(params: {
   deps: CliDeps;
-  getHooksConfig: () => HooksConfigResolved | null;
-  bindHost: string;
-  port: number;
   logHooks: SubsystemLogger;
-}) {
-  const { deps, getHooksConfig, bindHost, port, logHooks } = params;
+}): HookDispatchers {
+  const { deps, logHooks } = params;
 
   const dispatchWakeHook = (value: { text: string; mode: "now" | "next-heartbeat" }) => {
     const sessionKey = resolveMainSessionKeyFromConfig();
@@ -105,6 +120,20 @@ export function createGatewayHooksRequestHandler(params: {
 
     return runId;
   };
+
+  return { dispatchWakeHook, dispatchAgentHook };
+}
+
+export function createGatewayHooksRequestHandler(params: {
+  deps: CliDeps;
+  getHooksConfig: () => HooksConfigResolved | null;
+  bindHost: string;
+  port: number;
+  logHooks: SubsystemLogger;
+}) {
+  const { deps, getHooksConfig, bindHost, port, logHooks } = params;
+
+  const { dispatchWakeHook, dispatchAgentHook } = createHookDispatchers({ deps, logHooks });
 
   return createHooksRequestHandler({
     getHooksConfig,

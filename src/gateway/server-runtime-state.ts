@@ -10,6 +10,11 @@ import type { AuthRateLimiter } from "./auth-rate-limit.js";
 import type { ResolvedGatewayAuth } from "./auth.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import type { ControlUiRootState } from "./control-ui.js";
+import {
+  createGatewayElysiaApp,
+  listenGatewayElysia,
+  type HookDispatchers,
+} from "./elysia-gateway.js";
 import type { HooksConfigResolved } from "./hooks.js";
 import { resolveGatewayListenHosts } from "./net.js";
 import {
@@ -23,11 +28,8 @@ import {
   createToolEventRecipientRegistry,
 } from "./server-chat.js";
 import { MAX_PAYLOAD_BYTES } from "./server-constants.js";
-import { attachGatewayUpgradeHandler, createGatewayHttpServer } from "./server-http.js";
+import { attachGatewayUpgradeHandler } from "./server-http.js";
 import type { DedupeEntry } from "./server-shared.js";
-import { createGatewayHooksRequestHandler } from "./server/hooks.js";
-import { listenGatewayHttpServer } from "./server/http-listen.js";
-import { createGatewayPluginRequestHandler } from "./server/plugins-http.js";
 import type { GatewayTlsRuntime } from "./server/tls.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
 
@@ -46,6 +48,7 @@ export async function createGatewayRuntimeState(params: {
   rateLimiter?: AuthRateLimiter;
   gatewayTls?: GatewayTlsRuntime;
   hooksConfig: () => HooksConfigResolved | null;
+  hookDispatchers: HookDispatchers;
   pluginRegistry: PluginRegistry;
   deps: CliDeps;
   canvasRuntime: RuntimeEnv;
@@ -102,43 +105,32 @@ export async function createGatewayRuntimeState(params: {
   const clients = new Set<GatewayWsClient>();
   const { broadcast, broadcastToConnIds } = createGatewayBroadcaster({ clients });
 
-  const handleHooksRequest = createGatewayHooksRequestHandler({
-    deps: params.deps,
-    getHooksConfig: params.hooksConfig,
-    bindHost: params.bindHost,
+  const elysiaApp = createGatewayElysiaApp({
     port: params.port,
+    canvasHost,
+    controlUiEnabled: params.controlUiEnabled,
+    controlUiBasePath: params.controlUiBasePath,
+    controlUiRoot: params.controlUiRoot,
+    openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
+    openResponsesEnabled: params.openResponsesEnabled,
+    openResponsesConfig: params.openResponsesConfig,
+    resolvedAuth: params.resolvedAuth,
+    getHooksConfig: params.hooksConfig,
+    hookDispatchers: params.hookDispatchers,
+    pluginRegistry: params.pluginRegistry,
     logHooks: params.logHooks,
-  });
-
-  const handlePluginRequest = createGatewayPluginRequestHandler({
-    registry: params.pluginRegistry,
-    log: params.logPlugins,
+    logPlugins: params.logPlugins,
+    tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
   });
 
   const bindHosts = await resolveGatewayListenHosts(params.bindHost);
   const httpServers: HttpServer[] = [];
   const httpBindHosts: string[] = [];
   for (const host of bindHosts) {
-    const httpServer = createGatewayHttpServer({
-      canvasHost,
-      clients,
-      controlUiEnabled: params.controlUiEnabled,
-      controlUiBasePath: params.controlUiBasePath,
-      controlUiRoot: params.controlUiRoot,
-      openAiChatCompletionsEnabled: params.openAiChatCompletionsEnabled,
-      openResponsesEnabled: params.openResponsesEnabled,
-      openResponsesConfig: params.openResponsesConfig,
-      handleHooksRequest,
-      handlePluginRequest,
-      resolvedAuth: params.resolvedAuth,
-      rateLimiter: params.rateLimiter,
-      tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
-    });
     try {
-      await listenGatewayHttpServer({
-        httpServer,
-        bindHost: host,
+      const httpServer = await listenGatewayElysia(elysiaApp, {
         port: params.port,
+        hostname: host,
       });
       httpServers.push(httpServer);
       httpBindHosts.push(host);
@@ -159,6 +151,7 @@ export async function createGatewayRuntimeState(params: {
   const wss = new WebSocketServer({
     noServer: true,
     maxPayload: MAX_PAYLOAD_BYTES,
+    perMessageDeflate: false,
   });
   for (const server of httpServers) {
     attachGatewayUpgradeHandler({
