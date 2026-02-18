@@ -31,6 +31,7 @@ type ResolvedAgentConfig = {
   sandbox?: AgentEntry["sandbox"];
   tools?: AgentEntry["tools"];
   role?: string;
+  capabilities?: string[];
   expertise?: string[];
 };
 
@@ -134,6 +135,9 @@ export function resolveAgentConfig(
       typeof (entry as Record<string, unknown>).role === "string"
         ? ((entry as Record<string, unknown>).role as string)
         : undefined,
+    capabilities: Array.isArray((entry as Record<string, unknown>).capabilities)
+      ? ((entry as Record<string, unknown>).capabilities as string[])
+      : undefined,
     expertise: Array.isArray((entry as Record<string, unknown>).expertise)
       ? ((entry as Record<string, unknown>).expertise as string[])
       : undefined,
