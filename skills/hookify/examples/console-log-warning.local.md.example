@@ -1,0 +1,13 @@
+---
+name: console-log-warning
+enabled: true
+event: file
+pattern: console\.log\(
+---
+
+⚠️ console.log detectado em código de produção.
+
+Alternativas:
+- Remova antes do commit
+- Use o logger do projeto
+- Use `console.error` apenas para erros reais

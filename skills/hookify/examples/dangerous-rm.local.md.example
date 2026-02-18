@@ -1,0 +1,11 @@
+---
+name: dangerous-rm
+enabled: true
+event: bash
+action: block
+pattern: rm\s+-rf\s*/
+---
+
+⛔ Bloqueando rm -rf com path absoluto.
+
+Use `trash` em vez de `rm` para operações destrutivas, ou especifique caminhos relativos precisos.

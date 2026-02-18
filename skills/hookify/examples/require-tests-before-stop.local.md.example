@@ -1,0 +1,13 @@
+---
+name: require-tests
+enabled: true
+event: stop
+action: block
+pattern: .*
+---
+
+Antes de parar, verifique:
+- [ ] pnpm test — 0 falhas
+- [ ] pnpm build — sem erros
+- [ ] pnpm check — 0 warnings
+- [ ] Nenhum TODO pendente no código
