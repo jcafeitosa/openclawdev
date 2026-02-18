@@ -39,6 +39,13 @@ export function getBrowserControlServerBaseUrl(): string {
   return `http://127.0.0.1:${state.testPort}`;
 }
 
+export function getBrowserControlServerAuth(): { token?: string; password?: string } {
+  return {
+    token: process.env.OPENCLAW_GATEWAY_TOKEN ?? undefined,
+    password: process.env.OPENCLAW_GATEWAY_PASSWORD ?? undefined,
+  };
+}
+
 export function setBrowserControlServerCreateTargetId(targetId: string | null): void {
   state.createTargetId = targetId;
 }

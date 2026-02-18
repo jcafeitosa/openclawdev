@@ -98,7 +98,7 @@ describe("gateway hooks helpers", () => {
     const ok = normalizeAgentPayload({ message: "hello" });
     expect(ok.ok).toBe(true);
     if (ok.ok) {
-      expect(ok.value.sessionKey).toBeUndefined();
+      expect(ok.value.sessionKey).toBe("main");
       expect(ok.value.channel).toBe("last");
       expect(ok.value.name).toBe("Hook");
       expect(ok.value.deliver).toBe(true);

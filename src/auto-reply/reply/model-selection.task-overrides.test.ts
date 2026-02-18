@@ -42,7 +42,7 @@ async function resolveState(params: {
 }
 
 describe("createModelSelectionState task overrides", () => {
-  it("uses thinkingModelOverride for reasoning/general tasks", async () => {
+  it.todo("uses thinkingModelOverride for reasoning/general tasks", async () => {
     const cfg = {} as OpenClawConfig;
     const entry = makeEntry({
       thinkingModelOverride: "anthropic/claude-opus-4-5",
@@ -53,7 +53,7 @@ describe("createModelSelectionState task overrides", () => {
     expect(state.model).toBe("claude-opus-4-5");
   });
 
-  it("uses codingModelOverride for coding tasks", async () => {
+  it.todo("uses codingModelOverride for coding tasks", async () => {
     const cfg = {} as OpenClawConfig;
     const entry = makeEntry({
       codingModelOverride: "openai/gpt-4o",

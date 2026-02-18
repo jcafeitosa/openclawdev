@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { MACOS_APP_SOURCES_DIR } from "../compat/legacy-names.js";
 import { CronDeliverySchema } from "../gateway/protocol/schema.js";
 
@@ -8,10 +9,17 @@ type SchemaLike = {
   anyOf?: Array<SchemaLike>;
   properties?: Record<string, unknown>;
   const?: unknown;
+  enum?: string[];
 };
 
 function extractDeliveryModes(schema: SchemaLike): string[] {
+  // Try enum array first (Zod toJSONSchema produces { enum: [...] } for z.enum())
   const modeSchema = schema.properties?.mode as SchemaLike | undefined;
+  if (modeSchema?.enum && Array.isArray(modeSchema.enum)) {
+    return modeSchema.enum.filter((v): v is string => typeof v === "string");
+  }
+
+  // Fallback: anyOf with const values
   const directModes = (modeSchema?.anyOf ?? [])
     .map((entry) => entry?.const)
     .filter((value): value is string => typeof value === "string");
@@ -52,7 +60,8 @@ async function resolveSwiftFiles(cwd: string, candidates: string[]): Promise<str
 
 describe("cron protocol conformance", () => {
   it("ui + swift include all cron delivery modes from gateway schema", async () => {
-    const modes = extractDeliveryModes(CronDeliverySchema as SchemaLike);
+    const jsonSchema = z.toJSONSchema(CronDeliverySchema) as SchemaLike;
+    const modes = extractDeliveryModes(jsonSchema);
     expect(modes.length).toBeGreaterThan(0);
 
     const cwd = process.cwd();

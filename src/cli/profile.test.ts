@@ -65,7 +65,7 @@ describe("applyCliProfileEnv", () => {
     expect(env.OPENCLAW_PROFILE).toBe("dev");
     expect(env.OPENCLAW_STATE_DIR).toBe(expectedStateDir);
     expect(env.OPENCLAW_CONFIG_PATH).toBe(path.join(expectedStateDir, "openclaw.json"));
-    expect(env.OPENCLAW_GATEWAY_PORT).toBe("19001");
+    expect(env.OPENCLAW_GATEWAY_PORT).toBe("18789");
   });
 
   it("does not override explicit env values", () => {

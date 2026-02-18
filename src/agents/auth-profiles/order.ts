@@ -22,9 +22,44 @@ export function resolveAuthProfileOrder(params: {
   store: AuthProfileStore;
   provider: string;
   preferredProfile?: string;
+  accountTag?: string;
 }): string[] {
-  const { cfg, store, provider, preferredProfile } = params;
+  const { cfg, store, provider, accountTag } = params;
+  let { preferredProfile } = params;
   const providerKey = normalizeProviderId(provider);
+
+  // If accountTag specified, resolve tag → profileId and use as preferredProfile
+  if (accountTag) {
+    const tagMap = cfg?.auth?.accountTags?.[providerKey];
+    const taggedProfileId = tagMap?.[accountTag];
+
+    if (!taggedProfileId) {
+      const availableTags = Object.keys(tagMap ?? {});
+      const tagsHint =
+        availableTags.length > 0
+          ? `Available tags: ${availableTags.join(", ")}`
+          : "No tags configured for this provider";
+      throw new Error(
+        `Account tag "@${accountTag}" not found for provider "${provider}". ${tagsHint}`,
+      );
+    }
+
+    const profile = store.profiles[taggedProfileId];
+    if (!profile) {
+      throw new Error(
+        `Auth profile "${taggedProfileId}" (mapped from tag "@${accountTag}") not found in store.`,
+      );
+    }
+
+    if (normalizeProviderId(profile.provider) !== providerKey) {
+      throw new Error(
+        `Auth profile "${taggedProfileId}" (tag "@${accountTag}") has provider "${profile.provider}" but expected "${provider}".`,
+      );
+    }
+
+    preferredProfile = taggedProfileId;
+  }
+
   const now = Date.now();
 
   // Clear any cooldowns that have expired since the last check so profiles
