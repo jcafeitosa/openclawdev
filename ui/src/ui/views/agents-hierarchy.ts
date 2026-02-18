@@ -62,6 +62,7 @@ type GraphNodeData = {
 type GraphLinkData = {
   source: string;
   target: string;
+  edgeType?: string;
   lineStyle?: Record<string, unknown>;
   label?: Record<string, unknown>;
   _edgeType?: string;
@@ -155,11 +156,19 @@ const DEFAULT_EDGE_STYLE = { color: "rgba(161, 161, 170, 0.3)", type: "solid", w
    Helpers
    ═══════════════════════════════════════════════════════════════ */
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function hashString(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash = hash & hash;
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
   }
   return Math.abs(hash);
 }
@@ -234,12 +243,12 @@ function computeEdgeLength(nodeCount: number): number {
 
 function formatTokenCount(tokens: number): string {
   if (tokens >= 1_000_000) {
-    return `${(tokens / 1_000_000).toFixed(1)}M `;
+    return `${(tokens / 1_000_000).toFixed(1)}M`;
   }
   if (tokens >= 1_000) {
-    return `${(tokens / 1_000).toFixed(1)}K `;
+    return `${(tokens / 1_000).toFixed(1)}K`;
   }
-  return `${tokens} `;
+  return `${tokens}`;
 }
 
 function formatDurationMs(ms: number): string {
@@ -266,9 +275,13 @@ function extractAgentName(sessionKey: string): string {
     return role;
   }
   if (parts.length >= 2) {
-    return parts[1] || sessionKey.slice(0, 20);
+    return parts[1] || truncateWithEllipsis(sessionKey, 20);
   }
-  return sessionKey.slice(0, 20);
+  return truncateWithEllipsis(sessionKey, 20);
+}
+
+function truncateWithEllipsis(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max)}\u2026` : s;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -308,7 +321,8 @@ function filterRootsForAgent(
   }
   search(roots);
 
-  return found;
+  // Fall back to full tree when the focused agent is not in the current snapshot
+  return found.length > 0 ? found : roots;
 }
 
 /**
@@ -318,7 +332,7 @@ function filterEdgesForAgents(
   edges: CollaborationEdge[],
   visibleAgentIds: Set<string>,
 ): CollaborationEdge[] {
-  return edges.filter((e) => visibleAgentIds.has(e.source) || visibleAgentIds.has(e.target));
+  return edges.filter((e) => visibleAgentIds.has(e.source) && visibleAgentIds.has(e.target));
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -410,6 +424,7 @@ function transformToGraphData(
       links.push({
         source: parentKey,
         target: node.sessionKey,
+        edgeType: "spawn",
         lineStyle: {
           color: "rgba(161, 161, 170, 0.5)",
           width: 1.5,
@@ -462,6 +477,7 @@ function transformToGraphData(
       links.push({
         source: sourceSession,
         target: targetSession,
+        edgeType: collab.type,
         lineStyle: {
           color: style.color,
           width: style.width,
@@ -521,32 +537,43 @@ function tooltipFormatter(params: {
 }): string {
   if (params.dataType === "edge") {
     const link = params.data as GraphLinkData | undefined;
-    if (!link?._edgeType) {
+    if (!link) {
       return "";
     }
+    const label = link._edgeType ?? link.edgeType ?? "link";
     const topic = link._topic
       ? `<div style="margin-top:2px;font-size:11px;color:#ccc;">${link._topic}</div>`
       : "";
-    return `<div style="max-width:280px;"><strong style="text-transform:capitalize;">${link._edgeType}</strong>${topic}</div>`;
+    return `<div style="max-width:280px;"><strong style="text-transform:capitalize;">${label}</strong>${topic}</div>`;
   }
-  const meta = params.data?._meta;
+  const meta = (params.data as GraphNodeData | undefined)?._meta;
   if (!meta) {
-    return params.data?.name ?? "";
+    return escapeHtml(params.data?.name ?? "");
   }
 
   const statusColors = STATUS_COLORS[meta.status] ?? STATUS_COLORS.pending;
-  const roleLabel = meta.agentRole
-    ? `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${ROLE_COLORS[meta.agentRole]?.bg ?? "#6b7280"};color:${ROLE_COLORS[meta.agentRole]?.text ?? "#fff"};">${meta.agentRole}</span>`
-    : "";
-  const usageLines = meta.usage
-    ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Tokens: ${formatTokenCount(meta.usage.inputTokens)}in / ${formatTokenCount(meta.usage.outputTokens)}out<br/>Tools: ${meta.usage.toolCalls} | Duration: ${formatDurationMs(meta.usage.durationMs)}${meta.usage.costUsd > 0 ? `<br/>Cost: $${meta.usage.costUsd.toFixed(4)}` : ""}</div>`
-    : "";
-  const delegLines = meta.delegations
-    ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Delegations: ${meta.delegations.sent} sent / ${meta.delegations.received} received${meta.delegations.pending > 0 ? ` | ${meta.delegations.pending} pending` : ""}</div>`
+  const safeRole = meta.agentRole ? escapeHtml(meta.agentRole) : "";
+  const roleLabel = safeRole
+    ? `<span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${ROLE_COLORS[meta.agentRole!]?.bg ?? "#6b7280"};color:${ROLE_COLORS[meta.agentRole!]?.text ?? "#fff"};">${safeRole}</span>`
     : "";
 
-  const modelLine = meta.model
-    ? `<div style="margin-top:4px;font-size:11px;color:#93c5fd;">Model: ${meta.model}</div>`
+  let usageLines = "";
+  if (meta.usage) {
+    const u = meta.usage;
+    const tokLine = `Tokens: ${formatTokenCount(u.inputTokens)} in / ${formatTokenCount(u.outputTokens)} out`;
+    const toolLine = `Tools: ${u.toolCalls}`;
+    const durLine = u.durationMs ? ` | Duration: ${formatDurationMs(u.durationMs)}` : "";
+    const costLine = u.costUsd && u.costUsd > 0 ? `<br/>Cost: $${u.costUsd.toFixed(4)}` : "";
+    const cacheLine =
+      (u.cacheReadTokens ?? 0) > 0
+        ? `<br/>Cache: ${formatTokenCount(u.cacheReadTokens)} read / ${formatTokenCount(u.cacheWriteTokens)} write`
+        : "";
+    usageLines = `<div style="margin-top:4px;font-size:11px;color:#aaa;">${tokLine}<br/>${toolLine}${durLine}${costLine}${cacheLine}</div>`;
+  }
+
+  const d = meta.delegations;
+  const delegLines = d
+    ? `<div style="margin-top:4px;font-size:11px;color:#aaa;">Delegations: ${d.sent} sent / ${d.received} recv / ${d.completed} done / ${d.rejected} rejected${d.pending > 0 ? ` | ${d.pending} pending` : ""}</div>`
     : "";
 
   const capTags = meta.capabilities?.length
@@ -556,16 +583,25 @@ function tooltipFormatter(params: {
     ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;gap:3px;">${meta.expertise.map((e) => `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;background:#1a2e1a;color:#86efac;">${e}</span>`).join("")}</div>`
     : "";
 
+  const safeModel = meta.model ? escapeHtml(meta.model) : "";
+  const modelLine = safeModel
+    ? `<div style="margin-top:4px;font-size:11px;color:#93c5fd;">Model: ${safeModel}</div>`
+    : "";
+
+  const safeName = escapeHtml(params.data?.name ?? "");
+  const safeTask = meta.task ? escapeHtml(meta.task.slice(0, 120)) : "";
+  const safeSessionKey = escapeHtml(meta.sessionKey);
+
   return `<div style="max-width:350px;">
-    <strong>${params.data?.name ?? ""}</strong> ${roleLabel}<br/>
-    <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${statusColors.bg};color:${statusColors.text};">${meta.status}</span>
-    ${meta.task ? `<div style="margin-top:4px;font-size:12px;color:#ccc;">${meta.task.slice(0, 120)}</div>` : ""}
+    <strong>${safeName}</strong> ${roleLabel}<br/>
+    <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${statusColors.bg};color:${statusColors.text};">${escapeHtml(meta.status)}</span>
+    ${safeTask ? `<div style="margin-top:4px;font-size:12px;color:#ccc;">${safeTask}</div>` : ""}
     ${modelLine}
     ${capTags}
     ${expTags}
     ${usageLines}
     ${delegLines}
-    <div style="margin-top:4px;font-size:10px;color:#666;">${meta.sessionKey}</div>
+    <div style="margin-top:4px;font-size:10px;color:#666;">${safeSessionKey}</div>
   </div>`;
 }
 
@@ -602,7 +638,7 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
             ${totalNodes > 0 ? html` <span class="mono">${totalNodes}</span> nodes` : nothing}
           </div>
         </div>
-        <button class="btn btn--sm" ?disabled=${loading} @click=${onRefresh}>
+        <button class="btn btn--sm" aria-label="Refresh agent hierarchy" ?disabled=${loading} @click=${onRefresh}>
           ${loading ? "Loading..." : "Refresh"}
         </button>
       </div>
@@ -620,7 +656,7 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
       ${
         roots.length > 0
           ? html`
-            <div class="hierarchy-stats" style="margin-top: 16px; display: flex; gap: 12px; flex-wrap: wrap;">
+            <div class="hierarchy-stats" style="margin-top: 16px;">
               <div class="hierarchy-stat">
                 <span class="hierarchy-stat-dot" style="background: ${STATUS_COLORS.running.bg};"></span>
                 <span>Running: ${statusCounts.running}</span>
@@ -664,9 +700,11 @@ export function renderAgentsHierarchy(props: AgentsHierarchyProps) {
               class="hierarchy-chart-container"
               id="hierarchy-echarts-container"
               style="margin-top: 8px; min-height: 400px; height: calc(100vh - 220px); transition: height 0.3s ease;"
-            >
+            ></div>
+            <details class="hierarchy-tree-details" style="margin-top: 8px;">
+              <summary style="cursor: pointer; font-size: 12px; color: #71717a;">Show tree view</summary>
               ${renderHierarchyTree(roots, onNodeClick)}
-            </div>
+            </details>
             ${renderGraphLegend()}
             ${scheduleEChartsInit(roots, collabEdges, onNodeClick)}
           `
@@ -715,6 +753,10 @@ function renderGraphLegend() {
           <span>error</span>
         </div>
         <div style=${groupStyle}>
+          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#6b7280;border:1px solid #4b5563;"></span>
+          <span>pending</span>
+        </div>
+        <div style=${groupStyle}>
           <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#374151;border:1px solid #4b5563;"></span>
           <span>idle</span>
         </div>
@@ -723,20 +765,40 @@ function renderGraphLegend() {
       <div style=${sectionStyle}>
         <span style=${labelStyle}>Edges:</span>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px solid rgba(245,158,11,0.7);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px solid ${EDGE_STYLES.delegation.color};"></span>
           <span>delegation</span>
         </div>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px solid rgba(34,197,94,0.6);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.request.color};"></span>
+          <span>request</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px solid ${EDGE_STYLES.approval.color};"></span>
           <span>approval</span>
         </div>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed rgba(124,58,237,0.5);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.rejection.color};"></span>
+          <span>rejection</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.proposal.color};"></span>
           <span>proposal</span>
         </div>
         <div style=${groupStyle}>
-          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed rgba(239,68,68,0.5);"></span>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.challenge.color};"></span>
           <span>challenge</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.agreement.color};"></span>
+          <span>agreement</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:2px dashed ${EDGE_STYLES.decision.color};"></span>
+          <span>decision</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:1px dashed ${EDGE_STYLES.clarification.color};"></span>
+          <span>clarification</span>
         </div>
         <div style=${groupStyle}>
           <span style="display:inline-block;width:20px;height:0;border-top:1.5px solid rgba(161,161,170,0.5);"></span>
@@ -775,6 +837,7 @@ function renderHierarchyTree(
               class="hierarchy-node-header"
               style="--node-color: ${colors.bg}; --node-border: ${colors.border};"
               data-status=${node.status}
+              aria-label="View details for ${label}, status: ${node.status}"
               @click=${() => onNodeClick?.(node.sessionKey)}
               type="button"
             >
@@ -803,10 +866,10 @@ function renderHierarchyTree(
                 ${
                   usage
                     ? html`<div class="hierarchy-node-usage">
-                      <span class="hierarchy-usage-item" title="Input / Output tokens">${formatTokenCount(usage.inputTokens)}in / ${formatTokenCount(usage.outputTokens)}out</span>
+                      <span class="hierarchy-usage-item" title="Input / Output tokens">${formatTokenCount(usage.inputTokens)} in / ${formatTokenCount(usage.outputTokens)} out</span>
                       <span class="hierarchy-usage-item" title="Tool calls">Tools: ${usage.toolCalls}</span>
-                      <span class="hierarchy-usage-item" title="Duration">${formatDurationMs(usage.durationMs)}</span>
-                      ${usage.costUsd > 0 ? html`<span class="hierarchy-usage-item" title="Cost">$${usage.costUsd.toFixed(4)}</span>` : nothing}
+                      ${usage.durationMs ? html`<span class="hierarchy-usage-item" title="Duration">${formatDurationMs(usage.durationMs)}</span>` : nothing}
+                      ${usage.costUsd && usage.costUsd > 0 ? html`<span class="hierarchy-usage-item" title="Cost">$${usage.costUsd.toFixed(4)}</span>` : nothing}
                     </div>`
                     : nothing
                 }
@@ -814,7 +877,7 @@ function renderHierarchyTree(
               ${
                 hasChildren
                   ? html`
-                      <span class="hierarchy-node-expand">▼</span>
+                      <span class="hierarchy-node-expand" title="${node.children.length} children">(${node.children.length})</span>
                     `
                   : nothing
               }
@@ -853,8 +916,11 @@ let settleTimer: ReturnType<typeof setTimeout> | null = null;
 let lockedPositions: Map<string, { x: number; y: number }> | null = null;
 let currentGraphData: GraphData | null = null;
 
-/** Topology hash: node keys + parent-child structure. */
-function computeTopologyHash(roots: AgentHierarchyNode[]): string {
+/** Topology hash: node keys + parent-child structure + collaboration edges. */
+function computeTopologyHash(
+  roots: AgentHierarchyNode[],
+  collabEdges: CollaborationEdge[],
+): string {
   const keys: string[] = [];
   function collect(nodes: AgentHierarchyNode[], parentKey?: string) {
     for (const node of nodes) {
@@ -868,11 +934,14 @@ function computeTopologyHash(roots: AgentHierarchyNode[]): string {
     }
   }
   collect(roots);
+  for (const e of collabEdges) {
+    keys.push(`${e.source}→${e.target}:${e.type}`);
+  }
   return keys.join("|");
 }
 
-/** Full data hash: status, usage, interactions. */
-function computeDataHash(roots: AgentHierarchyNode[]): string {
+/** Full data hash: status, usage, interactions + collaboration edges. */
+function computeDataHash(roots: AgentHierarchyNode[], collabEdges: CollaborationEdge[]): string {
   const parts: string[] = [];
   function collect(nodes: AgentHierarchyNode[]) {
     for (const node of nodes) {
@@ -894,6 +963,9 @@ function computeDataHash(roots: AgentHierarchyNode[]): string {
     }
   }
   collect(roots);
+  for (const e of collabEdges) {
+    parts.push(`${e.source}→${e.target}:${e.type}`);
+  }
   return parts.join("|");
 }
 
@@ -910,6 +982,12 @@ function cleanupChart() {
     _resizeObserver.disconnect();
     _resizeObserver = null;
   }
+  if (chartInstance) {
+    chartInstance.dispose();
+    chartInstance = null;
+  }
+  lastDataHash = "";
+  lastTopologyHash = "";
   lockedPositions = null;
   currentGraphData = null;
 }
@@ -925,8 +1003,8 @@ function scheduleEChartsInit(
       return;
     }
 
-    const newDataHash = computeDataHash(roots);
-    const newTopoHash = computeTopologyHash(roots);
+    const newDataHash = computeDataHash(roots, collabEdges);
+    const newTopoHash = computeTopologyHash(roots, collabEdges);
 
     // Check existing chart
     const existingChart = echarts.getInstanceByDom(container);
@@ -1041,10 +1119,13 @@ function initECharts(
 
   chartInstance.setOption(option);
 
-  // Click handler
+  // Click handler (only for graph nodes, not edges)
   if (onNodeClick) {
     chartInstance.on("click", (params: unknown) => {
-      const p = params as { data?: GraphNodeData };
+      const p = params as { dataType?: string; data?: { _meta?: NodeMeta } };
+      if (p.dataType !== "node") {
+        return;
+      }
       const meta = p.data?._meta;
       if (meta?.sessionKey) {
         onNodeClick(meta.sessionKey);
@@ -1115,6 +1196,13 @@ function startPulseTimer() {
     pulseTimer = null;
   }
   if (!lockedPositions || lockedPositions.size === 0) {
+    return;
+  }
+  // Respect user motion preferences
+  if (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
     return;
   }
 

@@ -281,12 +281,16 @@ function resolveKnownAgentId(cfg: ReturnType<typeof loadConfig>, raw: string): s
 }
 
 function resolveAgentModelLabel(cfg: OpenClawConfig, agentId: string): string | undefined {
-  const override = resolveAgentModelPrimary(cfg, agentId);
-  if (override) {
-    return override;
+  try {
+    const override = resolveAgentModelPrimary(cfg, agentId);
+    if (override) {
+      return override;
+    }
+    const ref = resolveDefaultModelForAgent({ cfg, agentId });
+    return `${ref.provider}/${ref.model}`;
+  } catch {
+    return undefined;
   }
-  const ref = resolveDefaultModelForAgent({ cfg, agentId });
-  return `${ref.provider}/${ref.model}`;
 }
 
 function buildHierarchySnapshot(): HierarchySnapshot {
@@ -420,28 +424,31 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     });
   }
 
-  // Always include lead/orchestrator agents as permanent roots
+  // Include lead/orchestrator agents as roots ONLY when they have pending
+  // delegations (i.e. they are actively participating).  The default
+  // orchestrator is always shown (added above); all other agents appear
+  // on-demand when spawned, delegated to, or referenced by collaboration edges.
   const allConfiguredAgents = listAgentIds(cfg);
   for (const agentId of allConfiguredAgents) {
     if (agentId === defaultAgentId) {
       continue; // already added above
-    }
-    const agentRole = resolveAgentRole(cfg, agentId);
-    if (agentRole !== "lead" && agentRole !== "orchestrator") {
-      continue; // only include lead/orchestrator agents permanently
     }
     const sessionKey = `agent:${agentId}:main`;
     if (rootSessionKeysUsed.has(sessionKey)) {
       continue; // already exists (from active runs/delegations)
     }
     const delegMetrics = getAgentDelegationMetrics(agentId);
+    if (!hasPendingDelegations(delegMetrics)) {
+      continue; // only include agents that are actively participating
+    }
+    const agentRole = resolveAgentRole(cfg, agentId);
     roots.push({
       sessionKey,
       agentId,
       agentRole,
       label: computeAgentDisplayLabel(cfg, agentId),
       model: resolveAgentModelLabel(cfg, agentId),
-      status: hasPendingDelegations(delegMetrics) ? "running" : "idle",
+      status: "running",
       children: [],
       delegations: delegMetrics,
       ...resolveAgentCapabilities(cfg, agentId),
@@ -518,8 +525,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
         }
       }
     }
-  } catch {
-    // Collaboration data is optional — don't break hierarchy if it fails
+  } catch (err) {
+    // Collaboration data is optional — log for observability but don't break hierarchy
+    console.warn("[hierarchy] Failed to build collaboration edges:", String(err));
   }
 
   // Extract delegation edges from active delegations and build the active-agents set
@@ -588,8 +596,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
         }
       }
     }
-  } catch {
-    // Delegation data is optional
+  } catch (err) {
+    // Delegation data is optional — log for observability
+    console.warn("[hierarchy] Failed to build delegation edges:", String(err));
   }
 
   // Ensure agents referenced in collaboration/delegation edges have nodes.
@@ -605,7 +614,8 @@ function buildHierarchySnapshot(): HierarchySnapshot {
   }
 
   for (const referencedAgentId of referencedAgentIds) {
-    const agentId = resolveKnownAgentId(cfg, referencedAgentId);
+    // Edge source/target are already resolved agentIds from resolveKnownAgentId earlier
+    const agentId = referencedAgentId;
     if (!agentId) {
       continue;
     }
@@ -629,6 +639,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       agentId,
       agentRole: role,
       label: computeAgentDisplayLabel(cfg, agentId),
+      model: resolveAgentModelLabel(cfg, agentId),
       status: derivedStatus,
       endedAt: derivedEndedAt,
       children: [],

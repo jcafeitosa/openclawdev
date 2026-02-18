@@ -575,8 +575,8 @@ export type AgentHierarchyUsage = {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
-  costUsd: number;
-  durationMs: number;
+  costUsd?: number;
+  durationMs?: number;
   toolCalls: number;
 };
 
@@ -606,6 +606,12 @@ export type AgentHierarchyNode = {
   delegations?: AgentDelegationMetrics;
   capabilities?: string[];
   expertise?: string[];
+  progress?: {
+    percent: number;
+    status: string;
+    detail?: string;
+    lastUpdate: number;
+  };
 };
 
 export type CollaborationEdge = {
@@ -626,7 +632,7 @@ export type CollaborationEdge = {
 
 export type AgentHierarchyResult = {
   roots: AgentHierarchyNode[];
-  collaborationEdges?: CollaborationEdge[];
+  collaborationEdges: CollaborationEdge[];
   updatedAt: number;
 };
 

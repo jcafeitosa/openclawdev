@@ -12,6 +12,8 @@ export type SystemInfoResult = {
   model: string;
   browserProfiles: number | null;
   logFile: string;
+  uptime?: number;
+  memoryUsage?: number;
 };
 
 export type SystemInfoState = {

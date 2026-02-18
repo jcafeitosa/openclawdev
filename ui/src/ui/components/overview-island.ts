@@ -23,6 +23,13 @@ export class OverviewIsland extends LitElement {
   @state() private cronNext: number | null = null;
   @state() private lastChannelsRefresh: number | null = null;
   @state() private systemInfo: SystemInfoResult | null = null;
+  @state() private activeChannels = 0;
+  @state() private totalChannels = 0;
+  @state() private healthyProviders = 0;
+  @state() private totalProviders = 0;
+  @state() private securityStatus: string | null = null;
+  @state() private totalTokens: number | null = null;
+  @state() private totalCost: number | null = null;
 
   protected createRenderRoot() {
     return this;
@@ -35,7 +42,16 @@ export class OverviewIsland extends LitElement {
 
   private async loadData() {
     try {
-      const [presenceResult, sessionsResult, cronResult, systemResult] = await Promise.all([
+      const [
+        presenceResult,
+        sessionsResult,
+        cronResult,
+        systemResult,
+        channelsResult,
+        providersResult,
+        securityResult,
+        usageResult,
+      ] = await Promise.all([
         gateway.call<PresenceEntry[]>("system-presence", {}).catch(() => [] as PresenceEntry[]),
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
         gateway.call<CronStatus>("cron.status").catch(() => ({
@@ -44,6 +60,16 @@ export class OverviewIsland extends LitElement {
           nextWakeAtMs: null,
         })),
         gateway.call<SystemInfoResult>("system.info").catch(() => null),
+        gateway
+          .call<{ channels?: Record<string, { configured?: boolean }> }>("channels.status")
+          .catch(() => ({ channels: {} })),
+        gateway
+          .call<{ providers?: Array<{ healthStatus?: string }> }>("providers.health")
+          .catch(() => ({ providers: [] })),
+        gateway.call<{ status?: string }>("security.summary").catch(() => ({ status: null })),
+        gateway
+          .call<{ totals?: { totalTokens?: number; totalCost?: number } }>("usage.status")
+          .catch(() => ({ totals: null })),
       ]);
 
       this.presenceCount = Array.isArray(presenceResult) ? presenceResult.length : 0;
@@ -51,6 +77,20 @@ export class OverviewIsland extends LitElement {
       this.cronEnabled = cronResult.enabled;
       this.cronNext = cronResult.nextWakeAtMs ?? null;
       this.systemInfo = systemResult;
+
+      const channels = channelsResult.channels ?? {};
+      const channelEntries = Object.values(channels);
+      this.totalChannels = channelEntries.length;
+      this.activeChannels = channelEntries.filter((c) => c?.configured).length;
+
+      const providers = providersResult.providers ?? [];
+      this.totalProviders = providers.length;
+      this.healthyProviders = providers.filter((p) => p.healthStatus === "healthy").length;
+
+      this.securityStatus = securityResult.status ?? null;
+      this.totalTokens = usageResult.totals?.totalTokens ?? null;
+      this.totalCost = usageResult.totals?.totalCost ?? null;
+
       this.lastError = null;
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
@@ -102,6 +142,13 @@ export class OverviewIsland extends LitElement {
       cronNext: this.cronNext,
       lastChannelsRefresh: this.lastChannelsRefresh,
       systemInfo: this.systemInfo,
+      activeChannels: this.activeChannels,
+      totalChannels: this.totalChannels,
+      healthyProviders: this.healthyProviders,
+      totalProviders: this.totalProviders,
+      securityStatus: this.securityStatus,
+      totalTokens: this.totalTokens,
+      totalCost: this.totalCost,
       onSettingsChange: (next) => this.handleSettingsChange(next),
       onPasswordChange: (next) => this.handlePasswordChange(next),
       onSessionKeyChange: (next) => this.handleSessionKeyChange(next),

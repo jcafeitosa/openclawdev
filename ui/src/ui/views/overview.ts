@@ -17,6 +17,13 @@ export type OverviewProps = {
   cronNext: number | null;
   lastChannelsRefresh: number | null;
   systemInfo: SystemInfoResult | null;
+  activeChannels: number;
+  totalChannels: number;
+  healthyProviders: number;
+  totalProviders: number;
+  securityStatus: string | null;
+  totalTokens: number | null;
+  totalCost: number | null;
   onSettingsChange: (next: UiSettings) => void;
   onPasswordChange: (next: string) => void;
   onSessionKeyChange: (next: string) => void;
@@ -360,6 +367,18 @@ export function renderOverview(props: OverviewProps) {
                       </div>
                     </div>
                     <div class="stat">
+                      <div class="stat-label">Process Uptime</div>
+                      <div class="stat-value">
+                        ${props.systemInfo.uptime != null ? formatDurationHuman(props.systemInfo.uptime * 1000) : "n/a"}
+                      </div>
+                    </div>
+                    <div class="stat">
+                      <div class="stat-label">Memory (RSS)</div>
+                      <div class="stat-value mono" style="font-size: 0.85em;">
+                        ${props.systemInfo.memoryUsage != null ? `${(props.systemInfo.memoryUsage / 1024 / 1024).toFixed(0)} MB` : "n/a"}
+                      </div>
+                    </div>
+                    <div class="stat">
                       <div class="stat-label">Browser Profiles</div>
                       <div class="stat-value">
                         ${props.systemInfo.browserProfiles != null ? html`${props.systemInfo.browserProfiles} profile${props.systemInfo.browserProfiles !== 1 ? "s" : ""}` : "Disabled"}
@@ -419,6 +438,63 @@ export function renderOverview(props: OverviewProps) {
         <div class="muted" style="font-size: 0.85em;">Next wake ${formatNextRun(props.cronNext)}</div>
       </div>
     </section>
+
+    ${
+      props.connected
+        ? html`
+            <section class="grid grid-cols-4" style="margin-top: 18px;">
+              <div class="card stat-card" style="border-left: 3px solid #22c55e;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                  <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: #22c55e; flex-shrink: 0;">
+                    <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                  </svg>
+                  <div class="stat-label">Channels</div>
+                </div>
+                <div class="stat-value" style="color: #22c55e;">${props.activeChannels}/${props.totalChannels}</div>
+                <div class="muted" style="font-size: 0.85em;">Active / total configured channels.</div>
+              </div>
+              <div class="card stat-card" style="border-left: 3px solid #f59e0b;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                  <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: #f59e0b; flex-shrink: 0;">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                  </svg>
+                  <div class="stat-label">Providers</div>
+                </div>
+                <div class="stat-value" style="color: ${props.healthyProviders === props.totalProviders ? "#22c55e" : props.healthyProviders > 0 ? "#f59e0b" : "var(--danger)"};">
+                  ${props.healthyProviders}/${props.totalProviders}
+                </div>
+                <div class="muted" style="font-size: 0.85em;">Healthy / total AI providers.</div>
+              </div>
+              <div class="card stat-card" style="border-left: 3px solid ${props.securityStatus === "critical" ? "var(--danger)" : props.securityStatus === "warning" ? "#f59e0b" : "#22c55e"};">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                  <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: ${props.securityStatus === "critical" ? "var(--danger)" : props.securityStatus === "warning" ? "#f59e0b" : "#22c55e"}; flex-shrink: 0;">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                  <div class="stat-label">Security</div>
+                </div>
+                <div class="stat-value" style="color: ${props.securityStatus === "critical" ? "var(--danger)" : props.securityStatus === "warning" ? "#f59e0b" : "#22c55e"};">
+                  ${props.securityStatus === "critical" ? "Critical" : props.securityStatus === "warning" ? "Warning" : "Healthy"}
+                </div>
+                <div class="muted" style="font-size: 0.85em;">Current security posture.</div>
+              </div>
+              <div class="card stat-card" style="border-left: 3px solid #a855f7;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                  <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: #a855f7; flex-shrink: 0;">
+                    <path d="M12 20V10M18 20V4M6 20v-4" />
+                  </svg>
+                  <div class="stat-label">Usage</div>
+                </div>
+                <div class="stat-value" style="color: #a855f7;">
+                  ${props.totalTokens != null ? (props.totalTokens > 1_000_000 ? `${(props.totalTokens / 1_000_000).toFixed(1)}M` : props.totalTokens > 1_000 ? `${(props.totalTokens / 1_000).toFixed(1)}K` : String(props.totalTokens)) : "n/a"}
+                </div>
+                <div class="muted" style="font-size: 0.85em;">
+                  ${props.totalCost != null ? `$${props.totalCost.toFixed(2)} total cost` : "Total tokens consumed."}
+                </div>
+              </div>
+            </section>
+          `
+        : nothing
+    }
 
     ${
       props.connected

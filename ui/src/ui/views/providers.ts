@@ -29,6 +29,9 @@ export type ProvidersProps = {
   authProvidersList: AuthProviderEntry[] | null;
   oauthFlow: OAuthFlowState | null;
   removingProvider: string | null;
+  checkingProvider: string | null;
+  healthCheckResult: { providerId: string; healthy: boolean; status: string } | null;
+  rankedProviders: string[];
   onRefresh: () => void;
   onToggleShowAll: () => void;
   onToggleExpand: (id: string) => void;
@@ -46,6 +49,8 @@ export type ProvidersProps = {
   onCancelOAuth: () => void;
   onSubmitOAuthCode: (code: string) => void;
   onRemoveCredential: (provider: string) => void;
+  onCheckHealth: (providerId: string) => void;
+  onLoadRanked: () => void;
 };
 
 export function renderProviders(props: ProvidersProps) {
@@ -191,6 +196,7 @@ function renderProviderCard(
               ${renderConfigureSection(entry, props, isConfiguring)}
               ${renderModelsSection(entry, props)}
               ${renderUsageSection(entry)}
+              ${renderHealthCheckSection(entry, props)}
             </div>
           `
           : nothing
@@ -1018,6 +1024,41 @@ function renderUsageSection(entry: ProviderHealthEntry) {
         ${entry.usagePlan ? html`<span class="muted" style="font-weight: 400;"> (${entry.usagePlan})</span>` : nothing}
       </div>
       ${entry.usageWindows.map((w) => renderUsageBar(w))}
+    </div>
+  `;
+}
+
+function renderHealthCheckSection(entry: ProviderHealthEntry, props: ProvidersProps) {
+  if (!entry.detected) {
+    return nothing;
+  }
+  const isChecking = props.checkingProvider === entry.id;
+  const result = props.healthCheckResult?.providerId === entry.id ? props.healthCheckResult : null;
+
+  return html`
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <button
+          class="btn btn-secondary"
+          style="font-size: 12px; padding: 4px 12px;"
+          ?disabled=${isChecking}
+          @click=${() => props.onCheckHealth(entry.id)}
+        >
+          ${isChecking ? "Checking..." : "Check Health"}
+        </button>
+        ${
+          result
+            ? html`
+              <span
+                class="chip"
+                style="background: ${result.healthy ? "var(--ok)" : "var(--danger)"}20; color: ${result.healthy ? "var(--ok)" : "var(--danger)"};"
+              >
+                ${result.healthy ? "Healthy" : result.status}
+              </span>
+            `
+            : nothing
+        }
+      </div>
     </div>
   `;
 }
