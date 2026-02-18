@@ -1,9 +1,9 @@
-import type { ErrorObject } from "ajv";
 import { ErrorCodes, errorShape, formatValidationErrors } from "../protocol/index.js";
+import type { AjvLikeError } from "../protocol/zod-validator.js";
 import type { RespondFn } from "./types.js";
 
 export type Validator<T> = ((params: unknown) => params is T) & {
-  errors?: ErrorObject[] | null;
+  errors?: AjvLikeError[] | null;
 };
 
 export function assertValidParams<T>(

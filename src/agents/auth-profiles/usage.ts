@@ -31,6 +31,64 @@ export function getProfileCooldownRemainingMs(store: AuthProfileStore, profileId
 }
 
 /**
+ * Check if a profile is approaching cooldown based on error count.
+ * Returns true if the profile has accumulated enough errors to be near
+ * cooldown but is not yet in active cooldown.
+ */
+export function isProfileApproachingCooldown(
+  store: AuthProfileStore,
+  profileId: string,
+  threshold = 2,
+): boolean {
+  const stats = store.usageStats?.[profileId];
+  if (!stats) {
+    return false;
+  }
+  if (isProfileInCooldown(store, profileId)) {
+    return false;
+  }
+  return (stats.errorCount ?? 0) >= threshold;
+}
+
+export type ProfileHealthStatus = {
+  status: "healthy" | "warning" | "cooldown" | "disabled";
+  errorCount: number;
+  cooldownRemainingMs: number;
+  disabledReason?: string;
+};
+
+/**
+ * Get the health status of a profile for display purposes.
+ */
+export function getProfileHealthStatus(
+  store: AuthProfileStore,
+  profileId: string,
+): ProfileHealthStatus {
+  const stats = store.usageStats?.[profileId];
+  const errorCount = stats?.errorCount ?? 0;
+  const cooldownRemainingMs = getProfileCooldownRemainingMs(store, profileId);
+
+  if (stats?.disabledUntil && Date.now() < stats.disabledUntil) {
+    return {
+      status: "disabled",
+      errorCount,
+      cooldownRemainingMs,
+      disabledReason: stats.disabledReason,
+    };
+  }
+
+  if (cooldownRemainingMs > 0) {
+    return { status: "cooldown", errorCount, cooldownRemainingMs };
+  }
+
+  if (isProfileApproachingCooldown(store, profileId)) {
+    return { status: "warning", errorCount, cooldownRemainingMs: 0 };
+  }
+
+  return { status: "healthy", errorCount, cooldownRemainingMs: 0 };
+}
+
+/**
  * Check if a profile is currently in cooldown (due to rate limiting or errors).
  */
 export function isProfileInCooldown(store: AuthProfileStore, profileId: string): boolean {
