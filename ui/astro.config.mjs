@@ -39,6 +39,10 @@ export default defineConfig({
     },
     optimizeDeps: {
       include: ["lit/directives/repeat.js"],
+      exclude: [
+        "@webcomponents/template-shadowroot",
+        "@lit-labs/ssr-client/lit-element-hydrate-support.js",
+      ],
     },
   },
 

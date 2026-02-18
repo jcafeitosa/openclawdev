@@ -79,9 +79,9 @@ export class OverviewIsland extends LitElement {
       this.systemInfo = systemResult;
 
       const channels = channelsResult.channels ?? {};
-      const channelEntries = Object.values(channels);
+      const channelEntries: Array<{ configured?: boolean }> = Object.values(channels);
       this.totalChannels = channelEntries.length;
-      this.activeChannels = channelEntries.filter((c) => c?.configured).length;
+      this.activeChannels = channelEntries.filter((c) => c.configured).length;
 
       const providers = providersResult.providers ?? [];
       this.totalProviders = providers.length;
