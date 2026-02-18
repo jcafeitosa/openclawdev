@@ -51,23 +51,15 @@ export class ProvidersIsland extends LitElement {
     try {
       const [healthResult, presenceResult, sessionsResult] = await Promise.all([
         gateway.call<{
-          entries: ProviderHealthEntry[];
+          providers: ProviderHealthEntry[];
           updatedAt?: number;
-          modelAllowlist?: string[];
-          primaryModel?: string;
-          modelFallbacks?: string[];
-          agentRunning?: boolean;
         }>("providers.health"),
         gateway.call<unknown[]>("system-presence", {}).catch(() => [] as unknown[]),
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
       ]);
 
-      this.entries = healthResult.entries ?? [];
+      this.entries = healthResult.providers ?? [];
       this.updatedAt = healthResult.updatedAt ?? Date.now();
-      this.modelAllowlist = new Set(healthResult.modelAllowlist ?? []);
-      this.primaryModel = healthResult.primaryModel ?? null;
-      this.modelFallbacks = healthResult.modelFallbacks ?? [];
-      this.agentRunning = healthResult.agentRunning ?? false;
       this.instanceCount = Array.isArray(presenceResult) ? presenceResult.length : 0;
       this.sessionCount = sessionsResult.sessions.length;
     } catch (err) {

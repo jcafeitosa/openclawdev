@@ -41,6 +41,8 @@ type NodeMeta = {
   endedAt?: number;
   usage?: AgentHierarchyUsage;
   delegations?: AgentDelegationMetrics;
+  capabilities?: string[];
+  expertise?: string[];
 };
 
 type GraphNodeData = {
@@ -62,6 +64,8 @@ type GraphLinkData = {
   target: string;
   lineStyle?: Record<string, unknown>;
   label?: Record<string, unknown>;
+  _edgeType?: string;
+  _topic?: string;
 };
 
 type GraphData = {
@@ -396,6 +400,8 @@ function transformToGraphData(
         endedAt: node.endedAt,
         usage: node.usage,
         delegations: node.delegations,
+        capabilities: node.capabilities,
+        expertise: node.expertise,
       },
     });
 
@@ -410,6 +416,7 @@ function transformToGraphData(
           type: "solid",
           curveness: 0.2,
         },
+        _edgeType: "spawn",
       });
     }
 
@@ -461,6 +468,8 @@ function transformToGraphData(
           type: style.type,
           curveness: 0.3,
         },
+        _edgeType: collab.type,
+        _topic: collab.topic,
       });
     }
   }
@@ -506,9 +515,19 @@ function countByStatus(nodes: AgentHierarchyNode[]): Record<string, number> {
    Tooltip formatter
    ═══════════════════════════════════════════════════════════════ */
 
-function tooltipFormatter(params: { data?: GraphNodeData; dataType?: string }): string {
+function tooltipFormatter(params: {
+  data?: GraphNodeData & GraphLinkData;
+  dataType?: string;
+}): string {
   if (params.dataType === "edge") {
-    return "";
+    const link = params.data as GraphLinkData | undefined;
+    if (!link?._edgeType) {
+      return "";
+    }
+    const topic = link._topic
+      ? `<div style="margin-top:2px;font-size:11px;color:#ccc;">${link._topic}</div>`
+      : "";
+    return `<div style="max-width:280px;"><strong style="text-transform:capitalize;">${link._edgeType}</strong>${topic}</div>`;
   }
   const meta = params.data?._meta;
   if (!meta) {
@@ -530,11 +549,20 @@ function tooltipFormatter(params: { data?: GraphNodeData; dataType?: string }): 
     ? `<div style="margin-top:4px;font-size:11px;color:#93c5fd;">Model: ${meta.model}</div>`
     : "";
 
+  const capTags = meta.capabilities?.length
+    ? `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">${meta.capabilities.map((c) => `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;background:#1e3a5f;color:#93c5fd;">${c}</span>`).join("")}</div>`
+    : "";
+  const expTags = meta.expertise?.length
+    ? `<div style="margin-top:2px;display:flex;flex-wrap:wrap;gap:3px;">${meta.expertise.map((e) => `<span style="display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;background:#1a2e1a;color:#86efac;">${e}</span>`).join("")}</div>`
+    : "";
+
   return `<div style="max-width:350px;">
     <strong>${params.data?.name ?? ""}</strong> ${roleLabel}<br/>
     <span style="display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;background:${statusColors.bg};color:${statusColors.text};">${meta.status}</span>
     ${meta.task ? `<div style="margin-top:4px;font-size:12px;color:#ccc;">${meta.task.slice(0, 120)}</div>` : ""}
     ${modelLine}
+    ${capTags}
+    ${expTags}
     ${usageLines}
     ${delegLines}
     <div style="margin-top:4px;font-size:10px;color:#666;">${meta.sessionKey}</div>

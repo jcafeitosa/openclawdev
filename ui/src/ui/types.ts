@@ -604,6 +604,8 @@ export type AgentHierarchyNode = {
   usage?: AgentHierarchyUsage;
   interactionCount?: number;
   delegations?: AgentDelegationMetrics;
+  capabilities?: string[];
+  expertise?: string[];
 };
 
 export type CollaborationEdge = {
