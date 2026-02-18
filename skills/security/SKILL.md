@@ -153,6 +153,65 @@ grep -rn "INSERT.*\${" --include="*.ts" src/
 - [ ] Dependencies secure
 ```
 
+## Real-Time Security Hook
+
+O security hook intercepta edições de arquivo em tempo real e avisa sobre 9 padrões de segurança críticos.
+
+### Padrões Detectados
+
+| #   | Pattern                                   | Risco                     |
+| --- | ----------------------------------------- | ------------------------- |
+| 1   | `child_process.exec()` / `execSync()`     | Command injection         |
+| 2   | `new Function()` com strings dinâmicas    | Code injection            |
+| 3   | `eval()`                                  | Code execution arbitrário |
+| 4   | `dangerouslySetInnerHTML`                 | XSS em React              |
+| 5   | `document.write()`                        | XSS clássico              |
+| 6   | `.innerHTML =`                            | XSS via DOM               |
+| 7   | `pickle` (Python)                         | Arbitrary code execution  |
+| 8   | `os.system()` (Python)                    | Command injection         |
+| 9   | GitHub Actions com inputs não sanitizados | Workflow injection        |
+
+### Ativando o Hook
+
+O script fica em `skills/security/hooks/security_hook.py`. Para ativar, adicione ao seu `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /Users/juliocezar/Desenvolvimento/openclawdev/skills/security/hooks/security_hook.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Como Funciona
+
+1. Intercepta toda edição/escrita de arquivo (PreToolUse)
+2. Verifica path do arquivo e conteúdo novo contra 9 padrões
+3. Se match encontrado — envia aviso detalhado ao agente (exit 2)
+4. O aviso aparece UMA vez por arquivo/sessão (não spam)
+5. Se `ENABLE_SECURITY_REMINDER=0` — hook desabilitado
+
+### Alternativas Seguras
+
+Quando o hook detecta um padrão, sugere alternativas:
+
+- `exec()` → Use `execFileNoThrow` (sem shell injection)
+- `eval()` → Use `JSON.parse()` ou redesign
+- `innerHTML` → Use `textContent` ou DOMPurify
+- `os.system()` → Use `subprocess.run(args_list)` sem shell=True
+- `pickle` → Use JSON ou msgpack
+
 ## Team Security Workflow
 
 ### Submit Security Audit for Review
