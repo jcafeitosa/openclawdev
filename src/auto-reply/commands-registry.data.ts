@@ -207,7 +207,7 @@ function buildChatCommands(): ChatCommandDefinition[] {
     }),
     defineChatCommand({
       key: "export-session",
-      nativeName: "export_session",
+      nativeName: "export-session",
       description: "Export current session to HTML file with full system prompt.",
       textAliases: ["/export-session", "/export"],
       acceptsArgs: true,
@@ -483,27 +483,6 @@ function buildChatCommands(): ChatCommandDefinition[] {
       ],
     }),
     defineChatCommand({
-      key: "bookmark",
-      description: "Bookmark the current conversation point.",
-      textAlias: "/bookmark",
-      acceptsArgs: true,
-      category: "session",
-      args: [
-        {
-          name: "label",
-          description: "Optional label for the bookmark",
-          type: "string",
-          captureRemaining: true,
-        },
-      ],
-    }),
-    defineChatCommand({
-      key: "bookmarks",
-      description: "List all bookmarks for the current session.",
-      textAlias: "/bookmarks",
-      category: "session",
-    }),
-    defineChatCommand({
       key: "think",
       nativeName: "think",
       description: "Set thinking level.",
@@ -667,60 +646,6 @@ function buildChatCommands(): ChatCommandDefinition[] {
         {
           name: "command",
           description: "Shell command",
-          type: "string",
-          captureRemaining: true,
-        },
-      ],
-    }),
-    defineChatCommand({
-      key: "share",
-      description: "Share current session as a public GitHub Gist.",
-      textAlias: "/share",
-      category: "session",
-    }),
-    defineChatCommand({
-      key: "templates",
-      description: "List available prompt templates.",
-      textAlias: "/templates",
-      category: "session",
-    }),
-    defineChatCommand({
-      key: "name",
-      description: "Get or set the session display name.",
-      textAlias: "/name",
-      category: "session",
-      acceptsArgs: true,
-      args: [
-        {
-          name: "name",
-          description: "Display name for this session",
-          type: "string",
-          captureRemaining: true,
-        },
-      ],
-    }),
-    defineChatCommand({
-      key: "copy",
-      description: "Copy the last assistant message to clipboard.",
-      textAlias: "/copy",
-      category: "session",
-    }),
-    defineChatCommand({
-      key: "reload",
-      description: "Reload skills, extensions, and templates.",
-      textAlias: "/reload",
-      category: "tools",
-    }),
-    defineChatCommand({
-      key: "fork",
-      description: "Record a fork of the current session.",
-      textAlias: "/fork",
-      category: "session",
-      acceptsArgs: true,
-      args: [
-        {
-          name: "name",
-          description: "Optional name for this fork",
           type: "string",
           captureRemaining: true,
         },

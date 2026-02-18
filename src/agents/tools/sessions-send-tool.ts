@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { z } from "zod";
+import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../../config/config.js";
 import { callGateway } from "../../gateway/call.js";
 import { normalizeAgentId, resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
@@ -8,19 +8,12 @@ import {
   type GatewayMessageChannel,
   INTERNAL_MESSAGE_CHANNEL,
 } from "../../utils/message-channel.js";
-import { resolveAgentRole } from "../agent-scope.js";
-import { registerDelegation } from "../delegation-registry.js";
-import { resolveAgentIdentity } from "../identity.js";
 import { AGENT_LANE_NESTED } from "../lanes.js";
-import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
-import { resolveTeamChatSessionKey } from "../team-chat.js";
-import { deliverToInbox } from "./agent-inbox.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readStringParam } from "./common.js";
 import {
   createSessionVisibilityGuard,
   createAgentToAgentPolicy,
-  extractAgentIdCandidate,
   extractAssistantText,
   isRequesterSpawnedSessionVisible,
   resolveEffectiveSessionToolsVisibility,
@@ -31,15 +24,13 @@ import {
 import { buildAgentToAgentMessageContext, resolvePingPongTurns } from "./sessions-send-helpers.js";
 import { runSessionsSendA2AFlow } from "./sessions-send-tool.a2a.js";
 
-const SessionsSendToolSchema = zodToToolJsonSchema(
-  z.object({
-    sessionKey: z.string().optional(),
-    label: z.string().min(1).max(SESSION_LABEL_MAX_LENGTH).optional(),
-    agentId: z.string().min(1).max(64).optional(),
-    message: z.string(),
-    timeoutSeconds: z.number().min(0).optional(),
-  }),
-);
+const SessionsSendToolSchema = Type.Object({
+  sessionKey: Type.Optional(Type.String()),
+  label: Type.Optional(Type.String({ minLength: 1, maxLength: SESSION_LABEL_MAX_LENGTH })),
+  agentId: Type.Optional(Type.String({ minLength: 1, maxLength: 64 })),
+  message: Type.String(),
+  timeoutSeconds: Type.Optional(Type.Number({ minimum: 0 })),
+});
 
 export function createSessionsSendTool(opts?: {
   agentSessionKey?: string;
@@ -50,7 +41,7 @@ export function createSessionsSendTool(opts?: {
     label: "Session Send",
     name: "sessions_send",
     description:
-      "Send a message to another agent or session. Use agentId to target an agent directly, or sessionKey/label to target a specific session.",
+      "Send a message into another session. Use sessionKey or label to identify the target.",
     parameters: SessionsSendToolSchema,
     execute: async (_toolCallId, args) => {
       const params = args as Record<string, unknown>;
@@ -81,13 +72,6 @@ export function createSessionsSendTool(opts?: {
       }
 
       let sessionKey = sessionKeyParam;
-
-      // Allow standalone agentId targeting: sessions_send({ agentId: "backend-architect", message: "..." })
-      if (!sessionKey && !labelParam && labelAgentIdParam) {
-        const targetId = normalizeAgentId(labelAgentIdParam);
-        sessionKey = `agent:${targetId}:${mainKey}`;
-      }
-
       if (!sessionKey && labelParam) {
         const requesterAgentId = resolveAgentIdFromSessionKey(effectiveRequesterKey);
         const requestedAgentId = labelAgentIdParam
@@ -133,16 +117,20 @@ export function createSessionsSendTool(opts?: {
             timeoutMs: 10_000,
           });
           resolvedKey = typeof resolved?.key === "string" ? resolved.key.trim() : "";
-        } catch {
-          // Label resolution failed — will try agent ID fallback below
-        }
-
-        // Fallback: if label looks like an agent ID (e.g. "backend-architect"), convert directly
-        if (!resolvedKey) {
-          const candidate = extractAgentIdCandidate(labelParam);
-          if (candidate) {
-            resolvedKey = `agent:${normalizeAgentId(candidate)}:${mainKey}`;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (restrictToSpawned) {
+            return jsonResult({
+              runId: crypto.randomUUID(),
+              status: "forbidden",
+              error: "Session not visible from this sandboxed agent session.",
+            });
           }
+          return jsonResult({
+            runId: crypto.randomUUID(),
+            status: "error",
+            error: msg || `No session found with label: ${labelParam}`,
+          });
         }
 
         if (!resolvedKey) {
@@ -205,7 +193,7 @@ export function createSessionsSendTool(opts?: {
       const timeoutSeconds =
         typeof params.timeoutSeconds === "number" && Number.isFinite(params.timeoutSeconds)
           ? Math.max(0, Math.floor(params.timeoutSeconds))
-          : 0;
+          : 30;
       const timeoutMs = timeoutSeconds * 1000;
       const announceTimeoutMs = timeoutSeconds === 0 ? 30_000 : timeoutMs;
       const idempotencyKey = crypto.randomUUID();
@@ -224,72 +212,6 @@ export function createSessionsSendTool(opts?: {
           error: access.error,
           sessionKey: displayKey,
         });
-      }
-
-      // Determine cross-agent context for delegation and broadcast
-      const requesterAgentId = resolveAgentIdFromSessionKey(effectiveRequesterKey);
-      const targetAgentId = resolveAgentIdFromSessionKey(resolvedKey);
-      const isCrossAgent = requesterAgentId !== targetAgentId;
-
-      // Register cross-agent communication as a delegation record for graph visibility
-      if (isCrossAgent && requesterAgentId && targetAgentId) {
-        try {
-          const cfg2 = loadConfig();
-          const fromRole = resolveAgentRole(cfg2, requesterAgentId);
-          const toRole = resolveAgentRole(cfg2, targetAgentId);
-          registerDelegation({
-            fromAgentId: requesterAgentId,
-            fromSessionKey: effectiveRequesterKey ?? `agent:${requesterAgentId}:main`,
-            fromRole,
-            toAgentId: targetAgentId,
-            toSessionKey: resolvedKey,
-            toRole,
-            task: `[message] ${message.slice(0, 150)}`,
-            priority: "normal",
-          });
-        } catch {
-          // Non-critical — don't fail the send
-        }
-      }
-
-      // Deliver to inbox immediately so target agent can read it via sessions_inbox
-      // without waiting for the full agent run (LLM inference) to complete.
-      if (isCrossAgent && requesterAgentId && targetAgentId) {
-        try {
-          deliverToInbox({
-            fromAgentId: requesterAgentId,
-            fromSessionKey: effectiveRequesterKey ?? `agent:${requesterAgentId}:main`,
-            toAgentId: targetAgentId,
-            toSessionKey: resolvedKey,
-            message,
-          });
-        } catch {
-          // Non-critical
-        }
-      }
-
-      // Broadcast cross-agent message to root webchat for Slack-like visibility
-      if (isCrossAgent && requesterAgentId && targetAgentId) {
-        try {
-          const rootSession = resolveTeamChatSessionKey({ cfg });
-          const senderIdentity = resolveAgentIdentity(cfg, requesterAgentId);
-          const targetIdentity = resolveAgentIdentity(cfg, targetAgentId);
-          const toName = targetIdentity?.name ?? targetAgentId;
-          callGateway({
-            method: "chat.inject",
-            params: {
-              sessionKey: rootSession,
-              message: `**@${toName}** ${message}`,
-              senderAgentId: requesterAgentId,
-              senderName: senderIdentity?.name ?? requesterAgentId,
-              senderEmoji: senderIdentity?.emoji ?? "💬",
-              senderAvatar: senderIdentity?.avatar,
-            },
-            timeoutMs: 5_000,
-          }).catch(() => {});
-        } catch {
-          // Non-critical
-        }
       }
 
       const agentMessageContext = buildAgentToAgentMessageContext({

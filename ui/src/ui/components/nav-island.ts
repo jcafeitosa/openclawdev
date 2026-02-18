@@ -14,7 +14,7 @@ import { $connected, $theme, $themeResolved } from "../../stores/app.ts";
 import { $hello } from "../../stores/gateway.ts";
 import { icons } from "../icons.ts";
 import { TAB_GROUPS, iconForTab, titleForTab, pathForTab, type Tab } from "../navigation.ts";
-import { loadSettings, saveSettings, type UiSettings } from "../storage.ts";
+import { loadSettings, saveSettings } from "../storage.ts";
 import { resolveTheme, type ThemeMode, type ResolvedTheme } from "../theme.ts";
 
 function applyTheme(resolved: ResolvedTheme): void {
@@ -194,10 +194,7 @@ export class NavIsland extends LitElement {
 
   render() {
     const connected = this.connectedCtrl.value;
-    const hello = this.helloCtrl.value;
     const lastError = this.errorCtrl.value;
-    const snapshot = hello?.snapshot as { uptimeMs?: number } | undefined;
-
     return html`
       <header class="topbar">
         <div class="topbar-left">
@@ -285,11 +282,13 @@ export class NavIsland extends LitElement {
             class="nav-item"
             style="width: 100%; justify-content: space-between; opacity: 0.7;"
             @click=${() => {
-              const palette = document.querySelector("command-palette") as
-                | (HTMLElement & { open: () => void })
-                | null;
-              if (palette && typeof palette.open === "function") {
-                palette.open();
+              const el = document.querySelector("command-palette");
+              if (
+                el &&
+                "open" in el &&
+                typeof (el as HTMLElement & { open: () => void }).open === "function"
+              ) {
+                (el as HTMLElement & { open: () => void }).open();
               }
             }}
             title="Search commands (${navigator.platform?.includes("Mac") ? "\u2318" : "Ctrl"}+K)"

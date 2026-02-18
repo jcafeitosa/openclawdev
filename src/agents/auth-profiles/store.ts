@@ -3,10 +3,25 @@ import type { OAuthCredentials } from "@mariozechner/pi-ai";
 import { resolveOAuthPath } from "../../config/paths.js";
 import { withFileLock } from "../../infra/file-lock.js";
 import { loadJsonFile, saveJsonFile } from "../../infra/json-file.js";
+import type { AuthStoreBackend } from "./backend.js";
 import { AUTH_STORE_LOCK_OPTIONS, AUTH_STORE_VERSION, log } from "./constants.js";
 import { syncExternalCliCredentials } from "./external-cli-sync.js";
 import { ensureAuthStoreFile, resolveAuthStorePath, resolveLegacyAuthStorePath } from "./paths.js";
 import type { AuthProfileCredential, AuthProfileStore, ProfileUsageStats } from "./types.js";
+
+/**
+ * Module-level auth store backend override.
+ * When set, the encrypted DB backend is used instead of the default file backend.
+ */
+let _authStoreBackend: AuthStoreBackend | null = null;
+
+/**
+ * Set the active auth store backend (called during gateway startup
+ * when AUTH_ENCRYPTION_KEY is configured and the database is reachable).
+ */
+export function setAuthStoreBackend(backend: AuthStoreBackend): void {
+  _authStoreBackend = backend;
+}
 
 type LegacyAuthStore = Record<string, AuthProfileCredential>;
 

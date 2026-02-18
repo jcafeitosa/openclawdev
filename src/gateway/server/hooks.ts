@@ -1,27 +1,25 @@
 import { randomUUID } from "node:crypto";
 import type { CliDeps } from "../../cli/deps.js";
-import type { CronJob } from "../../cron/types.js";
-import type { createSubsystemLogger } from "../../logging/subsystem.js";
-import type { HookDispatchers } from "../elysia-gateway.js";
-import type { HookMessageChannel, HooksConfigResolved } from "../hooks.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
 import { runCronIsolatedAgentTurn } from "../../cron/isolated-agent.js";
+import type { CronJob } from "../../cron/types.js";
 import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
-import { createHooksRequestHandler, type HooksRequestHandler } from "../server-http.js";
+import type { createSubsystemLogger } from "../../logging/subsystem.js";
+import type { HookMessageChannel, HooksConfigResolved } from "../hooks.js";
+import { createHooksRequestHandler } from "../server-http.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
-/**
- * Create hook dispatchers (wake + agent) without an HTTP handler.
- * Used by the Elysia gateway to wire dispatchers into Elysia route plugins.
- */
-export function createHookDispatchers(params: {
+export function createGatewayHooksRequestHandler(params: {
   deps: CliDeps;
+  getHooksConfig: () => HooksConfigResolved | null;
+  bindHost: string;
+  port: number;
   logHooks: SubsystemLogger;
-}): HookDispatchers {
-  const { deps, logHooks } = params;
+}) {
+  const { deps, getHooksConfig, bindHost, port, logHooks } = params;
 
   const dispatchWakeHook = (value: { text: string; mode: "now" | "next-heartbeat" }) => {
     const sessionKey = resolveMainSessionKeyFromConfig();
@@ -108,28 +106,12 @@ export function createHookDispatchers(params: {
     return runId;
   };
 
-  return { dispatchWakeHook, dispatchAgentHook };
-}
-
-/**
- * Create a full hooks HTTP request handler for the gateway.
- * Combines hook dispatchers with the HTTP handler from server-http.
- */
-export function createGatewayHooksRequestHandler(params: {
-  deps: CliDeps;
-  getHooksConfig: () => HooksConfigResolved | null;
-  bindHost: string;
-  port: number;
-  logHooks: SubsystemLogger;
-}): HooksRequestHandler {
-  const { deps, getHooksConfig, bindHost, port, logHooks } = params;
-  const dispatchers = createHookDispatchers({ deps, logHooks });
-
   return createHooksRequestHandler({
     getHooksConfig,
     bindHost,
     port,
     logHooks,
-    ...dispatchers,
+    dispatchAgentHook,
+    dispatchWakeHook,
   });
 }

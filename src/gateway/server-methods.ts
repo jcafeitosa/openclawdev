@@ -1,8 +1,6 @@
-import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
-import { authHandlers } from "./server-methods/auth.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
@@ -13,17 +11,16 @@ import { deviceHandlers } from "./server-methods/devices.js";
 import { execApprovalsHandlers } from "./server-methods/exec-approvals.js";
 import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
+import { meshHandlers } from "./server-methods/mesh.js";
 import { modelsHandlers } from "./server-methods/models.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
-import { providersHealthHandlers } from "./server-methods/providers-health.js";
-import { providersHandlers } from "./server-methods/providers.js";
-import { securityHandlers } from "./server-methods/security.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
 import { ttsHandlers } from "./server-methods/tts.js";
+import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
 import { updateHandlers } from "./server-methods/update.js";
 import { usageHandlers } from "./server-methods/usage.js";
 import { voicewakeHandlers } from "./server-methods/voicewake.js";
@@ -82,21 +79,8 @@ const READ_METHODS = new Set([
   "chat.history",
   "config.get",
   "talk.config",
-  "providers.health",
-  "providers.health.check",
-  "providers.health.ranked",
-  "providers.list",
-  "providers.usage",
-  "auth.listProviders",
-  "auth.checkOAuth",
-  "security.events.query",
-  "security.events.stats",
-  "security.alerts",
-  "security.blocked",
-  "security.session",
-  "security.ip",
-  "security.audit",
-  "security.summary",
+  "mesh.plan",
+  "mesh.status",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -113,6 +97,9 @@ const WRITE_METHODS = new Set([
   "chat.send",
   "chat.abort",
   "browser.request",
+  "mesh.plan.auto",
+  "mesh.run",
+  "mesh.retry",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -180,11 +167,7 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
     method === "sessions.patch" ||
     method === "sessions.reset" ||
     method === "sessions.delete" ||
-    method === "sessions.compact" ||
-    method === "auth.setKey" ||
-    method === "auth.startOAuth" ||
-    method === "auth.submitOAuthCode" ||
-    method === "auth.removeCredential"
+    method === "sessions.compact"
   ) {
     return errorShape(ErrorCodes.INVALID_REQUEST, "missing scope: operator.admin");
   }
@@ -194,6 +177,7 @@ function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["c
 export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...connectHandlers,
   ...logsHandlers,
+  ...meshHandlers,
   ...voicewakeHandlers,
   ...healthHandlers,
   ...channelsHandlers,
@@ -217,10 +201,6 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...browserHandlers,
-  ...providersHandlers,
-  ...providersHealthHandlers,
-  ...authHandlers,
-  ...securityHandlers,
 };
 
 export async function handleGatewayRequest(

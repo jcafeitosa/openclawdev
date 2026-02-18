@@ -14,69 +14,8 @@ function resolveProfileUnusableUntil(stats: ProfileUsageStats): number | null {
 }
 
 /**
- * Check if a profile is currently in cooldown (due to rate limiting or errors).
- */
-export function isProfileInCooldown(store: AuthProfileStore, profileId: string): boolean {
-  const stats = store.usageStats?.[profileId];
-  if (!stats) {
-    return false;
-  }
-  const unusableUntil = resolveProfileUnusableUntil(stats);
-  return unusableUntil ? Date.now() < unusableUntil : false;
-}
-
-/**
- * Default error count threshold before suggesting proactive model switch.
- * Cooldown triggers at errorCount >= 1, so we warn at this threshold.
- */
-const PROACTIVE_SWITCH_ERROR_THRESHOLD = 2;
-
-/**
- * Maximum age (in ms) for error counts to be considered "approaching cooldown".
- * If the last failure was longer ago than this, the errors are stale and should
- * not trigger proactive model switching. Matches the default failureWindowHours.
- */
-const STALE_ERROR_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-
-/**
- * Check if a profile is approaching cooldown based on error count.
- * Returns true if the profile has accumulated errors that suggest
- * switching to another model proactively before cooldown triggers.
- *
- * Stale errors (last failure older than STALE_ERROR_WINDOW_MS) are ignored
- * to prevent perpetual proactive switching after a cooldown has expired.
- */
-export function isProfileApproachingCooldown(
-  store: AuthProfileStore,
-  profileId: string,
-  threshold: number = PROACTIVE_SWITCH_ERROR_THRESHOLD,
-): boolean {
-  const stats = store.usageStats?.[profileId];
-  if (!stats) {
-    return false;
-  }
-  // Already in cooldown
-  if (isProfileInCooldown(store, profileId)) {
-    return false;
-  }
-  const errorCount = stats.errorCount ?? 0;
-  if (errorCount < threshold) {
-    return false;
-  }
-  // Ignore stale errors: if the last failure was long ago, the errors are from
-  // a previous incident and should not trigger proactive switching.
-  const lastFailureAt = stats.lastFailureAt;
-  if (typeof lastFailureAt === "number" && lastFailureAt > 0) {
-    if (Date.now() - lastFailureAt > STALE_ERROR_WINDOW_MS) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Get the remaining cooldown time in milliseconds for a profile.
- * Returns 0 if not in cooldown, or the number of ms remaining.
+ * Return the remaining cooldown time in milliseconds for a profile.
+ * Returns 0 if the profile has no active cooldown.
  */
 export function getProfileCooldownRemainingMs(store: AuthProfileStore, profileId: string): number {
   const stats = store.usageStats?.[profileId];
@@ -92,43 +31,15 @@ export function getProfileCooldownRemainingMs(store: AuthProfileStore, profileId
 }
 
 /**
- * Get profile health status for display/logging purposes.
+ * Check if a profile is currently in cooldown (due to rate limiting or errors).
  */
-export function getProfileHealthStatus(
-  store: AuthProfileStore,
-  profileId: string,
-): {
-  status: "healthy" | "warning" | "cooldown" | "disabled";
-  errorCount: number;
-  cooldownRemainingMs: number;
-  disabledReason?: string;
-} {
+export function isProfileInCooldown(store: AuthProfileStore, profileId: string): boolean {
   const stats = store.usageStats?.[profileId];
   if (!stats) {
-    return { status: "healthy", errorCount: 0, cooldownRemainingMs: 0 };
+    return false;
   }
-
-  const errorCount = stats.errorCount ?? 0;
-  const cooldownRemainingMs = getProfileCooldownRemainingMs(store, profileId);
-
-  if (stats.disabledUntil && Date.now() < stats.disabledUntil) {
-    return {
-      status: "disabled",
-      errorCount,
-      cooldownRemainingMs,
-      disabledReason: stats.disabledReason,
-    };
-  }
-
-  if (cooldownRemainingMs > 0) {
-    return { status: "cooldown", errorCount, cooldownRemainingMs };
-  }
-
-  if (errorCount >= PROACTIVE_SWITCH_ERROR_THRESHOLD) {
-    return { status: "warning", errorCount, cooldownRemainingMs: 0 };
-  }
-
-  return { status: "healthy", errorCount, cooldownRemainingMs: 0 };
+  const unusableUntil = resolveProfileUnusableUntil(stats);
+  return unusableUntil ? Date.now() < unusableUntil : false;
 }
 
 /**
@@ -162,9 +73,9 @@ export function getSoonestCooldownExpiry(
  *
  * When `cooldownUntil` or `disabledUntil` has passed, the corresponding fields
  * are removed and error counters are reset so the profile gets a fresh start
- * (circuit-breaker half-open -> closed). Without this, a stale `errorCount`
+ * (circuit-breaker half-open → closed). Without this, a stale `errorCount`
  * causes the *next* transient failure to immediately escalate to a much longer
- * cooldown -- the root cause of profiles appearing "stuck" after rate limits.
+ * cooldown — the root cause of profiles appearing "stuck" after rate limits.
  *
  * `cooldownUntil` and `disabledUntil` are handled independently: if a profile
  * has both and only one has expired, only that field is cleared.

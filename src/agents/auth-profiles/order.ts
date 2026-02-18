@@ -22,46 +22,9 @@ export function resolveAuthProfileOrder(params: {
   store: AuthProfileStore;
   provider: string;
   preferredProfile?: string;
-  accountTag?: string;
 }): string[] {
-  const { cfg, store, provider, accountTag } = params;
-  let { preferredProfile } = params;
+  const { cfg, store, provider, preferredProfile } = params;
   const providerKey = normalizeProviderId(provider);
-
-  // If accountTag specified, resolve tag → profileId and use as preferredProfile
-  if (accountTag) {
-    const tagMap = cfg?.auth?.accountTags?.[providerKey];
-    const taggedProfileId = tagMap?.[accountTag];
-
-    if (!taggedProfileId) {
-      const availableTags = Object.keys(tagMap ?? {});
-      const tagsHint =
-        availableTags.length > 0
-          ? `Available tags: ${availableTags.join(", ")}`
-          : "No tags configured for this provider";
-      throw new Error(
-        `Account tag "@${accountTag}" not found for provider "${provider}". ${tagsHint}`,
-      );
-    }
-
-    // Verify profile exists in store
-    const profile = store.profiles[taggedProfileId];
-    if (!profile) {
-      throw new Error(
-        `Auth profile "${taggedProfileId}" (mapped from tag "@${accountTag}") not found in store.`,
-      );
-    }
-
-    // Verify profile provider matches
-    if (normalizeProviderId(profile.provider) !== providerKey) {
-      throw new Error(
-        `Auth profile "${taggedProfileId}" (tag "@${accountTag}") has provider "${profile.provider}" but expected "${provider}".`,
-      );
-    }
-
-    // Set tagged profile as preferred - rest of logic will handle failover
-    preferredProfile = taggedProfileId;
-  }
   const now = Date.now();
 
   // Clear any cooldowns that have expired since the last check so profiles
@@ -76,15 +39,9 @@ export function resolveAuthProfileOrder(params: {
         .filter(([, profile]) => normalizeProviderId(profile.provider) === providerKey)
         .map(([profileId]) => profileId)
     : [];
-  const discoveredProfiles = listProfilesForProvider(store, providerKey);
-  const profileCandidates =
-    explicitProfiles.length > 0
-      ? [
-          ...explicitProfiles,
-          ...discoveredProfiles.filter((profileId) => !explicitProfiles.includes(profileId)),
-        ]
-      : discoveredProfiles;
-  const baseOrder = explicitOrder ?? profileCandidates;
+  const baseOrder =
+    explicitOrder ??
+    (explicitProfiles.length > 0 ? explicitProfiles : listProfilesForProvider(store, providerKey));
   if (baseOrder.length === 0) {
     return [];
   }

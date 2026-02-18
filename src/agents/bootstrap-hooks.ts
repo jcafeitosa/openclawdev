@@ -2,7 +2,6 @@ import type { OpenClawConfig } from "../config/config.js";
 import type { AgentBootstrapHookContext } from "../hooks/internal-hooks.js";
 import { createInternalHookEvent, triggerInternalHook } from "../hooks/internal-hooks.js";
 import { resolveAgentIdFromSessionKey } from "../routing/session-key.js";
-import { applyPersonaToBootstrapFiles } from "./persona.js";
 import type { WorkspaceBootstrapFile } from "./workspace.js";
 
 export async function applyBootstrapHookOverrides(params: {
@@ -17,15 +16,9 @@ export async function applyBootstrapHookOverrides(params: {
   const agentId =
     params.agentId ??
     (params.sessionKey ? resolveAgentIdFromSessionKey(params.sessionKey) : undefined);
-  const filesWithPersona = await applyPersonaToBootstrapFiles({
-    files: params.files,
-    workspaceDir: params.workspaceDir,
-    cfg: params.config,
-    agentId,
-  });
   const context: AgentBootstrapHookContext = {
     workspaceDir: params.workspaceDir,
-    bootstrapFiles: filesWithPersona,
+    bootstrapFiles: params.files,
     cfg: params.config,
     sessionKey: params.sessionKey,
     sessionId: params.sessionId,
@@ -34,5 +27,5 @@ export async function applyBootstrapHookOverrides(params: {
   const event = createInternalHookEvent("agent", "bootstrap", sessionKey, context);
   await triggerInternalHook(event);
   const updated = (event.context as AgentBootstrapHookContext).bootstrapFiles;
-  return Array.isArray(updated) ? updated : filesWithPersona;
+  return Array.isArray(updated) ? updated : params.files;
 }

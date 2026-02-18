@@ -25,8 +25,7 @@ import {
   type ResolvedProviderAuth,
 } from "../model-auth.js";
 import { normalizeProviderId } from "../model-selection.js";
-import { ensureOpenClawModelsJson, mergeProviders } from "../models-config.js";
-import { resolveImplicitProviders } from "../models-config.providers.js";
+import { ensureOpenClawModelsJson } from "../models-config.js";
 import {
   formatBillingErrorMessage,
   classifyFailoverReason,
@@ -207,23 +206,6 @@ export async function runEmbeddedPiAgent(
         (params.config?.agents?.defaults?.model?.fallbacks?.length ?? 0) > 0;
       await ensureOpenClawModelsJson(params.config, agentDir);
 
-      // Merge implicit providers (like Antigravity) into config so resolveModel can access them
-      const implicitProviders = await resolveImplicitProviders({ agentDir });
-      const explicitProviders = params.config?.models?.providers ?? {};
-      const mergedProviders = mergeProviders({
-        implicit: implicitProviders,
-        explicit: explicitProviders,
-      });
-
-      // Create a config with merged providers
-      const configWithProviders = {
-        ...params.config,
-        models: {
-          ...params.config?.models,
-          providers: mergedProviders,
-        },
-      };
-
       // Run before_model_resolve hooks early so plugins can override the
       // provider/model before resolveModel().
       //
@@ -278,18 +260,10 @@ export async function runEmbeddedPiAgent(
         provider,
         modelId,
         agentDir,
-        configWithProviders,
+        params.config,
       );
       if (!model) {
-        const message = error ?? `Unknown model: ${provider}/${modelId}`;
-        // Treat unknown/unresolvable models as failover-eligible so agent fallback
-        // can continue to the next configured model instead of aborting the run.
-        throw new FailoverError(message, {
-          reason: "format",
-          provider,
-          model: modelId,
-          status: resolveFailoverStatus("format"),
-        });
+        throw new Error(error ?? `Unknown model: ${provider}/${modelId}`);
       }
 
       const ctxInfo = resolveContextWindowInfo({
@@ -331,19 +305,11 @@ export async function runEmbeddedPiAgent(
           lockedProfileId = undefined;
         }
       }
-
-      // Extract accountTag from modelId if present (format: model@tag)
-      const accountTag = (() => {
-        const atIndex = modelId.indexOf("@");
-        return atIndex !== -1 ? modelId.slice(atIndex + 1).trim() || undefined : undefined;
-      })();
-
       const profileOrder = resolveAuthProfileOrder({
         cfg: params.config,
         store: authStore,
         provider,
         preferredProfile: preferredProfileId,
-        accountTag,
       });
       if (lockedProfileId && !profileOrder.includes(lockedProfileId)) {
         throw new Error(`Auth profile "${lockedProfileId}" is not configured for ${provider}.`);
@@ -532,7 +498,6 @@ export async function runEmbeddedPiAgent(
             prompt,
             images: params.images,
             disableTools: params.disableTools,
-            extraTools: params.extraTools,
             provider,
             modelId,
             model,

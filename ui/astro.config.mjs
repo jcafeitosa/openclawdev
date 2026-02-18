@@ -1,7 +1,7 @@
-import lit from "@astrojs/lit";
-import { defineConfig } from "astro/config";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import lit from "@astrojs/lit";
+import { defineConfig } from "astro/config";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 

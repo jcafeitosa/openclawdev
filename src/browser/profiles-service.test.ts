@@ -1,15 +1,30 @@
 import fs from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-// The barrel `../config/config.js` re-exports from `../config/io.js`.
-// Vitest's vi.mock does not intercept ESM barrel re-exports reliably,
-// so we spy on the source module directly.
-import * as configIo from "../config/io.js";
-import * as chromePaths from "./chrome-paths.js";
+import { describe, expect, it, vi } from "vitest";
 import { resolveBrowserConfig } from "./config.js";
 import { createBrowserProfilesService } from "./profiles-service.js";
 import type { BrowserRouteContext, BrowserServerState } from "./server-context.js";
-import * as trashModule from "./trash.js";
+
+vi.mock("../config/config.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../config/config.js")>();
+  return {
+    ...actual,
+    loadConfig: vi.fn(),
+    writeConfigFile: vi.fn(async () => {}),
+  };
+});
+
+vi.mock("./trash.js", () => ({
+  movePathToTrash: vi.fn(async (targetPath: string) => targetPath),
+}));
+
+vi.mock("./chrome.js", () => ({
+  resolveOpenClawUserDataDir: vi.fn(() => "/tmp/openclaw-test/openclaw/user-data"),
+}));
+
+import { loadConfig, writeConfigFile } from "../config/config.js";
+import { resolveOpenClawUserDataDir } from "./chrome.js";
+import { movePathToTrash } from "./trash.js";
 
 function createCtx(resolved: BrowserServerState["resolved"]) {
   const state: BrowserServerState = {
@@ -31,31 +46,11 @@ function createCtx(resolved: BrowserServerState["resolved"]) {
 }
 
 describe("BrowserProfilesService", () => {
-  let spyLoadConfig: ReturnType<typeof vi.spyOn>;
-  let spyWriteConfigFile: ReturnType<typeof vi.spyOn>;
-  let spyResolveUserDataDir: ReturnType<typeof vi.spyOn>;
-  let spyMovePathToTrash: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    spyLoadConfig = vi.spyOn(configIo, "loadConfig");
-    spyWriteConfigFile = vi.spyOn(configIo, "writeConfigFile").mockResolvedValue(undefined);
-    spyResolveUserDataDir = vi
-      .spyOn(chromePaths, "resolveOpenClawUserDataDir")
-      .mockReturnValue("/tmp/openclaw-test/openclaw/user-data");
-    spyMovePathToTrash = vi
-      .spyOn(trashModule, "movePathToTrash")
-      .mockImplementation(async (targetPath: string) => targetPath);
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   it("allocates next local port for new profiles", async () => {
     const resolved = resolveBrowserConfig({});
     const { ctx, state } = createCtx(resolved);
 
-    spyLoadConfig.mockReturnValue({ browser: { profiles: {} } });
+    vi.mocked(loadConfig).mockReturnValue({ browser: { profiles: {} } });
 
     const service = createBrowserProfilesService(ctx);
     const result = await service.createProfile({ name: "work" });
@@ -63,14 +58,14 @@ describe("BrowserProfilesService", () => {
     expect(result.cdpPort).toBe(18801);
     expect(result.isRemote).toBe(false);
     expect(state.resolved.profiles.work?.cdpPort).toBe(18801);
-    expect(spyWriteConfigFile).toHaveBeenCalled();
+    expect(writeConfigFile).toHaveBeenCalled();
   });
 
   it("accepts per-profile cdpUrl for remote Chrome", async () => {
     const resolved = resolveBrowserConfig({});
     const { ctx } = createCtx(resolved);
 
-    spyLoadConfig.mockReturnValue({ browser: { profiles: {} } });
+    vi.mocked(loadConfig).mockReturnValue({ browser: { profiles: {} } });
 
     const service = createBrowserProfilesService(ctx);
     const result = await service.createProfile({
@@ -81,7 +76,7 @@ describe("BrowserProfilesService", () => {
     expect(result.cdpUrl).toBe("http://10.0.0.42:9222");
     expect(result.cdpPort).toBe(9222);
     expect(result.isRemote).toBe(true);
-    expect(spyWriteConfigFile).toHaveBeenCalledWith(
+    expect(writeConfigFile).toHaveBeenCalledWith(
       expect.objectContaining({
         browser: expect.objectContaining({
           profiles: expect.objectContaining({
@@ -102,7 +97,7 @@ describe("BrowserProfilesService", () => {
     });
     const { ctx } = createCtx(resolved);
 
-    spyLoadConfig.mockReturnValue({
+    vi.mocked(loadConfig).mockReturnValue({
       browser: {
         defaultProfile: "openclaw",
         profiles: {
@@ -117,7 +112,7 @@ describe("BrowserProfilesService", () => {
 
     expect(result.deleted).toBe(false);
     expect(ctx.forProfile).not.toHaveBeenCalled();
-    expect(spyMovePathToTrash).not.toHaveBeenCalled();
+    expect(movePathToTrash).not.toHaveBeenCalled();
   });
 
   it("deletes local profiles and moves data to Trash", async () => {
@@ -128,7 +123,7 @@ describe("BrowserProfilesService", () => {
     });
     const { ctx } = createCtx(resolved);
 
-    spyLoadConfig.mockReturnValue({
+    vi.mocked(loadConfig).mockReturnValue({
       browser: {
         defaultProfile: "openclaw",
         profiles: {
@@ -141,12 +136,12 @@ describe("BrowserProfilesService", () => {
     const tempDir = fs.mkdtempSync(path.join("/tmp", "openclaw-profile-"));
     const userDataDir = path.join(tempDir, "work", "user-data");
     fs.mkdirSync(path.dirname(userDataDir), { recursive: true });
-    spyResolveUserDataDir.mockReturnValue(userDataDir);
+    vi.mocked(resolveOpenClawUserDataDir).mockReturnValue(userDataDir);
 
     const service = createBrowserProfilesService(ctx);
     const result = await service.deleteProfile("work");
 
     expect(result.deleted).toBe(true);
-    expect(spyMovePathToTrash).toHaveBeenCalledWith(path.dirname(userDataDir));
+    expect(movePathToTrash).toHaveBeenCalledWith(path.dirname(userDataDir));
   });
 });

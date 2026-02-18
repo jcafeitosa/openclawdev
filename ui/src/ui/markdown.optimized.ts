@@ -43,21 +43,16 @@ async function ensureMermaidLoaded(): Promise<typeof import("mermaid").default> 
   }
 
   mermaidLoading = (async () => {
-    try {
-      const mermaidModule = await import("mermaid");
-      mermaidInstance = mermaidModule.default;
+    const mermaidModule = await import("mermaid");
+    mermaidInstance = mermaidModule.default;
 
-      // Initialize on first load
-      mermaidInstance.initialize({
-        startOnLoad: false,
-        theme: "default",
-        securityLevel: "strict",
-        fontFamily: "inherit",
-      });
-    } catch (error) {
-      // Mermaid lazy load failed — rethrow so callers can handle gracefully
-      throw error;
-    }
+    // Initialize on first load
+    mermaidInstance.initialize({
+      startOnLoad: false,
+      theme: "default",
+      securityLevel: "strict",
+      fontFamily: "inherit",
+    });
   })();
 
   await mermaidLoading;
@@ -110,27 +105,22 @@ async function renderMermaidDiagram(code: string): Promise<string> {
   const startTime = performance.now();
   const mermaid = await ensureMermaidLoaded();
 
-  try {
-    const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const { svg } = await mermaid.render(id, code);
+  const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  const { svg } = await mermaid.render(id, code);
 
-    // Track performance
-    const renderTime = performance.now() - startTime;
-    metrics.renderTimes.push(renderTime);
-    if (metrics.renderTimes.length > 100) {
-      metrics.renderTimes.shift(); // Keep last 100 samples
-    }
-    metrics.avgRenderTime =
-      metrics.renderTimes.reduce((a, b) => a + b, 0) / metrics.renderTimes.length;
-
-    // Cache the result
-    setCachedMermaidSVG(code, svg);
-
-    return svg;
-  } catch (error) {
-    // Mermaid rendering failed — rethrow so callers can show fallback
-    throw error;
+  // Track performance
+  const renderTime = performance.now() - startTime;
+  metrics.renderTimes.push(renderTime);
+  if (metrics.renderTimes.length > 100) {
+    metrics.renderTimes.shift(); // Keep last 100 samples
   }
+  metrics.avgRenderTime =
+    metrics.renderTimes.reduce((a, b) => a + b, 0) / metrics.renderTimes.length;
+
+  // Cache the result
+  setCachedMermaidSVG(code, svg);
+
+  return svg;
 }
 
 /**
@@ -386,7 +376,7 @@ export async function toSanitizedMarkdownHtml(markdown: string): Promise<string>
           placeholder: match[0],
           replacement: `<div class="mermaid-diagram">${svg}</div>`,
         };
-      } catch (error) {
+      } catch {
         // Mermaid rendering error — show raw code as fallback
         return {
           placeholder: match[0],

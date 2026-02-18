@@ -1,8 +1,7 @@
 import type { SlashCommand } from "@mariozechner/pi-tui";
-import type { OpenClawConfig } from "../config/types.js";
 import { listChatCommands, listChatCommandsForConfig } from "../auto-reply/commands-registry.js";
 import { formatThinkingLevels, listThinkingLevelLabels } from "../auto-reply/thinking.js";
-import { getMarkdownSlashCommands } from "./markdown-commands.js";
+import type { OpenClawConfig } from "../config/types.js";
 
 const VERBOSE_LEVELS = ["on", "off"];
 const REASONING_LEVELS = ["on", "off"];
@@ -45,7 +44,6 @@ export function getSlashCommands(options: SlashCommandOptions = {}): SlashComman
     { name: "status", description: "Show gateway status summary" },
     { name: "agent", description: "Switch agent (or open picker)" },
     { name: "agents", description: "Open agent picker" },
-    { name: "agent-type", description: "Switch agent personality/definition" },
     { name: "session", description: "Switch session (or open picker)" },
     { name: "sessions", description: "Open session picker" },
     {
@@ -137,15 +135,6 @@ export function getSlashCommands(options: SlashCommandOptions = {}): SlashComman
     }
   }
 
-  // Merge markdown-defined commands (from ~/.openclaw/commands/*.md)
-  const mdCommands = getMarkdownSlashCommands();
-  for (const cmd of mdCommands) {
-    if (!seen.has(cmd.name)) {
-      seen.add(cmd.name);
-      commands.push(cmd);
-    }
-  }
-
   return commands;
 }
 
@@ -157,7 +146,6 @@ export function helpText(options: SlashCommandOptions = {}): string {
     "/commands",
     "/status",
     "/agent <id> (or /agents)",
-    "/agent-type <definition-id>",
     "/session <key> (or /sessions)",
     "/model <provider/model> (or /models)",
     `/think <${thinkLevels}>`,

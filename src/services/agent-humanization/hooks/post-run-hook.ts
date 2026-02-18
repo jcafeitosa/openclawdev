@@ -10,8 +10,8 @@
  */
 
 import type { AutoMemoryEntry } from "../../../memory/auto-memory.js";
-import type { EnergyState, DecisionLog } from "../models/types.js";
 import { recordLearning } from "../../../memory/auto-memory.js";
+import type { EnergyState, DecisionLog } from "../models/types.js";
 import {
   isHumanizationEnabled,
   getHumanizationService,

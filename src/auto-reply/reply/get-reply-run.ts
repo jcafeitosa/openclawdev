@@ -1,8 +1,5 @@
 import crypto from "node:crypto";
-import {
-  clearSessionAuthProfileOverride,
-  resolveSessionAuthProfileOverride,
-} from "../../agents/auth-profiles/session-override.js";
+import { resolveSessionAuthProfileOverride } from "../../agents/auth-profiles/session-override.js";
 import type { ExecToolDefaults } from "../../agents/bash-tools.js";
 import {
   abortEmbeddedPiRun,
@@ -375,21 +372,6 @@ export async function runPreparedReply(
     resolvedQueue.mode === "followup" ||
     resolvedQueue.mode === "collect" ||
     resolvedQueue.mode === "steer-backlog";
-  if (
-    sessionEntry &&
-    sessionStore &&
-    sessionKey &&
-    sessionEntry.authProfileOverrideSource === "auto"
-  ) {
-    // Auto-selected profile overrides can become stale after model/provider changes.
-    // Clear before each run so profile selection follows the currently resolved provider.
-    await clearSessionAuthProfileOverride({
-      sessionEntry,
-      sessionStore,
-      sessionKey,
-      storePath,
-    });
-  }
   const authProfileId = await resolveSessionAuthProfileOverride({
     cfg,
     provider,

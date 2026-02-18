@@ -21,8 +21,11 @@ describe("ensureSkillsWatcher", () => {
     delete process.env.OPENCLAW_SKILLS_WATCH_IN_TESTS;
 
     expect(watchMock).toHaveBeenCalledTimes(1);
-    const targets = watchMock.mock.calls[0]?.[0] as string[];
-    const opts = watchMock.mock.calls[0]?.[1] as { ignored?: unknown };
+    const firstCall = (
+      watchMock.mock.calls as unknown as Array<[string[], { ignored?: unknown }]>
+    )[0];
+    const targets = firstCall?.[0] ?? [];
+    const opts = firstCall?.[1] ?? {};
 
     expect(opts.ignored).toBe(mod.DEFAULT_SKILLS_WATCH_IGNORED);
     const posix = (p: string) => p.replaceAll("\\", "/");

@@ -10,7 +10,6 @@ import {
   resolveModelRefFromString,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
-import { classifyTask } from "../../agents/task-classifier.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import { type SessionEntry, updateSessionStore } from "../../config/sessions.js";
 import { applyModelOverrideToSessionEntry } from "../../sessions/model-overrides.js";
@@ -275,8 +274,6 @@ export async function createModelSelectionState(params: {
   /** True when heartbeat.model was explicitly resolved for this run.
    *  In that case, skip session-stored overrides so the heartbeat selection wins. */
   hasResolvedHeartbeatModelOverride?: boolean;
-  /** Prompt text for task-type based model overrides. */
-  prompt?: string;
 }): Promise<ModelSelectionState> {
   const {
     cfg,
@@ -399,42 +396,6 @@ export async function createModelSelectionState(params: {
       resolved ?? (agentCfg?.thinkingDefault as ThinkLevel | undefined) ?? "off";
     return defaultThinkingLevel;
   };
-
-  // Apply per-task model overrides (thinkingModelOverride / codingModelOverride)
-  // only when no explicit model directive or providerOverride/modelOverride is set.
-  if (
-    params.prompt &&
-    sessionEntry &&
-    !params.hasModelDirective &&
-    !sessionEntry.providerOverride &&
-    !sessionEntry.modelOverride
-  ) {
-    const taskType = classifyTask(params.prompt);
-    const thinkingOverride = (sessionEntry as Record<string, unknown>).thinkingModelOverride as
-      | string
-      | undefined;
-    const codingOverride = (sessionEntry as Record<string, unknown>).codingModelOverride as
-      | string
-      | undefined;
-
-    let taskOverrideRaw: string | undefined;
-    if (taskType === "coding" && codingOverride) {
-      taskOverrideRaw = codingOverride;
-    } else if ((taskType === "reasoning" || taskType === "general") && thinkingOverride) {
-      taskOverrideRaw = thinkingOverride;
-    }
-
-    if (taskOverrideRaw) {
-      const resolved = resolveModelRefFromString({ raw: taskOverrideRaw, defaultProvider });
-      if (resolved) {
-        const key = modelKey(resolved.ref.provider, resolved.ref.model);
-        if (allowedModelKeys.size === 0 || allowedModelKeys.has(key)) {
-          provider = resolved.ref.provider;
-          model = resolved.ref.model;
-        }
-      }
-    }
-  }
 
   return {
     provider,

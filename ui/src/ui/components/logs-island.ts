@@ -6,10 +6,10 @@
 import { StoreController } from "@nanostores/lit";
 import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import type { LogEntry, LogLevel } from "../types.ts";
 import { gateway } from "../../services/gateway.ts";
 import { $connected } from "../../stores/app.ts";
 import { parseLogLine } from "../controllers/logs.ts";
+import type { LogEntry, LogLevel } from "../types.ts";
 import { renderLogs, type LogsProps } from "../views/logs.ts";
 
 const LOG_BUFFER_LIMIT = 2000;
@@ -158,7 +158,7 @@ export class LogsIsland extends LitElement {
   }
 
   private scrollToBottom() {
-    const container = this.querySelector(".log-stream") as HTMLElement | null;
+    const container = this.querySelector(".log-stream");
     if (container) {
       container.scrollTop = container.scrollHeight;
     }

@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Type } from "@sinclair/typebox";
 import { loadConfig } from "../../config/config.js";
 import {
   DEFAULT_AGENT_ID,
@@ -6,22 +6,16 @@ import {
   parseAgentSessionKey,
 } from "../../routing/session-key.js";
 import { resolveAgentConfig } from "../agent-scope.js";
-import { getAgentCapabilities } from "../capabilities-registry.js";
-import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult } from "./common.js";
 import { resolveInternalSessionKey, resolveMainSessionAlias } from "./sessions-helpers.js";
 
-const AgentsListToolSchema = zodToToolJsonSchema(z.object({}));
+const AgentsListToolSchema = Type.Object({});
 
 type AgentListEntry = {
   id: string;
   name?: string;
   configured: boolean;
-  role?: string;
-  capabilities?: string[];
-  expertise?: string[];
-  availability?: "auto" | "manual";
 };
 
 export function createAgentsListTool(opts?: {
@@ -87,18 +81,11 @@ export function createAgentsListTool(opts?: {
         .filter((id) => id !== requesterAgentId)
         .toSorted((a, b) => a.localeCompare(b));
       const ordered = [requesterAgentId, ...rest];
-      const agents: AgentListEntry[] = ordered.map((id) => {
-        const capabilityProfile = getAgentCapabilities(id);
-        return {
-          id,
-          name: configuredNameMap.get(id),
-          configured: configuredIds.includes(id),
-          role: capabilityProfile?.role,
-          capabilities: capabilityProfile?.capabilities,
-          expertise: capabilityProfile?.expertise,
-          availability: capabilityProfile?.availability,
-        };
-      });
+      const agents: AgentListEntry[] = ordered.map((id) => ({
+        id,
+        name: configuredNameMap.get(id),
+        configured: configuredIds.includes(id),
+      }));
 
       return jsonResult({
         requester: requesterAgentId,

@@ -1,11 +1,10 @@
 import type { Server as HttpServer } from "node:http";
 import type { WebSocketServer } from "ws";
 import type { CanvasHostHandler, CanvasHostServer } from "../canvas-host/server.js";
-import type { HeartbeatRunner } from "../infra/heartbeat-runner.js";
-import type { PluginServicesHandle } from "../plugins/services.js";
 import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js";
 import { stopGmailWatcher } from "../hooks/gmail-watcher.js";
-import { stopHierarchyEventBroadcaster } from "./server-hierarchy-events.js";
+import type { HeartbeatRunner } from "../infra/heartbeat-runner.js";
+import type { PluginServicesHandle } from "../plugins/services.js";
 
 export function createGatewayCloseHandler(params: {
   bonjourStop: (() => Promise<void>) | null;
@@ -100,7 +99,6 @@ export function createGatewayCloseHandler(params: {
         /* ignore */
       }
     }
-    stopHierarchyEventBroadcaster();
     params.chatRunState.clear();
     for (const c of params.clients) {
       try {
@@ -120,11 +118,14 @@ export function createGatewayCloseHandler(params: {
         ? params.httpServers
         : [params.httpServer];
     for (const server of servers) {
-      if (typeof server.closeIdleConnections === "function") {
-        server.closeIdleConnections();
+      const httpServer = server as HttpServer & {
+        closeIdleConnections?: () => void;
+      };
+      if (typeof httpServer.closeIdleConnections === "function") {
+        httpServer.closeIdleConnections();
       }
       await new Promise<void>((resolve, reject) =>
-        server.close((err) => (err ? reject(err) : resolve())),
+        httpServer.close((err) => (err ? reject(err) : resolve())),
       );
     }
   };

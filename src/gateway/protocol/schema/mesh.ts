@@ -1,97 +1,90 @@
-import { Type, type Static } from "@sinclair/typebox";
+import { z } from "zod";
 import { NonEmptyString } from "./primitives.js";
 
-export const MeshPlanStepSchema = Type.Object(
-  {
+export const MeshPlanStepSchema = z
+  .object({
     id: NonEmptyString,
-    name: Type.Optional(NonEmptyString),
+    name: NonEmptyString.optional(),
     prompt: NonEmptyString,
-    dependsOn: Type.Optional(Type.Array(NonEmptyString, { maxItems: 64 })),
-    agentId: Type.Optional(NonEmptyString),
-    sessionKey: Type.Optional(NonEmptyString),
-    thinking: Type.Optional(Type.String()),
-    timeoutMs: Type.Optional(Type.Integer({ minimum: 1_000, maximum: 3_600_000 })),
-  },
-  { additionalProperties: false },
-);
+    dependsOn: z.array(NonEmptyString).max(64).optional(),
+    agentId: NonEmptyString.optional(),
+    sessionKey: NonEmptyString.optional(),
+    thinking: z.string().optional(),
+    timeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
+  })
+  .strict();
 
-export const MeshWorkflowPlanSchema = Type.Object(
-  {
+export const MeshWorkflowPlanSchema = z
+  .object({
     planId: NonEmptyString,
     goal: NonEmptyString,
-    createdAt: Type.Integer({ minimum: 0 }),
-    steps: Type.Array(MeshPlanStepSchema, { minItems: 1, maxItems: 128 }),
-  },
-  { additionalProperties: false },
-);
+    createdAt: z.number().int().min(0),
+    steps: z.array(MeshPlanStepSchema).min(1).max(128),
+  })
+  .strict();
 
-export const MeshPlanParamsSchema = Type.Object(
-  {
+export const MeshPlanParamsSchema = z
+  .object({
     goal: NonEmptyString,
-    steps: Type.Optional(
-      Type.Array(
-        Type.Object(
-          {
-            id: Type.Optional(NonEmptyString),
-            name: Type.Optional(NonEmptyString),
+    steps: z
+      .array(
+        z
+          .object({
+            id: NonEmptyString.optional(),
+            name: NonEmptyString.optional(),
             prompt: NonEmptyString,
-            dependsOn: Type.Optional(Type.Array(NonEmptyString, { maxItems: 64 })),
-            agentId: Type.Optional(NonEmptyString),
-            sessionKey: Type.Optional(NonEmptyString),
-            thinking: Type.Optional(Type.String()),
-            timeoutMs: Type.Optional(Type.Integer({ minimum: 1_000, maximum: 3_600_000 })),
-          },
-          { additionalProperties: false },
-        ),
-        { minItems: 1, maxItems: 128 },
-      ),
-    ),
-  },
-  { additionalProperties: false },
-);
+            dependsOn: z.array(NonEmptyString).max(64).optional(),
+            agentId: NonEmptyString.optional(),
+            sessionKey: NonEmptyString.optional(),
+            thinking: z.string().optional(),
+            timeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(128)
+      .optional(),
+  })
+  .strict();
 
-export const MeshRunParamsSchema = Type.Object(
-  {
+export const MeshRunParamsSchema = z
+  .object({
     plan: MeshWorkflowPlanSchema,
-    continueOnError: Type.Optional(Type.Boolean()),
-    maxParallel: Type.Optional(Type.Integer({ minimum: 1, maximum: 16 })),
-    defaultStepTimeoutMs: Type.Optional(Type.Integer({ minimum: 1_000, maximum: 3_600_000 })),
-    lane: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
+    continueOnError: z.boolean().optional(),
+    maxParallel: z.number().int().min(1).max(16).optional(),
+    defaultStepTimeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
+    lane: z.string().optional(),
+  })
+  .strict();
 
-export const MeshPlanAutoParamsSchema = Type.Object(
-  {
+export const MeshPlanAutoParamsSchema = z
+  .object({
     goal: NonEmptyString,
-    maxSteps: Type.Optional(Type.Integer({ minimum: 1, maximum: 16 })),
-    agentId: Type.Optional(NonEmptyString),
-    sessionKey: Type.Optional(NonEmptyString),
-    thinking: Type.Optional(Type.String()),
-    timeoutMs: Type.Optional(Type.Integer({ minimum: 1_000, maximum: 3_600_000 })),
-    lane: Type.Optional(Type.String()),
-  },
-  { additionalProperties: false },
-);
+    maxSteps: z.number().int().min(1).max(16).optional(),
+    agentId: NonEmptyString.optional(),
+    sessionKey: NonEmptyString.optional(),
+    thinking: z.string().optional(),
+    timeoutMs: z.number().int().min(1_000).max(3_600_000).optional(),
+    lane: z.string().optional(),
+  })
+  .strict();
 
-export const MeshStatusParamsSchema = Type.Object(
-  {
+export const MeshStatusParamsSchema = z
+  .object({
     runId: NonEmptyString,
-  },
-  { additionalProperties: false },
-);
+  })
+  .strict();
 
-export const MeshRetryParamsSchema = Type.Object(
-  {
+export const MeshRetryParamsSchema = z
+  .object({
     runId: NonEmptyString,
-    stepIds: Type.Optional(Type.Array(NonEmptyString, { minItems: 1, maxItems: 128 })),
-  },
-  { additionalProperties: false },
-);
+    stepIds: z.array(NonEmptyString).min(1).max(128).optional(),
+  })
+  .strict();
 
-export type MeshPlanParams = Static<typeof MeshPlanParamsSchema>;
-export type MeshWorkflowPlan = Static<typeof MeshWorkflowPlanSchema>;
-export type MeshRunParams = Static<typeof MeshRunParamsSchema>;
-export type MeshPlanAutoParams = Static<typeof MeshPlanAutoParamsSchema>;
-export type MeshStatusParams = Static<typeof MeshStatusParamsSchema>;
-export type MeshRetryParams = Static<typeof MeshRetryParamsSchema>;
+export type MeshPlanParams = z.infer<typeof MeshPlanParamsSchema>;
+export type MeshWorkflowPlan = z.infer<typeof MeshWorkflowPlanSchema>;
+export type MeshRunParams = z.infer<typeof MeshRunParamsSchema>;
+export type MeshPlanAutoParams = z.infer<typeof MeshPlanAutoParamsSchema>;
+export type MeshStatusParams = z.infer<typeof MeshStatusParamsSchema>;
+export type MeshRetryParams = z.infer<typeof MeshRetryParamsSchema>;

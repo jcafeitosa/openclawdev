@@ -1,12 +1,9 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import type { ChannelAccountSnapshot } from "../channels/plugins/types.js";
-import type { OpenClawConfig } from "../config/config.js";
-import type { RuntimeEnv } from "../runtime.js";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
 import { getChannelPlugin, listChannelPlugins } from "../channels/plugins/index.js";
+import type { ChannelAccountSnapshot } from "../channels/plugins/types.js";
 import { withProgress } from "../cli/progress.js";
+import type { OpenClawConfig } from "../config/config.js";
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, resolveStorePath } from "../config/sessions.js";
 import { buildGatewayConnectionDetails, callGateway } from "../gateway/call.js";
@@ -19,6 +16,7 @@ import {
 } from "../infra/heartbeat-runner.js";
 import { buildChannelAccountBindings, resolvePreferredAccountId } from "../routing/bindings.js";
 import { normalizeAgentId } from "../routing/session-key.js";
+import type { RuntimeEnv } from "../runtime.js";
 import { styleHealthChannelLine } from "../terminal/health-style.js";
 import { isRich } from "../terminal/theme.js";
 
@@ -46,42 +44,6 @@ export type AgentHealthSummary = {
   sessions: HealthSummary["sessions"];
 };
 
-export type SystemResourceMetrics = {
-  cpu: {
-    model: string;
-    cores: number;
-    loadAvg: [number, number, number];
-  };
-  memory: {
-    totalBytes: number;
-    freeBytes: number;
-    usedBytes: number;
-    usedPercent: number;
-    process: {
-      rssBytes: number;
-      heapUsedBytes: number;
-      heapTotalBytes: number;
-    };
-  };
-  disk: {
-    path: string;
-    totalBytes: number;
-    freeBytes: number;
-    usedBytes: number;
-    usedPercent: number;
-  } | null;
-  uptime: {
-    systemSeconds: number;
-    processSeconds: number;
-  };
-  platform: {
-    os: string;
-    arch: string;
-    nodeVersion: string;
-    hostname: string;
-  };
-};
-
 export type HealthSummary = {
   /**
    * Convenience top-level flag for UIs (e.g. WebChat) that only need a binary
@@ -107,7 +69,6 @@ export type HealthSummary = {
       age: number | null;
     }>;
   };
-  system?: SystemResourceMetrics;
 };
 
 const DEFAULT_TIMEOUT_MS = 10_000;
@@ -384,62 +345,6 @@ export const formatHealthChannelLines = (
   return lines;
 };
 
-function collectSystemMetrics(dataPath: string): SystemResourceMetrics {
-  const cpus = os.cpus();
-  const totalMem = os.totalmem();
-  const freeMem = os.freemem();
-  const usedMem = totalMem - freeMem;
-  const mem = process.memoryUsage();
-  const loadAvg = os.loadavg() as [number, number, number];
-
-  let disk: SystemResourceMetrics["disk"] = null;
-  try {
-    const stat = fs.statfsSync(dataPath);
-    const totalBytes = stat.bsize * stat.blocks;
-    const freeBytes = stat.bsize * stat.bavail;
-    const usedBytes = totalBytes - freeBytes;
-    disk = {
-      path: dataPath,
-      totalBytes,
-      freeBytes,
-      usedBytes,
-      usedPercent: totalBytes > 0 ? (usedBytes / totalBytes) * 100 : 0,
-    };
-  } catch {
-    // Disk info not available on all platforms
-  }
-
-  return {
-    cpu: {
-      model: cpus[0]?.model ?? "unknown",
-      cores: cpus.length,
-      loadAvg,
-    },
-    memory: {
-      totalBytes: totalMem,
-      freeBytes: freeMem,
-      usedBytes: usedMem,
-      usedPercent: totalMem > 0 ? (usedMem / totalMem) * 100 : 0,
-      process: {
-        rssBytes: mem.rss,
-        heapUsedBytes: mem.heapUsed,
-        heapTotalBytes: mem.heapTotal,
-      },
-    },
-    disk,
-    uptime: {
-      systemSeconds: os.uptime(),
-      processSeconds: process.uptime(),
-    },
-    platform: {
-      os: `${os.type()} ${os.release()}`,
-      arch: os.arch(),
-      nodeVersion: process.version,
-      hostname: os.hostname(),
-    },
-  };
-}
-
 export async function getHealthSnapshot(params?: {
   timeoutMs?: number;
   probe?: boolean;
@@ -612,7 +517,6 @@ export async function getHealthSnapshot(params?: {
       count: sessions.count,
       recent: sessions.recent,
     },
-    system: collectSystemMetrics(sessions.path),
   };
 
   return summary;

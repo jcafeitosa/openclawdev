@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Type } from "@sinclair/typebox";
 import type { OpenClawConfig } from "../../config/config.js";
 import type { MemoryCitationsMode } from "../../config/types.memory.js";
 import { resolveMemoryBackendConfig } from "../../memory/backend-config.js";
@@ -7,25 +7,20 @@ import type { MemorySearchResult } from "../../memory/types.js";
 import { parseAgentSessionKey } from "../../routing/session-key.js";
 import { resolveSessionAgentId } from "../agent-scope.js";
 import { resolveMemorySearchConfig } from "../memory-search.js";
-import { zodToToolJsonSchema } from "../schema/zod-tool-schema.js";
 import type { AnyAgentTool } from "./common.js";
 import { jsonResult, readNumberParam, readStringParam } from "./common.js";
 
-const MemorySearchSchema = zodToToolJsonSchema(
-  z.object({
-    query: z.string(),
-    maxResults: z.number().optional(),
-    minScore: z.number().optional(),
-  }),
-);
+const MemorySearchSchema = Type.Object({
+  query: Type.String(),
+  maxResults: Type.Optional(Type.Number()),
+  minScore: Type.Optional(Type.Number()),
+});
 
-const MemoryGetSchema = zodToToolJsonSchema(
-  z.object({
-    path: z.string(),
-    from: z.number().optional(),
-    lines: z.number().optional(),
-  }),
-);
+const MemoryGetSchema = Type.Object({
+  path: Type.String(),
+  from: Type.Optional(Type.Number()),
+  lines: Type.Optional(Type.Number()),
+});
 
 function resolveMemoryToolContext(options: { config?: OpenClawConfig; agentSessionKey?: string }) {
   const cfg = options.config;

@@ -6,6 +6,8 @@
 import { StoreController } from "@nanostores/lit";
 import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
+import { gateway } from "../../services/gateway.ts";
+import { $connected } from "../../stores/app.ts";
 import type {
   AgentsListResult,
   AgentsFilesListResult,
@@ -15,8 +17,6 @@ import type {
   CronStatus,
   SkillStatusReport,
 } from "../types.ts";
-import { gateway } from "../../services/gateway.ts";
-import { $connected } from "../../stores/app.ts";
 import { renderAgents, type AgentsProps, type AgentsPanel } from "../views/agents.ts";
 
 @customElement("agents-island")

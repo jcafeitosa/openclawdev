@@ -1,4 +1,3 @@
-import type { IconName } from "./icons.ts";
 import {
   defaultTitle,
   normalizeToolName,
@@ -9,6 +8,7 @@ import {
   resolveWriteDetail,
   type ToolDisplaySpec as ToolDisplaySpecBase,
 } from "../../../src/agents/tool-display-common.js";
+import type { IconName } from "./icons.ts";
 import rawConfig from "./tool-display.json" with { type: "json" };
 
 type ToolDisplaySpec = ToolDisplaySpecBase & {
@@ -79,7 +79,7 @@ export function resolveToolDisplay(params: {
     detail = resolveReadDetail(params.args);
   }
   if (!detail && (key === "write" || key === "edit" || key === "attach")) {
-    detail = resolveWriteDetail(params.args);
+    detail = resolveWriteDetail(key, params.args);
   }
 
   const detailKeys = actionSpec?.detailKeys ?? spec?.detailKeys ?? FALLBACK.detailKeys ?? [];
