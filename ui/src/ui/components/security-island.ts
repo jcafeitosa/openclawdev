@@ -28,6 +28,7 @@ export class SecurityIsland extends LitElement {
   @state() private activeTab: "summary" | "events" | "alerts" | "blocked" | "audit" = "summary";
   @state() private eventsPage = 0;
   @state() private eventsPerPage = 50;
+  @state() private eventsTotal = 0;
 
   createRenderRoot() {
     return this;
@@ -42,10 +43,8 @@ export class SecurityIsland extends LitElement {
     this.loading = true;
     this.error = null;
     try {
-      // The security.summary handler returns a flat SecuritySummary shape
       const raw = await gateway.call<SecuritySummary>("security.summary");
       this.summary = raw;
-      // Derive stats from the summary for the summary tab
       this.stats = {
         totalEvents: raw.totalEvents ?? 0,
         byCategory: {},
@@ -65,9 +64,56 @@ export class SecurityIsland extends LitElement {
     }
   }
 
+  private async loadEvents() {
+    this.loading = true;
+    this.error = null;
+    try {
+      const params: Record<string, unknown> = {
+        limit: this.eventsPerPage,
+        offset: this.eventsPage * this.eventsPerPage,
+      };
+
+      const now = Date.now();
+      switch (this.filterTimeRange) {
+        case "1h":
+          params.startTime = now - 60 * 60 * 1000;
+          break;
+        case "24h":
+          params.startTime = now - 24 * 60 * 60 * 1000;
+          break;
+        case "7d":
+          params.startTime = now - 7 * 24 * 60 * 60 * 1000;
+          break;
+        case "30d":
+          params.startTime = now - 30 * 24 * 60 * 60 * 1000;
+          break;
+      }
+
+      if (this.filterCategory !== "all") {
+        params.categories = [this.filterCategory];
+      }
+      if (this.filterSeverity !== "all") {
+        params.severities = [this.filterSeverity];
+      }
+
+      const res = await gateway.call<{ events?: SecurityEvent[]; count?: number }>(
+        "security.events.query",
+        params,
+      );
+      this.events = res.events ?? [];
+      this.eventsTotal = res.count ?? this.events.length;
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.loading = false;
+    }
+  }
+
   private handleTabChange(tab: "summary" | "events" | "alerts" | "blocked" | "audit") {
     this.activeTab = tab;
-    if (tab === "audit" && !this.audit) {
+    if (tab === "events") {
+      void this.loadEvents();
+    } else if (tab === "audit" && !this.audit) {
       void this.handleRunAudit(false);
     }
   }
@@ -75,19 +121,19 @@ export class SecurityIsland extends LitElement {
   private handleFilterCategoryChange(category: SecurityEventCategory | "all") {
     this.filterCategory = category;
     this.eventsPage = 0;
-    void this.loadData();
+    void this.loadEvents();
   }
 
   private handleFilterSeverityChange(severity: SecurityEventSeverity | "all") {
     this.filterSeverity = severity;
     this.eventsPage = 0;
-    void this.loadData();
+    void this.loadEvents();
   }
 
   private handleFilterTimeRangeChange(range: "1h" | "24h" | "7d" | "30d" | "all") {
     this.filterTimeRange = range;
     this.eventsPage = 0;
-    void this.loadData();
+    void this.loadEvents();
   }
 
   private async handleRunAudit(deep: boolean) {
@@ -104,7 +150,7 @@ export class SecurityIsland extends LitElement {
 
   private handlePageChange(page: number) {
     this.eventsPage = Math.max(0, page);
-    void this.loadData();
+    void this.loadEvents();
   }
 
   render() {

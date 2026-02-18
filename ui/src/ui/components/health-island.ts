@@ -3,8 +3,71 @@ import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { gateway } from "../../services/gateway.ts";
 import { $connected } from "../../stores/app.ts";
-import type { HealthData } from "../controllers/health.ts";
+import type { HealthChannelEntry, HealthAgentEntry, HealthData } from "../controllers/health.ts";
 import { renderHealth, type HealthProps } from "../views/health.ts";
+
+/**
+ * Raw shape returned by the `health` RPC.  `channels` is a Record keyed by
+ * channel id (e.g. "whatsapp", "telegram"), NOT an array.  We convert it to
+ * the `HealthChannelEntry[]` that `HealthData` expects.
+ */
+type RawHealthResponse = {
+  ok?: boolean;
+  ts?: number;
+  durationMs?: number;
+  heartbeatSeconds?: number;
+  defaultAgentId?: string;
+  channelOrder?: string[];
+  channelLabels?: Record<string, string>;
+  channels?: Record<string, { configured?: boolean; linked?: boolean }>;
+  agents?: Array<{
+    agentId: string;
+    name?: string;
+    isDefault: boolean;
+    heartbeat?: { alive?: boolean; ageMs?: number | null };
+    sessions?: { count?: number };
+  }>;
+  sessions?: { path?: string; count?: number };
+  system?: HealthData["system"];
+};
+
+function parseHealthResponse(raw: RawHealthResponse): HealthData {
+  const channelOrder = raw.channelOrder ?? [];
+  const channelLabels = raw.channelLabels ?? {};
+  const rawChannels = raw.channels ?? {};
+
+  const channels: HealthChannelEntry[] = channelOrder.map((id) => {
+    const ch = rawChannels[id];
+    return {
+      id,
+      label: channelLabels[id] ?? id,
+      configured: ch?.configured ?? false,
+      linked: ch?.linked ?? false,
+    };
+  });
+
+  const agents: HealthAgentEntry[] = (raw.agents ?? []).map((a) => ({
+    agentId: a.agentId,
+    name: a.name,
+    isDefault: a.isDefault,
+    heartbeatAlive: a.heartbeat?.alive ?? false,
+    heartbeatAgeMs: a.heartbeat?.ageMs ?? null,
+    sessionCount: a.sessions?.count ?? 0,
+  }));
+
+  return {
+    ok: raw.ok ?? false,
+    ts: raw.ts ?? Date.now(),
+    durationMs: raw.durationMs ?? 0,
+    heartbeatSeconds: raw.heartbeatSeconds ?? 0,
+    defaultAgentId: raw.defaultAgentId ?? "",
+    sessionCount: raw.sessions?.count ?? 0,
+    sessionPath: raw.sessions?.path ?? "",
+    channels,
+    agents,
+    system: raw.system ?? null,
+  };
+}
 
 @customElement("health-island")
 export class HealthIsland extends LitElement {
@@ -29,25 +92,16 @@ export class HealthIsland extends LitElement {
     this.loading = true;
     this.error = null;
     try {
-      const [healthResult, channelsResult] = await Promise.all([
-        gateway.call<HealthData>("health").catch(() => null),
-        gateway
-          .call<{ channels?: Array<{ id: string; status: string }> }>("channels.status", {
-            probe: false,
-            timeoutMs: 8000,
-          })
-          .then((res) => ({
-            channels:
-              ((res as Record<string, unknown>)?.channels as Array<{
-                id: string;
-                status: string;
-              }>) ?? [],
-          }))
-          .catch(() => ({ channels: [] })),
-      ]);
-      this.data = healthResult;
-      this.channels = channelsResult.channels ?? [];
-      this.debugHealth = healthResult;
+      const raw = await gateway.call<RawHealthResponse>("health").catch(() => null);
+      if (raw) {
+        const parsed = parseHealthResponse(raw);
+        this.data = parsed;
+        this.channels = parsed.channels.map((ch) => ({
+          id: ch.label,
+          status: ch.linked ? "connected" : ch.configured ? "warning" : "disconnected",
+        }));
+        this.debugHealth = raw;
+      }
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {

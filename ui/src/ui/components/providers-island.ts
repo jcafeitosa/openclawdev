@@ -35,6 +35,13 @@ export class ProvidersIsland extends LitElement {
   @state() private authProvidersList: AuthProviderEntry[] | null = null;
   @state() private oauthFlow: OAuthFlowState | null = null;
   @state() private removingProvider: string | null = null;
+  @state() private checkingProvider: string | null = null;
+  @state() private healthCheckResult: {
+    providerId: string;
+    healthy: boolean;
+    status: string;
+  } | null = null;
+  @state() private rankedProviders: string[] = [];
 
   protected createRenderRoot() {
     return this;
@@ -184,6 +191,35 @@ export class ProvidersIsland extends LitElement {
     }
   }
 
+  private async checkProviderHealth(providerId: string) {
+    this.checkingProvider = providerId;
+    this.healthCheckResult = null;
+    try {
+      const result = await gateway.call<{ healthy: boolean; status: string }>(
+        "providers.health.check",
+        { providerId },
+      );
+      this.healthCheckResult = { providerId, healthy: result.healthy, status: result.status };
+    } catch (err) {
+      this.healthCheckResult = {
+        providerId,
+        healthy: false,
+        status: err instanceof Error ? err.message : String(err),
+      };
+    } finally {
+      this.checkingProvider = null;
+    }
+  }
+
+  private async loadRankedProviders() {
+    try {
+      const result = await gateway.call<{ ranked?: string[] }>("providers.health.ranked");
+      this.rankedProviders = result.ranked ?? [];
+    } catch {
+      // Ranked providers may not be available
+    }
+  }
+
   render(): TemplateResult {
     const props: ProvidersProps = {
       loading: this.loading,
@@ -205,6 +241,9 @@ export class ProvidersIsland extends LitElement {
       authProvidersList: this.authProvidersList,
       oauthFlow: this.oauthFlow,
       removingProvider: this.removingProvider,
+      checkingProvider: this.checkingProvider,
+      healthCheckResult: this.healthCheckResult,
+      rankedProviders: this.rankedProviders,
       onRefresh: () => void this.loadData(),
       onToggleShowAll: () => {
         this.showAll = !this.showAll;
@@ -229,6 +268,8 @@ export class ProvidersIsland extends LitElement {
       },
       onSubmitOAuthCode: (code) => void this.submitOAuthCode(code),
       onRemoveCredential: (provider) => void this.removeCredential(provider),
+      onCheckHealth: (providerId) => void this.checkProviderHealth(providerId),
+      onLoadRanked: () => void this.loadRankedProviders(),
     };
 
     return html`${renderProviders(props)}`;

@@ -143,8 +143,8 @@ export class ConfigIsland extends LitElement {
     try {
       const result = await gateway.call<{ schema?: unknown }>("config.schema");
       this.schema = result.schema ?? null;
-    } catch (err) {
-      console.warn("Failed to load config schema:", err);
+    } catch {
+      // Schema is optional — form mode degrades gracefully without it
     } finally {
       this.schemaLoading = false;
     }

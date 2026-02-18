@@ -29,12 +29,16 @@ export class DebugIsland extends LitElement {
   private async loadData() {
     this.loading = true;
     try {
-      const [statusResult, healthResult] = await Promise.all([
+      const [statusResult, healthResult, modelsResult, heartbeatResult] = await Promise.all([
         gateway.call<Record<string, unknown>>("status").catch(() => null),
         gateway.call<Record<string, unknown>>("health").catch(() => null),
+        gateway.call<{ models?: unknown[] }>("models.list").catch(() => ({ models: [] })),
+        gateway.call("last-heartbeat").catch(() => null),
       ]);
       this.status = statusResult;
       this.health = healthResult;
+      this.models = modelsResult.models ?? [];
+      this.heartbeat = heartbeatResult;
     } catch (err) {
       console.error("Failed to load debug data:", err);
     } finally {
