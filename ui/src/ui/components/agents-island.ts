@@ -104,7 +104,7 @@ export class AgentsIsland extends LitElement {
       return;
     }
     try {
-      const res = await gateway.call<{ content: string }>("agents.files.read", {
+      const res = await gateway.call<{ content: string }>("agents.files.get", {
         agentId: this.selectedAgentId,
         name,
       });
@@ -121,7 +121,7 @@ export class AgentsIsland extends LitElement {
     }
     this.agentFileSaving = true;
     try {
-      await gateway.call("agents.files.write", {
+      await gateway.call("agents.files.set", {
         agentId: this.selectedAgentId,
         name,
         content: this.agentFileDrafts[name],

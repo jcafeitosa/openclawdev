@@ -25,12 +25,9 @@ export class InstancesIsland extends LitElement {
     this.lastError = null;
     this.statusMessage = null;
     try {
-      const result = await gateway.call<{
-        entries: PresenceEntry[];
-        status?: string;
-      }>("presence.list");
-      this.entries = result.entries ?? [];
-      this.statusMessage = result.status ?? null;
+      const result = await gateway.call<PresenceEntry[]>("system-presence", {});
+      this.entries = Array.isArray(result) ? result : [];
+      this.statusMessage = this.entries.length === 0 ? "No instances yet." : null;
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
     } finally {

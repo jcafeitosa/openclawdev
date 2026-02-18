@@ -197,7 +197,7 @@ describe("config form renderer", () => {
     expect(container.textContent).toContain("Plugin Enabled");
   });
 
-  it("flags unsupported unions", () => {
+  it("preserves complex unions for JSON fallback rendering", () => {
     const schema = {
       type: "object",
       properties: {
@@ -207,7 +207,9 @@ describe("config form renderer", () => {
       },
     };
     const analysis = analyzeConfigSchema(schema);
-    expect(analysis.unsupportedPaths).toContain("mixed");
+    // Complex unions are no longer marked unsupported; they render as JSON textarea.
+    expect(analysis.unsupportedPaths).not.toContain("mixed");
+    expect(analysis.schema).toBeTruthy();
   });
 
   it("supports nullable types", () => {
@@ -255,5 +257,36 @@ describe("config form renderer", () => {
     };
     const analysis = analyzeConfigSchema(schema);
     expect(analysis.unsupportedPaths).toContain("extra");
+  });
+
+  it("treats empty schemas from transforms as string type", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              command: {},
+              description: {},
+            },
+            additionalProperties: false,
+          },
+        },
+      },
+    };
+    const analysis = analyzeConfigSchema(schema);
+    expect(analysis.unsupportedPaths).toHaveLength(0);
+    const itemSchema = (analysis.schema as Record<string, unknown>).properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    const inner = (itemSchema.items.items as Record<string, unknown>).properties as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(inner.command.type).toBe("string");
+    expect(inner.description.type).toBe("string");
   });
 });

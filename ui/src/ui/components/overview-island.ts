@@ -36,7 +36,7 @@ export class OverviewIsland extends LitElement {
   private async loadData() {
     try {
       const [presenceResult, sessionsResult, cronResult, systemResult] = await Promise.all([
-        gateway.call<{ entries: PresenceEntry[] }>("presence.list").catch(() => ({ entries: [] })),
+        gateway.call<PresenceEntry[]>("system-presence", {}).catch(() => [] as PresenceEntry[]),
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
         gateway.call<CronStatus>("cron.status").catch(() => ({
           enabled: false,
@@ -46,7 +46,7 @@ export class OverviewIsland extends LitElement {
         gateway.call<SystemInfoResult>("system.info").catch(() => null),
       ]);
 
-      this.presenceCount = presenceResult.entries.length;
+      this.presenceCount = Array.isArray(presenceResult) ? presenceResult.length : 0;
       this.sessionsCount = sessionsResult.sessions.length;
       this.cronEnabled = cronResult.enabled;
       this.cronNext = cronResult.nextWakeAtMs ?? null;

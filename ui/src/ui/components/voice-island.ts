@@ -3,14 +3,6 @@ import { customElement, state } from "lit/decorators.js";
 import { gateway } from "../../services/gateway.ts";
 import { renderVoice, type VoiceProps } from "../views/voice.ts";
 
-type VoiceStatusResult = {
-  ttsEnabled: boolean;
-  ttsProvider: string | null;
-  ttsProviders: string[];
-  wakeWord: string | null;
-  talkMode: string | null;
-};
-
 @customElement("voice-island")
 export class VoiceIsland extends LitElement {
   @state() private loading = false;
@@ -34,12 +26,27 @@ export class VoiceIsland extends LitElement {
     this.loading = true;
     this.error = null;
     try {
-      const result = await gateway.call<VoiceStatusResult>("voice.status");
-      this.ttsEnabled = result.ttsEnabled;
-      this.ttsProvider = result.ttsProvider;
-      this.ttsProviders = result.ttsProviders ?? [];
-      this.wakeWord = result.wakeWord;
-      this.talkMode = result.talkMode;
+      const [ttsResult, voicewakeResult, talkResult] = await Promise.all([
+        gateway
+          .call<{
+            enabled: boolean;
+            provider: string | null;
+          }>("tts.status")
+          .catch(() => ({ enabled: false, provider: null })),
+        gateway.call<{ triggers: string[] }>("voicewake.get").catch(() => ({ triggers: [] })),
+        gateway.call<{ mode?: string | null }>("talk.config").catch(() => ({ mode: null })),
+      ]);
+      this.ttsEnabled = ttsResult.enabled;
+      this.ttsProvider = ttsResult.provider;
+
+      // Load provider list
+      const providersResult = await gateway
+        .call<{ providers: Array<{ id: string }> }>("tts.providers")
+        .catch(() => ({ providers: [] }));
+      this.ttsProviders = providersResult.providers.map((p) => p.id);
+
+      this.wakeWord = voicewakeResult.triggers?.[0] ?? null;
+      this.talkMode = talkResult.mode ?? null;
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -49,7 +56,11 @@ export class VoiceIsland extends LitElement {
 
   private async handleTtsToggle() {
     try {
-      await gateway.call("voice.toggleTts");
+      if (this.ttsEnabled) {
+        await gateway.call("tts.disable");
+      } else {
+        await gateway.call("tts.enable");
+      }
       await this.loadData();
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -58,7 +69,7 @@ export class VoiceIsland extends LitElement {
 
   private async handleTtsProviderChange(provider: string) {
     try {
-      await gateway.call("voice.setTtsProvider", { provider });
+      await gateway.call("tts.setProvider", { provider });
       await this.loadData();
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -67,7 +78,7 @@ export class VoiceIsland extends LitElement {
 
   private async handleWakeWordChange(word: string) {
     try {
-      await gateway.call("voice.setWakeWord", { word });
+      await gateway.call("voicewake.set", { triggers: word ? [word] : [] });
       await this.loadData();
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -76,7 +87,8 @@ export class VoiceIsland extends LitElement {
 
   private async handleTalkModeToggle() {
     try {
-      await gateway.call("voice.toggleTalkMode");
+      const nextMode = this.talkMode === "talk" ? "off" : "talk";
+      await gateway.call("talk.mode", { mode: nextMode });
       await this.loadData();
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);

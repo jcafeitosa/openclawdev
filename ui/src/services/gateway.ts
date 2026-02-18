@@ -115,6 +115,9 @@ function ensureConnected(): void {
 export const gateway = {
   /** Connect to the gateway WebSocket. */
   connect(url?: string, token?: string, password?: string): void {
+    // Mark as connected so ensureConnected() doesn't trigger a duplicate connect
+    // (fixes race between nav-island.connect() and page island ensureConnected())
+    autoConnected = true;
     if (client) {
       client.stop();
       client = null;

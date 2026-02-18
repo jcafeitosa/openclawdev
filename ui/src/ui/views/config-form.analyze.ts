@@ -44,12 +44,16 @@ function normalizeSchemaNode(
     if (union) {
       return union;
     }
-    return { schema, unsupportedPaths: [pathLabel] };
+    // Preserve complex unions for the renderer to handle (e.g. JSON textarea fallback).
+    return { schema, unsupportedPaths: [] };
   }
 
   const nullable = Array.isArray(schema.type) && schema.type.includes("null");
+  // Empty schemas (from z.string().transform() or unrepresentable: "any") → treat as string.
   const type =
-    schemaType(schema) ?? (schema.properties || schema.additionalProperties ? "object" : undefined);
+    schemaType(schema) ??
+    (schema.properties || schema.additionalProperties ? "object" : undefined) ??
+    (isAnySchema(schema) ? "string" : undefined);
   normalized.type = type ?? schema.type;
   normalized.nullable = nullable || schema.nullable;
 

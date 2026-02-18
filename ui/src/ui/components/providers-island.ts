@@ -58,7 +58,7 @@ export class ProvidersIsland extends LitElement {
           modelFallbacks?: string[];
           agentRunning?: boolean;
         }>("providers.health"),
-        gateway.call<{ entries: unknown[] }>("presence.list").catch(() => ({ entries: [] })),
+        gateway.call<unknown[]>("system-presence", {}).catch(() => [] as unknown[]),
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
       ]);
 
@@ -68,7 +68,7 @@ export class ProvidersIsland extends LitElement {
       this.primaryModel = healthResult.primaryModel ?? null;
       this.modelFallbacks = healthResult.modelFallbacks ?? [];
       this.agentRunning = healthResult.agentRunning ?? false;
-      this.instanceCount = presenceResult.entries.length;
+      this.instanceCount = Array.isArray(presenceResult) ? presenceResult.length : 0;
       this.sessionCount = sessionsResult.sessions.length;
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -113,7 +113,7 @@ export class ProvidersIsland extends LitElement {
   ) {
     this.authConfigSaving = true;
     try {
-      await gateway.call("auth.setCredential", { provider, credential, credentialType });
+      await gateway.call("auth.setKey", { provider, credential, credentialType });
       this.authConfigProvider = null;
       await this.loadData();
     } catch (err) {

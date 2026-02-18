@@ -101,7 +101,7 @@ export class CronIsland extends LitElement {
   private async handleToggle(job: CronJob, enabled: boolean) {
     this.busy = true;
     try {
-      await gateway.call("cron.toggle", { jobId: job.id, enabled });
+      await gateway.call("cron.update", { jobId: job.id, patch: { enabled } });
       await this.loadData();
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);

@@ -1,6 +1,7 @@
 import { ErrorCodes, errorShape } from "./protocol/index.js";
 import { agentHandlers } from "./server-methods/agent.js";
 import { agentsHandlers } from "./server-methods/agents.js";
+import { authHandlers } from "./server-methods/auth.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
 import { chatHandlers } from "./server-methods/chat.js";
@@ -15,6 +16,7 @@ import { meshHandlers } from "./server-methods/mesh.js";
 import { modelsHandlers } from "./server-methods/models.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
 import { providersHealthHandlers } from "./server-methods/providers-health.js";
+import { providersHandlers } from "./server-methods/providers.js";
 import { securityHandlers } from "./server-methods/security.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
@@ -78,21 +80,12 @@ const READ_METHODS = new Set([
   "cron.runs",
   "system-presence",
   "last-heartbeat",
-  "node.list",
-  "node.describe",
-  "chat.history",
-  "config.get",
-  "talk.config",
-  "mesh.plan",
-  "mesh.status",
   "providers.health",
   "providers.health.check",
   "providers.health.ranked",
-  "presence.list",
-  "agents.hierarchy",
-  "voice.status",
-  "agent-resources.list",
-  "system.info",
+  "providers.list",
+  "providers.usage",
+  "security.audit",
   "security.summary",
   "security.events.query",
   "security.events.stats",
@@ -100,11 +93,30 @@ const READ_METHODS = new Set([
   "security.blocked",
   "security.session",
   "security.ip",
-  "security.audit",
+  "node.list",
+  "node.describe",
+  "chat.history",
+  "config.get",
+  "talk.config",
+  "mesh.plan",
+  "mesh.status",
+  "presence.list",
+  "agents.hierarchy",
+  "voice.status",
+  "agent-resources.list",
+  "system.info",
   "status.get",
   "health.check",
   "twitter.data",
   "twitter.relationships",
+  "sessions.usage",
+  "sessions.usage.timeseries",
+  "sessions.usage.logs",
+  "agents.files.list",
+  "agents.files.get",
+  "auth.listProviders",
+  "auth.checkOAuth",
+  "config.schema",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -128,6 +140,11 @@ const WRITE_METHODS = new Set([
   "voice.setTtsProvider",
   "voice.setWakeWord",
   "voice.toggleTalkMode",
+  "agents.files.set",
+  "auth.setKey",
+  "auth.startOAuth",
+  "auth.submitOAuthCode",
+  "auth.removeCredential",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -229,8 +246,10 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...browserHandlers,
+  ...providersHandlers,
   ...providersHealthHandlers,
   ...securityHandlers,
+  ...authHandlers,
   ...twitterHandlers,
   ...uiBridgeHandlers,
 };

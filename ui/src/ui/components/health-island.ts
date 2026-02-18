@@ -30,9 +30,19 @@ export class HealthIsland extends LitElement {
     this.error = null;
     try {
       const [healthResult, channelsResult] = await Promise.all([
-        gateway.call<HealthData>("health.check").catch(() => null),
+        gateway.call<HealthData>("health").catch(() => null),
         gateway
-          .call<{ channels: Array<{ id: string; status: string }> }>("health.channels")
+          .call<{ channels?: Array<{ id: string; status: string }> }>("channels.status", {
+            probe: false,
+            timeoutMs: 8000,
+          })
+          .then((res) => ({
+            channels:
+              ((res as Record<string, unknown>)?.channels as Array<{
+                id: string;
+                status: string;
+              }>) ?? [],
+          }))
           .catch(() => ({ channels: [] })),
       ]);
       this.data = healthResult;

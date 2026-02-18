@@ -30,8 +30,8 @@ export class DebugIsland extends LitElement {
     this.loading = true;
     try {
       const [statusResult, healthResult] = await Promise.all([
-        gateway.call<Record<string, unknown>>("status.get").catch(() => null),
-        gateway.call<Record<string, unknown>>("health.check").catch(() => null),
+        gateway.call<Record<string, unknown>>("status").catch(() => null),
+        gateway.call<Record<string, unknown>>("health").catch(() => null),
       ]);
       this.status = statusResult;
       this.health = healthResult;

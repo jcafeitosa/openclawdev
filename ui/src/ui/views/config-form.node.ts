@@ -204,6 +204,9 @@ export function renderNode(params: {
         });
       }
     }
+
+    // Complex union (e.g. array | object) — render as JSON textarea
+    return renderJsonField(params);
   }
 
   // Enum - use segmented for small, dropdown for large
@@ -287,6 +290,50 @@ export function renderNode(params: {
     <div class="cfg-field cfg-field--error">
       <div class="cfg-field__label">${label}</div>
       <div class="cfg-field__error">Unsupported type: ${type}. Use Raw mode.</div>
+    </div>
+  `;
+}
+
+function renderJsonField(params: {
+  schema: JsonSchema;
+  value: unknown;
+  path: Array<string | number>;
+  hints: ConfigUiHints;
+  disabled: boolean;
+  showLabel?: boolean;
+  onPatch: (path: Array<string | number>, value: unknown) => void;
+}): TemplateResult {
+  const { schema, value, path, hints, disabled, onPatch } = params;
+  const showLabel = params.showLabel ?? true;
+  const hint = hintForPath(path, hints);
+  const label = hint?.label ?? schema.title ?? humanize(String(path.at(-1)));
+  const help = hint?.help ?? schema.description;
+  const fallback = jsonValue(value);
+
+  return html`
+    <div class="cfg-field">
+      ${showLabel ? html`<label class="cfg-field__label">${label}</label>` : nothing}
+      ${help ? html`<div class="cfg-field__help">${help}</div>` : nothing}
+      <textarea
+        class="cfg-textarea cfg-textarea--sm"
+        placeholder="JSON value"
+        rows="3"
+        .value=${fallback}
+        ?disabled=${disabled}
+        @change=${(e: Event) => {
+          const target = e.target as HTMLTextAreaElement;
+          const raw = target.value.trim();
+          if (!raw) {
+            onPatch(path, undefined);
+            return;
+          }
+          try {
+            onPatch(path, JSON.parse(raw));
+          } catch {
+            target.value = fallback;
+          }
+        }}
+      ></textarea>
     </div>
   `;
 }

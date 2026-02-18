@@ -164,7 +164,7 @@ export class ConfigIsland extends LitElement {
   private async saveConfig() {
     this.saving = true;
     try {
-      await gateway.call("config.save", { raw: this.raw });
+      await gateway.call("config.set", { raw: this.raw });
       this.originalRaw = this.raw;
       if (this.formValue) {
         this.originalValue = structuredClone(this.formValue);
@@ -190,7 +190,7 @@ export class ConfigIsland extends LitElement {
   private async runUpdate() {
     this.updating = true;
     try {
-      await gateway.call("config.update");
+      await gateway.call("update.run");
       await this.loadConfig();
     } catch (err) {
       this.issues = [{ message: err instanceof Error ? err.message : String(err) }];

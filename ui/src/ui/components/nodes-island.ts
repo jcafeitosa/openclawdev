@@ -96,7 +96,7 @@ export class NodesIsland extends LitElement {
 
   private async rotateDevice(deviceId: string, role: string, scopes?: string[]) {
     try {
-      await gateway.call("device.pair.rotate", { deviceId, role, scopes });
+      await gateway.call("device.token.rotate", { deviceId, role, scopes });
       await this.loadDevices();
     } catch (err) {
       this.devicesError = err instanceof Error ? err.message : String(err);
@@ -105,7 +105,7 @@ export class NodesIsland extends LitElement {
 
   private async revokeDevice(deviceId: string, role: string) {
     try {
-      await gateway.call("device.pair.revoke", { deviceId, role });
+      await gateway.call("device.token.revoke", { deviceId, role });
       await this.loadDevices();
     } catch (err) {
       this.devicesError = err instanceof Error ? err.message : String(err);
@@ -129,10 +129,15 @@ export class NodesIsland extends LitElement {
   private async loadExecApprovals() {
     this.execApprovalsLoading = true;
     try {
-      const res = await gateway.call<ExecApprovalsSnapshot>("exec-approvals.snapshot", {
-        target: this.execApprovalsTarget,
-        nodeId: this.execApprovalsTargetNodeId,
-      });
+      const method =
+        this.execApprovalsTarget === "node" && this.execApprovalsTargetNodeId
+          ? "exec.approvals.node.get"
+          : "exec.approvals.get";
+      const callParams =
+        this.execApprovalsTarget === "node" && this.execApprovalsTargetNodeId
+          ? { nodeId: this.execApprovalsTargetNodeId }
+          : {};
+      const res = await gateway.call<ExecApprovalsSnapshot>(method, callParams);
       this.execApprovalsSnapshot = res;
       this.execApprovalsForm = res.file ?? null;
       this.execApprovalsDirty = false;
@@ -188,11 +193,15 @@ export class NodesIsland extends LitElement {
     }
     this.execApprovalsSaving = true;
     try {
-      await gateway.call("exec-approvals.save", {
-        target: this.execApprovalsTarget,
-        nodeId: this.execApprovalsTargetNodeId,
-        file: this.execApprovalsForm,
-      });
+      const saveMethod =
+        this.execApprovalsTarget === "node" && this.execApprovalsTargetNodeId
+          ? "exec.approvals.node.set"
+          : "exec.approvals.set";
+      const saveParams =
+        this.execApprovalsTarget === "node" && this.execApprovalsTargetNodeId
+          ? { nodeId: this.execApprovalsTargetNodeId, file: this.execApprovalsForm }
+          : { file: this.execApprovalsForm };
+      await gateway.call(saveMethod, saveParams);
       this.execApprovalsDirty = false;
     } catch (err) {
       console.warn("Failed to save exec approvals:", err);

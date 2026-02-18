@@ -8,7 +8,12 @@ import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { gateway } from "../../services/gateway.ts";
 import { $connected } from "../../stores/app.ts";
-import type { ChannelsStatusSnapshot, ConfigUiHints, NostrProfile } from "../types.ts";
+import type {
+  ChannelsStatusSnapshot,
+  ConfigSchemaResponse,
+  ConfigUiHints,
+  NostrProfile,
+} from "../types.ts";
 import {
   createNostrProfileFormState,
   type NostrProfileFormState,
@@ -44,6 +49,7 @@ export class ChannelsIsland extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     void this.loadChannels(false);
+    void this.loadConfigSchema();
   }
 
   private async loadChannels(probe: boolean) {
@@ -113,7 +119,7 @@ export class ChannelsIsland extends LitElement {
     }
     this.whatsappBusy = true;
     try {
-      await gateway.call("web.logout", {});
+      await gateway.call("channels.logout", {});
       this.whatsappMessage = "Logged out";
       this.whatsappQrDataUrl = null;
       this.whatsappConnected = false;
@@ -152,7 +158,7 @@ export class ChannelsIsland extends LitElement {
     }
     this.configSaving = true;
     try {
-      await gateway.call("config.save", { raw: JSON.stringify(this.configForm, null, 2) });
+      await gateway.call("config.set", { raw: JSON.stringify(this.configForm, null, 2) });
       this.configFormDirty = false;
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
@@ -161,21 +167,32 @@ export class ChannelsIsland extends LitElement {
     }
   }
 
-  private async reloadConfig() {
+  private async loadConfigSchema() {
+    if (this.configSchemaLoading) {
+      return;
+    }
     this.configSchemaLoading = true;
     try {
-      const result = await gateway.call<{
-        config?: Record<string, unknown>;
-        uiHints?: ConfigUiHints;
-        schema?: unknown;
-      }>("config.get");
-      this.configForm = result.config ?? null;
-      this.configUiHints = result.uiHints ?? {};
-      this.configFormDirty = false;
+      const res = await gateway.call<ConfigSchemaResponse>("config.schema", {});
+      this.configSchema = res.schema ?? null;
+      this.configUiHints = res.uiHints ?? {};
     } catch (err) {
       this.lastError = err instanceof Error ? err.message : String(err);
     } finally {
       this.configSchemaLoading = false;
+    }
+  }
+
+  private async reloadConfig() {
+    try {
+      const [result] = await Promise.all([
+        gateway.call<{ config?: Record<string, unknown> }>("config.get", {}),
+        this.loadConfigSchema(),
+      ]);
+      this.configForm = result.config ?? null;
+      this.configFormDirty = false;
+    } catch (err) {
+      this.lastError = err instanceof Error ? err.message : String(err);
     }
   }
 
