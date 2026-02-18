@@ -1,6 +1,6 @@
 import { lookup as dnsLookupCb, type LookupAddress } from "node:dns";
 import { lookup as dnsLookup } from "node:dns/promises";
-import { Agent, type Dispatcher } from "undici";
+import { Agent, Dispatcher } from "undici";
 import { normalizeHostname } from "./hostname.js";
 
 type LookupCallback = (
