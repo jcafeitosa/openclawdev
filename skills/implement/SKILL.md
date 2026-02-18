@@ -141,11 +141,23 @@ Ative quando o usuário pede uma feature nova não trivial (>3 arquivos, novo do
 
 **Goal**: Entender o código existente antes de qualquer decisão.
 
-Spawne 2-3 `code-explorer` agents em paralelo, cada um com foco diferente:
+Spawne 2-3 agentes de exploração em paralelo, cada um com foco diferente:
 
-- "Trace features similares a [X] — como estão implementadas?"
-- "Mapeie a arquitetura de [área] — abstrações e fluxo de controle"
-- "Identifique padrões de UI/teste/integração relevantes para [feature]"
+```typescript
+// Exploração em paralelo — use agentId baseado no domínio da feature
+sessions_spawn({
+  agentId: "deep-research",
+  task: "Trace features similares a [X] — como estão implementadas? Liste arquivos-chave.",
+});
+sessions_spawn({
+  agentId: "software-architect",
+  task: "Mapeie a arquitetura de [área] — abstrações e fluxo de controle. Liste arquivos essenciais.",
+});
+sessions_spawn({
+  agentId: "root-cause-analyst",
+  task: "Identifique padrões de UI/teste/integração relevantes para [feature]. Liste arquivos.",
+});
+```
 
 Após os agents retornarem, **leia todos os arquivos identificados** antes de prosseguir.
 
@@ -167,14 +179,22 @@ Perguntas que DEVEM ser respondidas:
 
 **Goal**: Projetar a arquitetura com base nos padrões existentes.
 
-Spawne `code-architect` agent:
+Spawne o arquiteto do domínio relevante:
 
-- Analisa padrões existentes no codebase
-- Propõe arquitetura concreta (não "opções")
-- Lista TODOS os arquivos a criar/modificar
-- Define sequência de implementação
+```typescript
+// Escolha pelo domínio — backend, frontend, sistema, ou cross-stack
+sessions_spawn({
+  agentId: "software-architect",
+  task: "Projete arquitetura para [feature]. Analise padrões existentes no codebase. Proponha design concreto (não opções). Liste TODOS os arquivos a criar/modificar. Defina sequência de build em fases.",
+});
+// Alternativas por domínio:
+// agentId: "backend-architect"   → APIs, Elysia, server-side
+// agentId: "frontend-architect"  → Astro, React Islands, componentes
+// agentId: "system-architect"    → distribuído, escalabilidade
+// agentId: "solutions-architect" → integração cross-stack
+```
 
-Output do architect:
+Output esperado do architect:
 
 - Decisão arquitetural com rationale
 - Blueprint completo (file → responsibility → interface)
@@ -199,7 +219,7 @@ Use subagents para módulos paralelos quando possível.
 
 **Goal**: Revisar antes de entregar.
 
-Spawne `code-reviewer` agent (confidence ≥ 80):
+Spawne o agente de review adequado (confidence ≥ 80):
 
 - Guidelines compliance
 - Bug detection

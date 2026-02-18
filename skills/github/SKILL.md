@@ -205,15 +205,19 @@ gh pr list --state open --author @me
 
 ---
 
-## Linking PRs e Sessions
+## Retomar trabalho em um PR
 
-Quando Claude Code cria um PR via `gh pr create`, ele é automaticamente vinculado à sessão. Para retomar trabalho em um PR específico:
+Para continuar implementação relacionada a um PR existente:
 
 ```bash
-# Retomar sessão de um PR
-claude --resume --from-pr <PR_NUMBER>
-# ou
-claude --resume --from-pr https://github.com/owner/repo/pull/123
+# Ver branch do PR e fazer checkout
+gh pr checkout <PR_NUMBER>
+
+# Ver contexto do PR (title, body, checks, reviews)
+gh pr view <PR_NUMBER> --json title,body,reviewDecision,statusCheckRollup
+
+# Listar commits do PR para contexto
+gh pr view <PR_NUMBER> --json commits --jq '.commits[].messageHeadline'
 ```
 
 ---

@@ -72,29 +72,48 @@ conditions:
 
 ## Actions
 
-- `warn` — Shows message but allows operation (default)
-- `block` — Prevents operation (PreToolUse) or stops session (Stop)
+- `warn` — Mostra mensagem mas permite a operação (default)
+- `block` — Impede a operação
 
-## Workflow: Creating a Rule
+## Como o Agente Usa as Regras
 
-1. Identify the unwanted behavior
-2. Determine which event: bash command? file edit? agent stopping?
-3. Write the regex pattern
-4. Create the `.hookify.{name}.local.md` file
-5. Rules load dynamically — no restart needed
+O hookify funciona via **comportamento proativo do agente**, não via hooks de sistema. O agente:
 
-## File Organization
+1. Antes de executar um comando bash → roda `python3 scripts/rule_engine.py` via `exec`
+2. Antes de escrever um arquivo → verifica as regras
+3. Antes de encerrar → verifica checklist de stop
 
-- **Location**: Project root `.claude/hookify.{name}.local.md`
-- **Naming**: `hookify.{descriptive-name}.local.md`
-- **Gitignore**: Add `.claude/*.local.md` to `.gitignore`
+O engine é model-agnostic: qualquer modelo que use as tools `exec` do OpenClaw pode checar as regras.
 
-## Using the Rule Engine
+```typescript
+// Padrão de uso — o agente checa antes de agir:
+const result = exec(
+  `echo '{"tool_name":"Bash","tool_input":{"command":"${cmd}"}}' | python3 skills/hookify/scripts/rule_engine.py`,
+);
+if (result.stdout) {
+  /* há aviso ou bloqueio — leia e siga */
+}
+```
 
-The rule engine is at `scripts/rule_engine.py`. Run directly for testing:
+## Workflow: Criando uma Regra
+
+1. Identifique o comportamento indesejado
+2. Determine o tipo de evento: comando bash, edição de arquivo, encerramento?
+3. Escreva o regex pattern
+4. Crie o arquivo `.hookify.{name}.local.md` na raiz do projeto
+5. Regras são lidas dinamicamente a cada verificação
+
+## Organização de Arquivos
+
+- **Localização**: Raiz do projeto → `.hookify.{name}.local.md`
+- **Nomenclatura**: `hookify.{nome-descritivo}.local.md`
+- **Gitignore**: Adicione `*.hookify.*.local.md` ao `.gitignore`
+
+## Testando o Rule Engine
 
 ```bash
-echo '{"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}' | python3 scripts/rule_engine.py
+echo '{"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}' \
+  | python3 /Users/juliocezar/Desenvolvimento/openclawdev/skills/hookify/scripts/rule_engine.py
 ```
 
 ## Example Rules

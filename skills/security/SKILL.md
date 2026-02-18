@@ -171,36 +171,36 @@ O security hook intercepta edições de arquivo em tempo real e avisa sobre 9 pa
 | 8   | `os.system()` (Python)                    | Command injection         |
 | 9   | GitHub Actions com inputs não sanitizados | Workflow injection        |
 
-### Ativando o Hook
+### Usando o Hook
 
-O script fica em `skills/security/hooks/security_hook.py`. Para ativar, adicione ao seu `~/.claude/settings.json`:
+O script fica em `skills/security/hooks/security_hook.py`. É model-agnostic — qualquer agente pode rodá-lo via `exec` antes de editar arquivos.
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 /Users/juliocezar/Desenvolvimento/openclawdev/skills/security/hooks/security_hook.py",
-            "timeout": 10
-          }
-        ]
-      }
-    ]
+**Uso proativo pelo agente** (antes de escrever qualquer arquivo):
+
+```bash
+# O agente checa antes de editar — passa o contexto como JSON
+echo '{
+  "session_id": "current",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "caminho/do/arquivo.ts",
+    "new_string": "conteúdo novo aqui"
   }
-}
+}' | python3 /Users/juliocezar/Desenvolvimento/openclawdev/skills/security/hooks/security_hook.py
+
+# Exit 0 = seguro prosseguir
+# Exit 2 = aviso de segurança no stderr — leia antes de continuar
 ```
+
+**Variável de controle**: `ENABLE_SECURITY_REMINDER=0` desabilita o hook.
 
 ### Como Funciona
 
-1. Intercepta toda edição/escrita de arquivo (PreToolUse)
-2. Verifica path do arquivo e conteúdo novo contra 9 padrões
-3. Se match encontrado — envia aviso detalhado ao agente (exit 2)
-4. O aviso aparece UMA vez por arquivo/sessão (não spam)
-5. Se `ENABLE_SECURITY_REMINDER=0` — hook desabilitado
+1. Agente passa contexto da edição via JSON (stdin)
+2. Script verifica path do arquivo e conteúdo novo contra 9 padrões
+3. Se match → imprime aviso detalhado no stderr (exit 2)
+4. O aviso aparece UMA vez por arquivo/sessão (sem spam repetido)
+5. Exit 0 = operação segura, pode prosseguir
 
 ### Alternativas Seguras
 

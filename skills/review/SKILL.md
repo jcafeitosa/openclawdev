@@ -184,31 +184,34 @@ For comprehensive PR reviews, use 6 specialized agents in parallel. Each focuses
 ### Running Full PR Review
 
 ```typescript
-// Spawn all 6 agents in parallel
-const pr = await exec("gh pr diff --name-only");
-const files = pr.stdout.trim();
+// Spawn all 6 agents in parallel usando agentIds reais do sistema
+// Obtenha os arquivos alterados primeiro:
+// exec("gh pr diff --name-only") ou exec("git diff --name-only HEAD~1")
 
-// Run in parallel
+// Run in parallel — cada agente com foco específico
 sessions_spawn({
-  agentId: "review",
-  task: `comment-analyzer: Review code comments accuracy in: ${files}`,
-});
-sessions_spawn({ agentId: "review", task: `pr-test-analyzer: Review test coverage in: ${files}` });
-sessions_spawn({
-  agentId: "review",
-  task: `silent-failure-hunter: Find silent failures in: ${files}`,
+  agentId: "tech-lead",
+  task: `Analise a qualidade e precisão dos comentários de código nos arquivos: ${files}. Verifique se comentários explicam o "porquê" (não o "o quê"), se estão desatualizados, e se TODOs foram endereçados. Report confidence ≥80.`,
 });
 sessions_spawn({
-  agentId: "review",
-  task: `type-design-analyzer: Analyze type design in: ${files}`,
+  agentId: "testing-specialist",
+  task: `Analise cobertura de testes no PR com arquivos: ${files}. Identifique gaps críticos: error paths não testados, edge cases de boundary, lógica de negócio sem negative tests. Rate gaps 1-10.`,
 });
 sessions_spawn({
-  agentId: "review",
-  task: `code-reviewer: General review with confidence ≥80 in: ${files}`,
+  agentId: "security-engineer",
+  task: `Caça silent failures nos arquivos: ${files}. Procure: catch blocks genéricos, erros logados mas não surfaceados, fallbacks sem notificação ao usuário, optional chaining escondendo erros.`,
 });
 sessions_spawn({
-  agentId: "review",
-  task: `code-simplifier: Simplify code for clarity in: ${files}`,
+  agentId: "software-architect",
+  task: `Analise design de tipos nos arquivos: ${files}. Rate cada tipo novo em: encapsulamento (1-10), expressão de invariantes (1-10), utilidade (1-10), enforcement (1-10). Report tipos com qualquer dimensão < 7.`,
+});
+sessions_spawn({
+  agentId: "tech-lead",
+  task: `Code review geral dos arquivos: ${files}. Use confidence scoring (0-100), reporte apenas issues ≥80. Foque em: bugs reais, guidelines do projeto (AGENTS.md/SOUL.md), security, qualidade.`,
+});
+sessions_spawn({
+  agentId: "refactoring-expert",
+  task: `Simplifique o código nos arquivos: ${files} para maior clareza e manutenibilidade. Preserve comportamento exato. Reduza: condicionais redundantes, lógica aninhada, variáveis desnecessárias. Use features nativas da linguagem.`,
 });
 ```
 
