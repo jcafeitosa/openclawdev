@@ -3238,7 +3238,6 @@
 .hierarchy-chart-container {
   width: 100%;
   min-height: 400px;
-  max-height: 700px;
   background: var(--bg-elevated);
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
@@ -3300,6 +3299,11 @@
 .hierarchy-node-header:hover {
   border-color: var(--node-border, var(--border-strong));
   box-shadow: var(--shadow-sm);
+}
+
+.hierarchy-node-header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .hierarchy-node-indicator {
@@ -3386,6 +3390,13 @@
 
 .hierarchy-node-header[data-status="running"] {
   animation: hierarchy-glow 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hierarchy-node-indicator[data-status="running"],
+  .hierarchy-node-header[data-status="running"] {
+    animation: none;
+  }
 }
 
 .hierarchy-node[data-just-updated="true"] .hierarchy-node-header {

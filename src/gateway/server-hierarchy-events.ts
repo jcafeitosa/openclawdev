@@ -261,12 +261,16 @@ function resolveKnownAgentId(cfg: ReturnType<typeof loadConfig>, raw: string): s
 }
 
 function resolveAgentModelLabel(cfg: OpenClawConfig, agentId: string): string | undefined {
-  const override = resolveAgentModelPrimary(cfg, agentId);
-  if (override) {
-    return override;
+  try {
+    const override = resolveAgentModelPrimary(cfg, agentId);
+    if (override) {
+      return override;
+    }
+    const ref = resolveDefaultModelForAgent({ cfg, agentId });
+    return `${ref.provider}/${ref.model}`;
+  } catch {
+    return undefined;
   }
-  const ref = resolveDefaultModelForAgent({ cfg, agentId });
-  return `${ref.provider}/${ref.model}`;
 }
 
 function buildHierarchySnapshot(): HierarchySnapshot {
@@ -495,8 +499,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
         }
       }
     }
-  } catch {
-    // Collaboration data is optional — don't break hierarchy if it fails
+  } catch (err) {
+    // Collaboration data is optional — log for observability but don't break hierarchy
+    console.warn("[hierarchy] Failed to build collaboration edges:", String(err));
   }
 
   // Extract delegation edges from active delegations and build the active-agents set
@@ -565,8 +570,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
         }
       }
     }
-  } catch {
-    // Delegation data is optional
+  } catch (err) {
+    // Delegation data is optional — log for observability
+    console.warn("[hierarchy] Failed to build delegation edges:", String(err));
   }
 
   // Ensure agents referenced in collaboration/delegation edges have nodes.
@@ -582,7 +588,8 @@ function buildHierarchySnapshot(): HierarchySnapshot {
   }
 
   for (const referencedAgentId of referencedAgentIds) {
-    const agentId = resolveKnownAgentId(cfg, referencedAgentId);
+    // Edge source/target are already resolved agentIds from resolveKnownAgentId earlier
+    const agentId = referencedAgentId;
     if (!agentId) {
       continue;
     }
@@ -606,6 +613,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       agentId,
       agentRole: role,
       label: computeAgentDisplayLabel(cfg, agentId),
+      model: resolveAgentModelLabel(cfg, agentId),
       status: derivedStatus,
       endedAt: derivedEndedAt,
       children: [],
