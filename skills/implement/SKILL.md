@@ -120,6 +120,147 @@ Type of work?
 |   --> sessions_spawn(agentId: "performance-engineer")
 ```
 
+## FEATURE DEV MODE — 7 Phase Workflow
+
+Para features novas e complexas, use este workflow estruturado em lugar de ir direto à execução.
+
+Ative quando o usuário pede uma feature nova não trivial (>3 arquivos, novo domínio, nova integração).
+
+### Phase 1 — Discovery
+
+**Goal**: Entender o que precisa ser construído.
+
+1. Crie todo list com todas as fases
+2. Se a feature não está clara, pergunte:
+   - Que problema resolve?
+   - O que exatamente deve fazer?
+   - Constraints ou requisitos?
+3. Resuma o entendimento e confirme
+
+### Phase 2 — Codebase Exploration
+
+**Goal**: Entender o código existente antes de qualquer decisão.
+
+Spawne 2-3 `code-explorer` agents em paralelo, cada um com foco diferente:
+
+- "Trace features similares a [X] — como estão implementadas?"
+- "Mapeie a arquitetura de [área] — abstrações e fluxo de controle"
+- "Identifique padrões de UI/teste/integração relevantes para [feature]"
+
+Após os agents retornarem, **leia todos os arquivos identificados** antes de prosseguir.
+
+### Phase 3 — Clarifying Questions
+
+**Goal**: Eliminar todas as ambiguidades ANTES de projetar.
+
+Perguntas que DEVEM ser respondidas:
+
+- Casos de borda e edge cases
+- Comportamento esperado em erros
+- Integração com features existentes
+- Requisitos de performance
+- Constraints de segurança
+
+**Aguarde respostas antes de projetar.**
+
+### Phase 4 — Architecture Design
+
+**Goal**: Projetar a arquitetura com base nos padrões existentes.
+
+Spawne `code-architect` agent:
+
+- Analisa padrões existentes no codebase
+- Propõe arquitetura concreta (não "opções")
+- Lista TODOS os arquivos a criar/modificar
+- Define sequência de implementação
+
+Output do architect:
+
+- Decisão arquitetural com rationale
+- Blueprint completo (file → responsibility → interface)
+- Sequência de build em fases
+
+**Confirme o design com o usuário antes de implementar.**
+
+### Phase 5 — Implementation
+
+**Goal**: Implementar seguindo o blueprint aprovado.
+
+Siga o plano do architect. A cada arquivo:
+
+1. Implemente
+2. `pnpm lint [file]` — 0 erros
+3. `pnpm typecheck` — 0 erros
+4. Testes para o módulo
+
+Use subagents para módulos paralelos quando possível.
+
+### Phase 6 — Code Review
+
+**Goal**: Revisar antes de entregar.
+
+Spawne `code-reviewer` agent (confidence ≥ 80):
+
+- Guidelines compliance
+- Bug detection
+- Security check
+- Code quality
+
+Corrija todos os issues de confidence ≥ 80.
+
+### Phase 7 — Delivery
+
+**Goal**: Entregar limpo e documentado.
+
+```bash
+pnpm build    # 0 erros
+pnpm check    # 0 warnings
+pnpm test     # 100% passando
+```
+
+Commit ou PR seguindo o padrão do projeto.
+
+---
+
+## RALPH-WIGGUM LOOP — Autonomous Iteration
+
+Para tasks que precisam de iteração até completar (ex: "implementar X até funcionar perfeitamente").
+
+**Como funciona**: O agente executa a task, vê o próprio trabalho anterior, e itera até atingir a condição de conclusão.
+
+### Quando usar
+
+- Task que requer múltiplos ciclos (testes falhando → corrigir → testar novamente)
+- Refinamento iterativo de código
+- Build-until-green workflows
+
+### Pattern de implementação
+
+```markdown
+## Iteração [N]
+
+**Vendo trabalho anterior**: [lê git log, arquivos modificados]
+
+**Status atual**:
+
+- Build: [passou/falhou]
+- Testes: [X/Y passando]
+- Issues pendentes: [lista]
+
+**Ações desta iteração**:
+
+1. [o que vou corrigir]
+2. [por que]
+
+**Condição de conclusão**: Só termino quando pnpm build + pnpm test = 0 erros.
+```
+
+### Regra crítica do Ralph Loop
+
+Só declare conclusão quando a condição for **completamente e inequivocamente verdadeira**. Não declare "pronto" para escapar do loop — o loop está lá justamente para garantir a qualidade.
+
+---
+
 ## PHASE 3: EXECUTION (50%)
 
 ### Share Outputs
