@@ -109,6 +109,27 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     }
     const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
     const key = `${agentId}:${workspaceDir}:${JSON.stringify(settings)}`;
+
+    // ── PostgreSQL + pgvector backend ─────────────────────────────────────────
+    if (cfg.memory?.backend === "pg") {
+      const pgKey = `pg:${key}`;
+      const existing = INDEX_CACHE.get(pgKey);
+      if (existing) {
+        return existing;
+      }
+      // Dynamic import to avoid circular dependency (manager-pg imports manager)
+      const { MemoryIndexManagerPg } = await import("./manager-pg.js");
+      const pgManager = await MemoryIndexManagerPg.createPg({
+        cfg,
+        agentId,
+        purpose: params.purpose,
+        cacheKey: pgKey,
+      });
+      INDEX_CACHE.set(pgKey, pgManager);
+      return pgManager;
+    }
+
+    // ── SQLite backend (default) ───────────────────────────────────────────────
     const existing = INDEX_CACHE.get(key);
     if (existing) {
       return existing;
@@ -135,7 +156,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
     return manager;
   }
 
-  private constructor(params: {
+  protected constructor(params: {
     cacheKey: string;
     cfg: OpenClawConfig;
     agentId: string;
