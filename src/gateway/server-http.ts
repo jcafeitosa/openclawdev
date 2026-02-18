@@ -608,6 +608,8 @@ export function attachGatewayUpgradeHandler(opts: {
 }) {
   const { httpServer, wss, canvasHost, clients, resolvedAuth, rateLimiter } = opts;
   httpServer.on("upgrade", (req, socket, head) => {
+    const listeners = httpServer.listeners("upgrade");
+    console.log(`[gateway] upgrade request: ${req.url}, total upgrade listeners: ${listeners.length}`);
     void (async () => {
       if (canvasHost) {
         const url = new URL(req.url ?? "/", "http://localhost");
