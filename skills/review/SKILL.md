@@ -161,6 +161,183 @@ collaboration({ action: "review.list", completed: true });
 
 ---
 
+## Confidence Scoring System
+
+Every issue must have a confidence score (0-100). **Only report issues with score ≥ 80.**
+
+| Score  | Level          | Meaning                                       |
+| ------ | -------------- | --------------------------------------------- |
+| 0-25   | False positive | Pre-existing issue or unrelated               |
+| 26-50  | Possible       | Might be an issue, likely nitpick             |
+| 51-75  | Probable       | Real issue but low impact                     |
+| 76-90  | Important      | Likely real, will impact functionality        |
+| 91-100 | Critical       | Confirmed bug or explicit guideline violation |
+
+**Focus on quality over quantity.** 3 high-confidence issues beat 15 uncertain ones.
+
+---
+
+## PR Review Toolkit — Specialized Agents
+
+For comprehensive PR reviews, use 6 specialized agents in parallel. Each focuses on one dimension.
+
+### Running Full PR Review
+
+```typescript
+// Spawn all 6 agents in parallel
+const pr = await exec("gh pr diff --name-only");
+const files = pr.stdout.trim();
+
+// Run in parallel
+sessions_spawn({
+  agentId: "review",
+  task: `comment-analyzer: Review code comments accuracy in: ${files}`,
+});
+sessions_spawn({ agentId: "review", task: `pr-test-analyzer: Review test coverage in: ${files}` });
+sessions_spawn({
+  agentId: "review",
+  task: `silent-failure-hunter: Find silent failures in: ${files}`,
+});
+sessions_spawn({
+  agentId: "review",
+  task: `type-design-analyzer: Analyze type design in: ${files}`,
+});
+sessions_spawn({
+  agentId: "review",
+  task: `code-reviewer: General review with confidence ≥80 in: ${files}`,
+});
+sessions_spawn({
+  agentId: "review",
+  task: `code-simplifier: Simplify code for clarity in: ${files}`,
+});
+```
+
+### Agent 1: comment-analyzer
+
+**When**: After adding docs/comments, before finalizing PR
+
+**Mission**: Verify every comment adds genuine value and remains accurate.
+
+Check:
+
+- ✅ Function signatures match documented params/return types
+- ✅ Described behavior aligns with actual code logic
+- ✅ Referenced types, functions, variables exist and are used correctly
+- ✅ Edge cases mentioned are actually handled
+- ✅ Comments explain _why_, not _what_ (code already shows _what_)
+- ❌ Comments that merely restate obvious code → flag for removal
+- ❌ TODOs/FIXMEs that may already be addressed
+
+### Agent 2: pr-test-analyzer
+
+**When**: After creating or updating a PR with new functionality
+
+**Mission**: Ensure tests cover critical paths without being pedantic about 100%.
+
+Check:
+
+- ✅ Error handling paths that could cause silent failures
+- ✅ Edge cases for boundary conditions
+- ✅ Critical business logic branches
+- ✅ Negative test cases for validation logic
+- ✅ Async/concurrent behavior where relevant
+- Rate each gap: criticality 1-10 (10 = blocking)
+- Explain specific regression each missing test would catch
+
+### Agent 3: silent-failure-hunter
+
+**When**: Reviewing any error handling, catch blocks, or fallback logic
+
+**Non-negotiable rules**:
+
+1. Silent failures are unacceptable — every error needs logging + user feedback
+2. Users deserve actionable feedback — messages must say what failed and what to do
+3. Fallbacks must be explicit and justified
+4. Catch blocks must be specific — `catch (e: any)` hides unrelated errors
+5. Mock/fake implementations belong only in tests
+
+Systematically find:
+
+- All try-catch blocks
+- All error callbacks
+- All conditional branches handling error states
+- All fallback logic / default values on failure
+- All optional chaining (`?.`) that might hide errors
+
+### Agent 4: type-design-analyzer
+
+**When**: Introducing new types, before PR creation, when refactoring types
+
+**Rate each type on 4 dimensions (1-10)**:
+
+1. **Encapsulation** — Are internals hidden? Can invariants be violated from outside?
+2. **Invariant Expression** — How clearly are constraints communicated through the type structure?
+3. **Invariant Usefulness** — Do invariants prevent real bugs? Are they aligned with business rules?
+4. **Enforcement** — Are invariants enforced at compile-time where possible?
+
+Report types with any dimension < 7.
+
+### Agent 5: code-reviewer (with Confidence Scoring)
+
+**When**: Proactively after writing code, before commits or PRs
+
+Default scope: `git diff` (unstaged changes)
+
+Review dimensions:
+
+- **Project Guidelines**: CLAUDE.md / AGENTS.md compliance, import patterns, naming
+- **Bug Detection**: Logic errors, null handling, race conditions, memory leaks
+- **Security**: All OWASP categories, auth checks, input validation
+- **Code Quality**: Duplication, missing error handling, accessibility
+
+**Format output**:
+
+```
+## Code Review
+
+Reviewing: [files/scope]
+
+### Critical Issues (confidence ≥ 91)
+- [confidence: 95] file.ts:42 — [description] | [fix]
+
+### Important Issues (confidence 80-90)
+- [confidence: 85] file.ts:88 — [description] | [fix]
+
+### No issues found / All checks pass ✅
+```
+
+### Agent 6: code-simplifier
+
+**When**: After completing a logical chunk of code, before commit
+
+**Focus**: Reduce complexity while preserving exact functionality.
+
+Analyze:
+
+- Redundant conditionals that can be simplified
+- Nested logic that can be flattened
+- Variables that exist only once (inline them)
+- Code that can use built-in language features
+- Overly verbose patterns vs concise equivalents
+
+**Never**: Change behavior, add functionality, remove error handling, or change test coverage.
+
+---
+
+## When to Use Each Agent
+
+| Scenario                  | Agents to Use                   |
+| ------------------------- | ------------------------------- |
+| Quick self-review         | code-reviewer only              |
+| Before PR creation        | code-reviewer + code-simplifier |
+| PR with new types         | + type-design-analyzer          |
+| PR with error handling    | + silent-failure-hunter         |
+| PR with docs/comments     | + comment-analyzer              |
+| PR with new features      | + pr-test-analyzer              |
+| Full comprehensive review | All 6 agents in parallel        |
+
+---
+
 ## Delegation
 
 For security-focused review:
