@@ -72,6 +72,12 @@ export class OverviewIsland extends LitElement {
 
   private async handleConnect() {
     try {
+      // Reconnect the WebSocket with current settings (URL, token, password)
+      const url = this.settings.gatewayUrl.trim() || undefined;
+      const token = this.settings.token.trim() || undefined;
+      const password = this.password.trim() || undefined;
+      gateway.connect(url, token, password);
+      // Wait briefly for the handshake, then reload dashboard data
       await gateway.call("hello");
       await this.loadData();
     } catch (err) {

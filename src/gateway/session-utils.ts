@@ -383,17 +383,24 @@ export function listAgentsForGateway(cfg: OpenClawConfig): {
       identity,
     });
   }
+  // Merge explicit config IDs with disk-discovered agents so that
+  // agents created by skills, delegation, or other runtime mechanisms
+  // always appear in the gateway listing.
   const explicitIds = new Set(
     (cfg.agents?.list ?? [])
       .map((entry) => (entry?.id ? normalizeAgentId(entry.id) : ""))
       .filter(Boolean),
   );
-  const allowedIds = explicitIds.size > 0 ? new Set([...explicitIds, defaultId]) : null;
-  let agentIds = listConfiguredAgentIds(cfg).filter((id) =>
-    allowedIds ? allowedIds.has(id) : true,
-  );
-  if (mainKey && !agentIds.includes(mainKey) && (!allowedIds || allowedIds.has(mainKey))) {
-    agentIds = [...agentIds, mainKey];
+  const diskIds = listExistingAgentIdsFromDisk();
+  const allKnownIds = new Set([...explicitIds, ...diskIds, defaultId]);
+  let agentIds = Array.from(allKnownIds).filter(Boolean);
+  agentIds.sort((a, b) => a.localeCompare(b));
+  if (mainKey && !agentIds.includes(mainKey)) {
+    agentIds.push(mainKey);
+  }
+  // Keep defaultId at the front
+  if (agentIds.includes(defaultId)) {
+    agentIds = [defaultId, ...agentIds.filter((id) => id !== defaultId)];
   }
   const agents = agentIds.map((id) => {
     const meta = configuredById.get(id);

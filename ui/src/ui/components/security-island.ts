@@ -42,24 +42,22 @@ export class SecurityIsland extends LitElement {
     this.loading = true;
     this.error = null;
     try {
-      const result = await gateway.call<{
-        summary: SecuritySummary;
-        stats: SecurityEventStats;
-        events: SecurityEvent[];
-        alerts: SecurityEvent[];
-        blocked: SecurityEvent[];
-      }>("security.summary", {
-        category: this.filterCategory,
-        severity: this.filterSeverity,
-        timeRange: this.filterTimeRange,
-        page: this.eventsPage,
-        limit: this.eventsPerPage,
-      });
-      this.summary = result.summary;
-      this.stats = result.stats;
-      this.events = result.events;
-      this.alerts = result.alerts;
-      this.blocked = result.blocked;
+      // The security.summary handler returns a flat SecuritySummary shape
+      const raw = await gateway.call<SecuritySummary>("security.summary");
+      this.summary = raw;
+      // Derive stats from the summary for the summary tab
+      this.stats = {
+        totalEvents: raw.totalEvents ?? 0,
+        byCategory: {},
+        bySeverity: {
+          critical: raw.criticalCount ?? 0,
+          high: raw.highCount ?? 0,
+        },
+        blockedCount: raw.blockedCount ?? 0,
+        timeRange: { start: null, end: null },
+      };
+      this.alerts = raw.recentAlerts ?? [];
+      this.blocked = raw.recentBlocked ?? [];
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
     } finally {

@@ -15,6 +15,37 @@ export type UiSettings = {
   navGroupsCollapsed: Record<string, boolean>; // Which nav groups are collapsed
 };
 
+/**
+ * Extract token from URL hash fragment (e.g. `#token=abc123`).
+ * The `openclaw dashboard` CLI command embeds the gateway token in the
+ * URL fragment so it never leaks via query params or Referer headers.
+ * When found, the token is persisted to localStorage and the hash is
+ * cleared from the address bar to keep URLs clean.
+ */
+function extractHashToken(): string | null {
+  if (typeof globalThis.location === "undefined") {
+    return null;
+  }
+  const hash = globalThis.location.hash;
+  if (!hash) {
+    return null;
+  }
+  const params = new URLSearchParams(hash.slice(1));
+  const token = params.get("token");
+  if (!token) {
+    return null;
+  }
+  // Clear the hash so the token doesn't linger in the address bar
+  if (typeof globalThis.history !== "undefined") {
+    globalThis.history.replaceState(
+      null,
+      "",
+      globalThis.location.pathname + globalThis.location.search,
+    );
+  }
+  return token;
+}
+
 export function loadSettings(): UiSettings {
   const defaultUrl = (() => {
     if (typeof globalThis.location === "undefined") {
@@ -42,21 +73,32 @@ export function loadSettings(): UiSettings {
     navGroupsCollapsed: {},
   };
 
+  // Check for a token embedded in the URL hash (from `openclaw dashboard`)
+  const hashToken = extractHashToken();
+
   try {
     if (typeof globalThis.localStorage === "undefined") {
+      if (hashToken) {
+        return { ...defaults, token: hashToken };
+      }
       return defaults;
     }
     const raw = localStorage.getItem(KEY);
     if (!raw) {
-      return defaults;
+      const settings = hashToken ? { ...defaults, token: hashToken } : defaults;
+      if (hashToken) {
+        saveSettings(settings);
+      }
+      return settings;
     }
     const parsed = JSON.parse(raw) as Partial<UiSettings>;
-    return {
+    const token = hashToken || (typeof parsed.token === "string" ? parsed.token : defaults.token);
+    const result: UiSettings = {
       gatewayUrl:
         typeof parsed.gatewayUrl === "string" && parsed.gatewayUrl.trim()
           ? parsed.gatewayUrl.trim()
           : defaults.gatewayUrl,
-      token: typeof parsed.token === "string" ? parsed.token : defaults.token,
+      token,
       sessionKey:
         typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()
           ? parsed.sessionKey.trim()
@@ -89,7 +131,17 @@ export function loadSettings(): UiSettings {
           ? parsed.navGroupsCollapsed
           : defaults.navGroupsCollapsed,
     };
+    // Persist the hash token so subsequent page loads use it
+    if (hashToken) {
+      saveSettings(result);
+    }
+    return result;
   } catch {
+    if (hashToken) {
+      const settings = { ...defaults, token: hashToken };
+      saveSettings(settings);
+      return settings;
+    }
     return defaults;
   }
 }

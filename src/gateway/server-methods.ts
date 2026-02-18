@@ -14,13 +14,17 @@ import { logsHandlers } from "./server-methods/logs.js";
 import { meshHandlers } from "./server-methods/mesh.js";
 import { modelsHandlers } from "./server-methods/models.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
+import { providersHealthHandlers } from "./server-methods/providers-health.js";
+import { securityHandlers } from "./server-methods/security.js";
 import { sendHandlers } from "./server-methods/send.js";
 import { sessionsHandlers } from "./server-methods/sessions.js";
 import { skillsHandlers } from "./server-methods/skills.js";
 import { systemHandlers } from "./server-methods/system.js";
 import { talkHandlers } from "./server-methods/talk.js";
 import { ttsHandlers } from "./server-methods/tts.js";
+import { twitterHandlers } from "./server-methods/twitter.js";
 import type { GatewayRequestHandlers, GatewayRequestOptions } from "./server-methods/types.js";
+import { uiBridgeHandlers } from "./server-methods/ui-bridge.js";
 import { updateHandlers } from "./server-methods/update.js";
 import { usageHandlers } from "./server-methods/usage.js";
 import { voicewakeHandlers } from "./server-methods/voicewake.js";
@@ -81,6 +85,26 @@ const READ_METHODS = new Set([
   "talk.config",
   "mesh.plan",
   "mesh.status",
+  "providers.health",
+  "providers.health.check",
+  "providers.health.ranked",
+  "presence.list",
+  "agents.hierarchy",
+  "voice.status",
+  "agent-resources.list",
+  "system.info",
+  "security.summary",
+  "security.events.query",
+  "security.events.stats",
+  "security.alerts",
+  "security.blocked",
+  "security.session",
+  "security.ip",
+  "security.audit",
+  "status.get",
+  "health.check",
+  "twitter.data",
+  "twitter.relationships",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -100,6 +124,10 @@ const WRITE_METHODS = new Set([
   "mesh.plan.auto",
   "mesh.run",
   "mesh.retry",
+  "voice.toggleTts",
+  "voice.setTtsProvider",
+  "voice.setWakeWord",
+  "voice.toggleTalkMode",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -201,6 +229,10 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...agentHandlers,
   ...agentsHandlers,
   ...browserHandlers,
+  ...providersHealthHandlers,
+  ...securityHandlers,
+  ...twitterHandlers,
+  ...uiBridgeHandlers,
 };
 
 export async function handleGatewayRequest(
