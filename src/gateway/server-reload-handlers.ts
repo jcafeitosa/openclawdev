@@ -7,6 +7,7 @@ import type { loadConfig } from "../config/config.js";
 import { startGmailWatcher, stopGmailWatcher } from "../hooks/gmail-watcher.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 import type { HeartbeatRunner } from "../infra/heartbeat-runner.js";
+import { getMachineDisplayName } from "../infra/machine-name.js";
 import { resetDirectoryCache } from "../infra/outbound/target-resolver.js";
 import {
   deferGatewayRestartUntilIdle,
@@ -15,10 +16,13 @@ import {
 } from "../infra/restart.js";
 import { setCommandLaneConcurrency, getTotalQueueSize } from "../process/command-queue.js";
 import { CommandLane } from "../process/lanes.js";
+import { startChannelHealthMonitor, type ChannelHealthMonitor } from "./channel-health-monitor.js";
 import type { ChannelKind, GatewayReloadPlan } from "./config-reload.js";
 import { resolveHooksConfig } from "./hooks.js";
 import { startBrowserControlServerIfEnabled } from "./server-browser.js";
+import type { ChannelManager } from "./server-channels.js";
 import { buildGatewayCronService, type GatewayCronState } from "./server-cron.js";
+import { startGatewayDiscovery } from "./server-discovery-runtime.js";
 import { broadcastHierarchyFullRefresh } from "./server-hierarchy-events.js";
 
 type GatewayHotReloadState = {
@@ -26,6 +30,9 @@ type GatewayHotReloadState = {
   heartbeatRunner: HeartbeatRunner;
   cronState: GatewayCronState;
   browserControl: Awaited<ReturnType<typeof startBrowserControlServerIfEnabled>> | null;
+  channelHealthMonitor: ChannelHealthMonitor | null;
+  machineDisplayName: string;
+  bonjourStop: (() => Promise<void>) | null;
 };
 
 export function createGatewayReloadHandlers(params: {
@@ -44,6 +51,11 @@ export function createGatewayReloadHandlers(params: {
   logChannels: { info: (msg: string) => void; error: (msg: string) => void };
   logCron: { error: (msg: string) => void };
   logReload: { info: (msg: string) => void; warn: (msg: string) => void };
+  logDiscovery: { info: (msg: string) => void; warn: (msg: string) => void };
+  channelManager: ChannelManager;
+  port: number;
+  gatewayTls: { enabled: boolean; fingerprintSha256?: string };
+  tailscaleMode: "off" | "serve" | "funnel";
 }) {
   const applyHotReload = async (
     plan: GatewayReloadPlan,
@@ -115,6 +127,38 @@ export function createGatewayReloadHandlers(params: {
       } else {
         params.logHooks.info("skipping gmail watcher restart (OPENCLAW_SKIP_GMAIL_WATCHER=1)");
       }
+    }
+
+    if (plan.restartDiscovery) {
+      if (state.bonjourStop) {
+        await state.bonjourStop().catch(() => {});
+      }
+      nextState.machineDisplayName = await getMachineDisplayName();
+      const discovery = await startGatewayDiscovery({
+        machineDisplayName: nextState.machineDisplayName,
+        port: params.port,
+        gatewayTls: params.gatewayTls,
+        wideAreaDiscoveryEnabled: nextConfig.discovery?.wideArea?.enabled === true,
+        wideAreaDiscoveryDomain: nextConfig.discovery?.wideArea?.domain,
+        tailscaleMode: params.tailscaleMode,
+        mdnsMode: nextConfig.discovery?.mdns?.mode,
+        logDiscovery: params.logDiscovery,
+      });
+      nextState.bonjourStop = discovery.bonjourStop;
+    }
+
+    if (plan.restartHealthMonitor) {
+      if (state.channelHealthMonitor) {
+        state.channelHealthMonitor.stop();
+      }
+      const healthCheckMinutes = nextConfig.gateway?.channelHealthCheckMinutes;
+      const healthCheckDisabled = healthCheckMinutes === 0;
+      nextState.channelHealthMonitor = healthCheckDisabled
+        ? null
+        : startChannelHealthMonitor({
+            channelManager: params.channelManager,
+            checkIntervalMs: (healthCheckMinutes ?? 5) * 60_000,
+          });
     }
 
     if (plan.restartChannels.size > 0) {

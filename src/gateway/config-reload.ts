@@ -21,6 +21,8 @@ export type GatewayReloadPlan = {
   restartBrowserControl: boolean;
   restartCron: boolean;
   restartHeartbeat: boolean;
+  restartDiscovery: boolean;
+  restartHealthMonitor: boolean;
   reinitCapabilities: boolean;
   restartChannels: Set<ChannelKind>;
   noopPaths: string[];
@@ -38,6 +40,8 @@ type ReloadAction =
   | "restart-browser-control"
   | "restart-cron"
   | "restart-heartbeat"
+  | "restart-discovery"
+  | "restart-health-monitor"
   | "reinit-capabilities"
   | `restart-channel:${ChannelId}`;
 
@@ -63,6 +67,14 @@ const BASE_RELOAD_RULES: ReloadRule[] = [
     kind: "hot",
     actions: ["restart-browser-control"],
   },
+  { prefix: "discovery", kind: "hot", actions: ["restart-discovery"] },
+  { prefix: "meta.machineDisplayName", kind: "hot", actions: ["restart-discovery"] },
+  {
+    prefix: "gateway.channelHealthCheckMinutes",
+    kind: "hot",
+    actions: ["restart-health-monitor"],
+  },
+  { prefix: "agents", kind: "hot", actions: ["reinit-capabilities"] },
 ];
 
 const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
@@ -71,7 +83,6 @@ const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
   { prefix: "wizard", kind: "none" },
   { prefix: "logging", kind: "none" },
   { prefix: "models", kind: "none" },
-  { prefix: "agents", kind: "hot", actions: ["reinit-capabilities"] },
   { prefix: "tools", kind: "none" },
   { prefix: "bindings", kind: "none" },
   { prefix: "audio", kind: "none" },
@@ -84,7 +95,6 @@ const BASE_RELOAD_RULES_TAIL: ReloadRule[] = [
   { prefix: "plugins", kind: "restart" },
   { prefix: "ui", kind: "none" },
   { prefix: "gateway", kind: "restart" },
-  { prefix: "discovery", kind: "restart" },
   { prefix: "canvasHost", kind: "restart" },
 ];
 
@@ -184,6 +194,8 @@ export function buildGatewayReloadPlan(changedPaths: string[]): GatewayReloadPla
     restartBrowserControl: false,
     restartCron: false,
     restartHeartbeat: false,
+    restartDiscovery: false,
+    restartHealthMonitor: false,
     reinitCapabilities: false,
     restartChannels: new Set(),
     noopPaths: [],
@@ -210,6 +222,12 @@ export function buildGatewayReloadPlan(changedPaths: string[]): GatewayReloadPla
         break;
       case "restart-heartbeat":
         plan.restartHeartbeat = true;
+        break;
+      case "restart-discovery":
+        plan.restartDiscovery = true;
+        break;
+      case "restart-health-monitor":
+        plan.restartHealthMonitor = true;
         break;
       case "reinit-capabilities":
         plan.reinitCapabilities = true;

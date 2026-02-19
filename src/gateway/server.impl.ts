@@ -48,7 +48,7 @@ import { getTotalQueueSize } from "../process/command-queue.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { runOnboardingWizard } from "../wizard/onboarding.js";
 import { createAuthRateLimiter, type AuthRateLimiter } from "./auth-rate-limit.js";
-import { startChannelHealthMonitor } from "./channel-health-monitor.js";
+import { startChannelHealthMonitor, type ChannelHealthMonitor } from "./channel-health-monitor.js";
 import { startGatewayConfigReloader } from "./config-reload.js";
 import type { ControlUiRootState } from "./control-ui.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
@@ -418,8 +418,9 @@ export async function startGatewayServer(
   const { getRuntimeSnapshot, startChannels, startChannel, stopChannel, markChannelLoggedOut } =
     channelManager;
 
+  let machineDisplayName = "";
   if (!minimalTestGateway) {
-    const machineDisplayName = await getMachineDisplayName();
+    machineDisplayName = await getMachineDisplayName();
     const discovery = await startGatewayDiscovery({
       machineDisplayName,
       port,
@@ -513,7 +514,7 @@ export async function startGatewayServer(
 
   const healthCheckMinutes = cfgAtStart.gateway?.channelHealthCheckMinutes;
   const healthCheckDisabled = healthCheckMinutes === 0;
-  const channelHealthMonitor = healthCheckDisabled
+  let channelHealthMonitor: ChannelHealthMonitor | null = healthCheckDisabled
     ? null
     : startChannelHealthMonitor({
         channelManager,
@@ -664,6 +665,9 @@ export async function startGatewayServer(
             heartbeatRunner,
             cronState,
             browserControl,
+            channelHealthMonitor,
+            machineDisplayName,
+            bonjourStop,
           }),
           setState: (nextState) => {
             hooksConfig = nextState.hooksConfig;
@@ -672,6 +676,9 @@ export async function startGatewayServer(
             cron = cronState.cron;
             cronStorePath = cronState.storePath;
             browserControl = nextState.browserControl;
+            channelHealthMonitor = nextState.channelHealthMonitor;
+            machineDisplayName = nextState.machineDisplayName;
+            bonjourStop = nextState.bonjourStop;
           },
           startChannel,
           stopChannel,
@@ -680,6 +687,13 @@ export async function startGatewayServer(
           logChannels,
           logCron,
           logReload,
+          logDiscovery,
+          channelManager,
+          port,
+          gatewayTls: gatewayTls.enabled
+            ? { enabled: true, fingerprintSha256: gatewayTls.fingerprintSha256 }
+            : { enabled: false },
+          tailscaleMode,
         });
 
         return startGatewayConfigReloader({

@@ -359,9 +359,11 @@ Most fields hot-apply without downtime. In `hybrid` mode, restart-required chang
 | Automation          | `hooks`, `cron`, `agent.heartbeat`                                   | No              |
 | Sessions & messages | `session`, `messages`                                                | No              |
 | Tools & media       | `tools`, `browser`, `skills`, `audio`, `talk`                        | No              |
-| UI & misc           | `ui`, `logging`, `identity`, `bindings`                              | No              |
+| UI & misc           | `ui`, `logging`, `identity`, `bindings`, `meta` (machineDisplayName) | No              |
+| Gateway server      | `gateway.channelHealthCheckMinutes`                                  | No              |
 | Gateway server      | `gateway.*` (port, bind, auth, tailscale, TLS, HTTP)                 | **Yes**         |
-| Infrastructure      | `discovery`, `canvasHost`, `plugins`                                 | **Yes**         |
+| Infrastructure      | `discovery`                                                          | No              |
+| Infrastructure      | `canvasHost`, `plugins`                                              | **Yes**         |
 
 <Note>
 `gateway.reload` and `gateway.remote` are exceptions — changing them does **not** trigger a restart.
