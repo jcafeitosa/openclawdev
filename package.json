@@ -58,7 +58,7 @@
     "android:install": "cd apps/android && ./gradlew :app:installDebug",
     "android:run": "cd apps/android && ./gradlew :app:installDebug && adb shell am start -n ai.openclaw.android/.MainActivity",
     "android:test": "cd apps/android && ./gradlew :app:testDebugUnitTest",
-    "build": "bun canvas:a2ui:bundle && tsdown && bun build:plugin-sdk:dts && bun run --import tsx scripts/write-plugin-sdk-entry-dts.ts && bun run --import tsx scripts/canvas-a2ui-copy.ts && bun run --import tsx scripts/copy-hook-metadata.ts && bun run --import tsx scripts/copy-export-html-templates.ts && bun run --import tsx scripts/write-build-info.ts && bun run --import tsx scripts/write-cli-compat.ts",
+    "build": "bash scripts/bundle-a2ui.sh && tsdown && npm run build:plugin-sdk:dts && node scripts/ui.js build && tsx scripts/write-plugin-sdk-entry-dts.ts && tsx scripts/canvas-a2ui-copy.ts && tsx scripts/copy-hook-metadata.ts && tsx scripts/copy-export-html-templates.ts && tsx scripts/write-build-info.ts && tsx scripts/write-cli-compat.ts",
     "build:plugin-sdk:dts": "tsc -p tsconfig.plugin-sdk.dts.json",
     "canvas:a2ui:bundle": "bash scripts/bundle-a2ui.sh",
     "check": "bun format:check && bun tsgo && bun lint",
@@ -222,8 +222,6 @@
     "node-llama-cpp": "3.15.1"
   },
   "resolutions": {
-    "@types/express": "5.0.6",
-    "@types/node": "25.2.3",
     "@vitest/browser": "4.0.18",
     "@vitest/browser-playwright": "4.0.18",
     "@vitest/coverage-v8": "4.0.18",
@@ -232,8 +230,6 @@
     "vitest": "4.0.18"
   },
   "overrides": {
-    "@types/express": "5.0.6",
-    "@types/node": "25.2.3",
     "@vitest/browser": "4.0.18",
     "@vitest/browser-playwright": "4.0.18",
     "@vitest/coverage-v8": "4.0.18",

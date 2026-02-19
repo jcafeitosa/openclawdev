@@ -1,0 +1,37 @@
+[90m2026-02-19T01:50:26.119Z[39m [35m[canvas][39m [36mhost mounted at http://127.0.0.1:18789/__openclaw__/canvas/ (root /Users/juliocezar/.openclaw/canvas)[39m
+[90m2026-02-19T01:50:26.190Z[39m [36m[gateway][39m [33mfailed to bind loopback alias ::1:18789 (TypeError: Invalid URL)[39m
+[90m2026-02-19T01:50:26.578Z[39m [36m[heartbeat][39m [36mstarted[39m
+[90m2026-02-19T01:50:26.644Z[39m [32m[health-monitor][39m [36mstarted (interval: 300s, grace: 60s)[39m
+[90m2026-02-19T01:50:26.684Z[39m [36m[gateway][39m [36magent model: google-antigravity/claude-opus-4-6-thinking[39m
+[90m2026-02-19T01:50:26.724Z[39m [36m[gateway][39m [36mlistening on ws://127.0.0.1:18789 (PID 4745)[39m
+[90m2026-02-19T01:50:26.788Z[39m [36m[gateway][39m [36mlog file: /tmp/openclaw/openclaw-2026-02-18.log[39m
+[90m2026-02-19T01:50:26.882Z[39m [33m[delivery-recovery][39m [36mFound 9 pending delivery entries — starting recovery[39m
+[90m2026-02-19T01:50:26.910Z[39m [33m[delivery-recovery][39m [33mRecovery time budget exceeded — 9 entries deferred to next restart[39m
+[90m2026-02-19T01:50:26.936Z[39m [33m[delivery-recovery][39m [36mDelivery recovery complete: 0 recovered, 0 failed, 0 skipped (max retries)[39m
+[90m2026-02-19T01:50:27.111Z[39m [35m[browser/service][39m [36mBrowser control service ready (profiles=2)[39m
+[90m2026-02-19T01:50:27.751Z[39m [34m[telegram][39m [36m[default] starting provider (@JarvisBC_bot)[39m
+[90m2026-02-19T01:50:27.829Z[39m [34m[telegram][39m [36mautoSelectFamily=true (default-node22)[39m
+2026-02-18T17:50:37.731-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:50:37.828Z[39m [36m[ws][39m [33mclosed before connect conn=3ffa8c45-f6a8-4439-a9c1-24ac8510bde3 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:50:52.896-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:50:52.929Z[39m [36m[ws][39m [33mclosed before connect conn=9419929f-60e3-471f-838c-f50fdbc1930d remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:51:08.059-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:51:08.093Z[39m [36m[ws][39m [33mclosed before connect conn=66ec625a-6a7e-49d5-9ed7-edf6ca052533 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:51:23.178-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:51:23.221Z[39m [36m[ws][39m [33mclosed before connect conn=4bfd42fa-a3c5-47a8-ab15-c58374137408 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:51:38.274-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:51:38.303Z[39m [36m[ws][39m [33mclosed before connect conn=a9e30c28-6fe3-441a-ab9e-0995fabe3a64 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:51:53.397-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:51:53.428Z[39m [36m[ws][39m [33mclosed before connect conn=782be1ec-1394-498c-8153-43cb478566ad remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:52:08.520-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:52:08.552Z[39m [36m[ws][39m [33mclosed before connect conn=ead7823d-e67a-4b41-90fd-486c13aedba2 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:52:23.627-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:52:23.657Z[39m [36m[ws][39m [33mclosed before connect conn=48053ec9-d549-4fad-90ad-d51d0144efa5 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:52:38.725-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:52:38.762Z[39m [36m[ws][39m [33mclosed before connect conn=666f31f6-259a-4aa4-ad6b-09783e29900f remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:52:53.822-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:52:53.854Z[39m [36m[ws][39m [33mclosed before connect conn=b9bd9519-c761-4141-ba61-bd466606ec5a remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:53:08.939-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:53:08.973Z[39m [36m[ws][39m [33mclosed before connect conn=4a0ebcef-421b-474f-b86f-e662d56878b5 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:53:24.029-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:53:24.058Z[39m [36m[ws][39m [33mclosed before connect conn=b1428252-6582-4535-a3e1-ed4faed0cf12 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m

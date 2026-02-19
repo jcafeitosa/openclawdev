@@ -10,16 +10,22 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@astrojs/lit": "^4.3.0",
+    "@astrojs/react": "^4.4.2",
     "@nanostores/lit": "^0.2.3",
     "@noble/ed25519": "3.0.0",
+    "@tabler/icons-react": "^3.36.1",
     "astro": "^5.17.2",
+    "clsx": "^2.1.1",
     "dompurify": "^3.3.1",
     "echarts": "^6.0.0",
     "lit": "^3.3.2",
     "marked": "^17.0.2",
     "mermaid": "^11.4.1",
+    "motion": "^12.34.2",
     "nanostores": "^1.1.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwind-merge": "^3.5.0",
     "vite": "7.3.1"
   },
   "devDependencies": {

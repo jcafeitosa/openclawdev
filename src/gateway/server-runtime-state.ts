@@ -93,8 +93,11 @@ export async function createGatewayRuntimeState(params: {
       });
       if (handler.rootDir) {
         canvasHost = handler;
+        const displayHost = params.bindHost.includes(":")
+          ? `[${params.bindHost}]`
+          : params.bindHost;
         params.logCanvas.info(
-          `canvas host mounted at http://${params.bindHost}:${params.port}${CANVAS_HOST_PATH}/ (root ${handler.rootDir})`,
+          `canvas host mounted at http://${displayHost}:${params.port}${CANVAS_HOST_PATH}/ (root ${handler.rootDir})`,
         );
       }
     } catch (err) {
@@ -131,6 +134,7 @@ export async function createGatewayRuntimeState(params: {
       const httpServer = await listenGatewayElysia(elysiaApp, {
         port: params.port,
         hostname: host,
+        tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
       });
       httpServers.push(httpServer);
       httpBindHosts.push(host);
@@ -139,7 +143,7 @@ export async function createGatewayRuntimeState(params: {
         throw err;
       }
       params.log.warn(
-        `gateway: failed to bind loopback alias ${host}:${params.port} (${String(err)})`,
+        `gateway: failed to bind loopback alias ${host.includes(":") ? `[${host}]` : host}:${params.port} (${String(err)})`,
       );
     }
   }

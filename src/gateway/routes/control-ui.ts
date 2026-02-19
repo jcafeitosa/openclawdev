@@ -230,7 +230,8 @@ export function controlUiRoutes(params: { basePath: string; root?: ControlUiRoot
     // ----------------------------------------------------------------
     // Static file serving + SPA fallback
     // ----------------------------------------------------------------
-    return serveSpaRequest(request, pathname, url, basePath, root);
+    const res = serveSpaRequest(request, pathname, url, basePath, root);
+    return res;
   });
 }
 

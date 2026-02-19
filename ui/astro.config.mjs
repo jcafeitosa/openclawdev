@@ -1,6 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import lit from "@astrojs/lit";
+import react from "@astrojs/react";
 import { defineConfig } from "astro/config";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -24,7 +24,7 @@ const base = envBase ? normalizeBase(envBase) : "./";
 
 // https://astro.build/config
 export default defineConfig({
-  integrations: [lit()],
+  integrations: [react()],
 
   base,
   outDir: path.resolve(here, "../dist/control-ui"),

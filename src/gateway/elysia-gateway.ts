@@ -5,7 +5,8 @@
  * Each route group is composed as an Elysia plugin.
  */
 
-import type { Server as HttpServer } from "node:http";
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import type { TlsOptions } from "node:tls";
 import { node } from "@elysiajs/node";
 import { Elysia } from "elysia";
@@ -72,8 +73,20 @@ export interface GatewayElysiaOptions {
 export function createGatewayElysiaApp(opts: GatewayElysiaOptions) {
   const app = new Elysia({ adapter: node() })
     // CSRF origin guard for state-changing requests
-    .use(csrfGuard({ port: opts.port }))
-    // Route groups
+    .use(csrfGuard({ port: opts.port }));
+
+  // Control UI SPA serving (top priority to avoid wildcard conflicts)
+  if (opts.controlUiEnabled) {
+    app.use(
+      controlUiRoutes({
+        basePath: opts.controlUiBasePath,
+        root: opts.controlUiRoot,
+      }),
+    );
+  }
+
+  // Route groups
+  app
     .use(
       hooksRoutes({
         getHooksConfig: opts.getHooksConfig,
@@ -125,16 +138,6 @@ export function createGatewayElysiaApp(opts: GatewayElysiaOptions) {
     app.use(canvasHostFallback({ canvasHost: opts.canvasHost }));
   }
 
-  // Control UI SPA serving
-  if (opts.controlUiEnabled) {
-    app.use(
-      controlUiRoutes({
-        basePath: opts.controlUiBasePath,
-        root: opts.controlUiRoot,
-      }),
-    );
-  }
-
   return app;
 }
 
@@ -169,19 +172,28 @@ function canvasHostFallback(params: { canvasHost: CanvasHostHandler }) {
  */
 export async function listenGatewayElysia(
   app: ReturnType<typeof createGatewayElysiaApp>,
-  params: { port: number; hostname: string },
+  params: { port: number; hostname: string; tlsOptions?: TlsOptions },
 ): Promise<HttpServer> {
+  const httpServer = params.tlsOptions
+    ? createHttpsServer(params.tlsOptions, (req, _res) => {
+        if (req.headers.upgrade?.toLowerCase() === "websocket") {
+          return;
+        }
+        void app.handle(req);
+      })
+    : createHttpServer((req, _res) => {
+        if (req.headers.upgrade?.toLowerCase() === "websocket") {
+          return;
+        }
+        void app.handle(req);
+      });
+
   return new Promise((resolve, reject) => {
-    app.listen({ port: params.port, hostname: params.hostname }, (serverInfo) => {
-      const nodeServer = (serverInfo as { raw?: { node?: { server?: HttpServer } } }).raw?.node
-        ?.server;
-      if (nodeServer) {
-        resolve(nodeServer);
-      } else {
-        reject(
-          new Error(`Failed to create gateway HTTP server on ${params.hostname}:${params.port}`),
-        );
-      }
+    httpServer.on("error", (err) => {
+      reject(err);
+    });
+    httpServer.listen(params.port, params.hostname, () => {
+      resolve(httpServer);
     });
   });
 }

@@ -607,13 +607,13 @@ export function attachGatewayUpgradeHandler(opts: {
   rateLimiter?: AuthRateLimiter;
 }) {
   const { httpServer, wss, canvasHost, clients, resolvedAuth, rateLimiter } = opts;
+
   httpServer.on("upgrade", (req, socket, head) => {
-    const listeners = httpServer.listeners("upgrade");
-    console.log(`[gateway] upgrade request: ${req.url}, total upgrade listeners: ${listeners.length}`);
-    void (async () => {
-      if (canvasHost) {
-        const url = new URL(req.url ?? "/", "http://localhost");
-        if (url.pathname === CANVAS_WS_PATH) {
+    const url = new URL(req.url ?? "/", "http://localhost");
+
+    if (canvasHost && url.pathname === CANVAS_WS_PATH) {
+      void (async () => {
+        try {
           const configSnapshot = loadConfig();
           const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
           const ok = await authorizeCanvasRequest({
@@ -628,16 +628,20 @@ export function attachGatewayUpgradeHandler(opts: {
             socket.destroy();
             return;
           }
+          if (!canvasHost.handleUpgrade(req, socket, head)) {
+            socket.destroy();
+          }
+        } catch (err) {
+          console.error("[gateway] Canvas WS upgrade error:", err);
+          socket.destroy();
         }
-        if (canvasHost.handleUpgrade(req, socket, head)) {
-          return;
-        }
-      }
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        wss.emit("connection", ws, req);
-      });
-    })().catch(() => {
-      socket.destroy();
+      })();
+      return;
+    }
+
+    // Default Gateway WebSocket handler - sync call to handleUpgrade is safer in Node.js
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit("connection", ws, req);
     });
   });
 }

@@ -1,0 +1,17 @@
+[90m2026-02-19T01:43:33.682Z[39m [35m[canvas][39m [36mhost mounted at http://127.0.0.1:18789/__openclaw__/canvas/ (root /Users/juliocezar/.openclaw/canvas)[39m
+[90m2026-02-19T01:43:33.744Z[39m [36m[gateway][39m [33mfailed to bind loopback alias ::1:18789 (TypeError: Invalid URL)[39m
+[90m2026-02-19T01:43:34.077Z[39m [36m[heartbeat][39m [36mstarted[39m
+[90m2026-02-19T01:43:34.122Z[39m [32m[health-monitor][39m [36mstarted (interval: 300s, grace: 60s)[39m
+[90m2026-02-19T01:43:34.147Z[39m [36m[gateway][39m [36magent model: google-antigravity/claude-opus-4-6-thinking[39m
+[90m2026-02-19T01:43:34.170Z[39m [36m[gateway][39m [36mlistening on ws://127.0.0.1:18789 (PID 98855)[39m
+[90m2026-02-19T01:43:34.215Z[39m [36m[gateway][39m [36mlog file: /tmp/openclaw/openclaw-2026-02-18.log[39m
+[90m2026-02-19T01:43:34.300Z[39m [33m[delivery-recovery][39m [36mFound 9 pending delivery entries — starting recovery[39m
+[90m2026-02-19T01:43:34.323Z[39m [33m[delivery-recovery][39m [33mRecovery time budget exceeded — 9 entries deferred to next restart[39m
+[90m2026-02-19T01:43:34.350Z[39m [33m[delivery-recovery][39m [36mDelivery recovery complete: 0 recovered, 0 failed, 0 skipped (max retries)[39m
+[90m2026-02-19T01:43:34.493Z[39m [35m[browser/service][39m [36mBrowser control service ready (profiles=2)[39m
+[90m2026-02-19T01:43:35.115Z[39m [34m[telegram][39m [36m[default] starting provider (@JarvisBC_bot)[39m
+[90m2026-02-19T01:43:35.181Z[39m [34m[telegram][39m [36mautoSelectFamily=true (default-node22)[39m
+[90m2026-02-19T01:44:52.793Z[39m [36m[gateway][39m [36msignal SIGTERM received[39m
+[90m2026-02-19T01:44:52.839Z[39m [36m[gateway][39m [36mreceived SIGTERM; shutting down[39m
+[90m2026-02-19T01:44:53.267Z[39m [34m[gmail-watcher][39m [36mgmail watcher stopped[39m
+[90m2026-02-19T01:44:54.491Z[39m [36m[gateway][39m [31mshutdown error: Error [ERR_SERVER_NOT_RUNNING]: Server is not running.[39m

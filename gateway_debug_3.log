@@ -1,0 +1,109 @@
+[90m2026-02-19T01:48:17.923Z[39m [35m[canvas][39m [36mhost mounted at http://127.0.0.1:18789/__openclaw__/canvas/ (root /Users/juliocezar/.openclaw/canvas)[39m
+[90m2026-02-19T01:48:17.986Z[39m [36m[gateway][39m [33mfailed to bind loopback alias ::1:18789 (TypeError: Invalid URL)[39m
+[90m2026-02-19T01:48:18.341Z[39m [36m[heartbeat][39m [36mstarted[39m
+[90m2026-02-19T01:48:18.398Z[39m [32m[health-monitor][39m [36mstarted (interval: 300s, grace: 60s)[39m
+[90m2026-02-19T01:48:18.438Z[39m [36m[gateway][39m [36magent model: google-antigravity/claude-opus-4-6-thinking[39m
+[90m2026-02-19T01:48:18.500Z[39m [36m[gateway][39m [36mlistening on ws://127.0.0.1:18789 (PID 3268)[39m
+[90m2026-02-19T01:48:18.559Z[39m [36m[gateway][39m [36mlog file: /tmp/openclaw/openclaw-2026-02-18.log[39m
+[90m2026-02-19T01:48:18.654Z[39m [33m[delivery-recovery][39m [36mFound 9 pending delivery entries — starting recovery[39m
+[90m2026-02-19T01:48:18.703Z[39m [33m[delivery-recovery][39m [33mRecovery time budget exceeded — 9 entries deferred to next restart[39m
+[90m2026-02-19T01:48:18.732Z[39m [33m[delivery-recovery][39m [36mDelivery recovery complete: 0 recovered, 0 failed, 0 skipped (max retries)[39m
+[90m2026-02-19T01:48:18.910Z[39m [35m[browser/service][39m [36mBrowser control service ready (profiles=2)[39m
+[90m2026-02-19T01:48:19.543Z[39m [34m[telegram][39m [36m[default] starting provider (@JarvisBC_bot)[39m
+[90m2026-02-19T01:48:19.599Z[39m [34m[telegram][39m [36mautoSelectFamily=true (default-node22)[39m
+2026-02-18T17:48:26.049-08:00 [control-ui] request: GET /
+2026-02-18T17:48:26.168-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:32.229-08:00 [control-ui] request: GET /
+2026-02-18T17:48:32.450-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:32.809-08:00 [control-ui] request: GET /
+2026-02-18T17:48:32.923-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:33.249-08:00 [control-ui] request: GET /favicon.ico
+2026-02-18T17:48:33.431-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:35.203-08:00 [control-ui] request: GET /chat
+2026-02-18T17:48:35.340-08:00 [control-ui] token redirect: /chat?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:35.370-08:00 [control-ui] request: GET /chat
+2026-02-18T17:48:35.397-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:35.706-08:00 [control-ui] request: GET /_astro/agents.ZLlNOXEa.css
+2026-02-18T17:48:35.815-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:35.916-08:00 [control-ui] request: GET /_astro/astro_scripts/before-hydration.js.CvKZj4Sc.js
+2026-02-18T17:48:35.980-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.010-08:00 [control-ui] request: GET /favicon.svg
+2026-02-18T17:48:36.036-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.066-08:00 [control-ui] request: GET /_astro/lit-html.CYPuBTYX.js
+2026-02-18T17:48:36.092-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.119-08:00 [control-ui] request: GET /_astro/directive-helpers.CEmkehxq.js
+2026-02-18T17:48:36.197-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.233-08:00 [control-ui] request: GET /_astro/command-palette.DsrU-9dQ.js
+2026-02-18T17:48:36.288-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.330-08:00 [control-ui] request: GET /_astro/client.DEGHhFmz.js
+2026-02-18T17:48:36.458-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.488-08:00 [control-ui] request: GET /_astro/chat-island.6QrOMnXl.js
+2026-02-18T17:48:36.516-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.574-08:00 [control-ui] request: GET /_astro/state.DhKcsH7E.js
+2026-02-18T17:48:36.661-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.687-08:00 [control-ui] request: GET /_astro/nav-island.DH4fC2FK.js
+2026-02-18T17:48:36.713-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.745-08:00 [control-ui] request: GET /_astro/format.C8a0h4yA.js
+2026-02-18T17:48:36.782-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.807-08:00 [control-ui] request: GET /_astro/index.C8in-kl9.js
+2026-02-18T17:48:36.878-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.904-08:00 [control-ui] request: GET /_astro/gateway.Clo8tPL_.js
+2026-02-18T17:48:36.932-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:36.959-08:00 [control-ui] request: GET /_astro/icons.CaMnluFB.js
+2026-02-18T17:48:36.984-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:37.014-08:00 [control-ui] request: GET /_astro/navigation.DCXbJ0dR.js
+2026-02-18T17:48:37.075-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:37.114-08:00 [control-ui] request: GET /
+2026-02-18T17:48:37.217-08:00 [control-ui] response: 200 bodyLen: 23
+2026-02-18T17:48:37.312-08:00 [control-ui] request: GET /
+2026-02-18T17:48:37.434-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:37.461-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:37.530Z[39m [36m[ws][39m [33mclosed before connect conn=ca128b74-327d-4281-8927-065878112a00 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:48:37.580-08:00 [control-ui] request: GET /
+2026-02-18T17:48:37.653-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:37.682-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:37.717Z[39m [36m[ws][39m [33mclosed before connect conn=77409bfc-192f-4646-9987-e8e76f7300ee remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:48:38.514-08:00 [control-ui] request: GET /
+2026-02-18T17:48:38.593-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:38.626-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:38.663Z[39m [36m[ws][39m [33mclosed before connect conn=cfccee50-d285-49b5-838b-e6ddb35a58c7 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:48:40.016-08:00 [control-ui] request: GET /
+2026-02-18T17:48:40.094-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:40.118-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:40.146Z[39m [36m[ws][39m [33mclosed before connect conn=10b3d172-bd0e-483f-a6f5-f2cc33cde64f remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:48:42.464-08:00 [control-ui] request: GET /
+2026-02-18T17:48:42.552-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:42.588-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:42.627Z[39m [36m[ws][39m [33mclosed before connect conn=a4900ff2-0ee6-4ed7-a822-6f2afdfad881 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:48:46.572-08:00 [control-ui] request: GET /
+2026-02-18T17:48:46.878-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:46.916-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:47.009Z[39m [36m[ws][39m [33mclosed before connect conn=9385d052-04cf-417c-9e57-605726838b74 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:48:53.695-08:00 [control-ui] request: GET /
+2026-02-18T17:48:53.774-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:48:53.800-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:48:53.829Z[39m [36m[ws][39m [33mclosed before connect conn=52ad28b6-0443-4e4d-bb5f-68926141f4fb remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:49:05.288-08:00 [control-ui] request: GET /
+2026-02-18T17:49:05.454-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:49:05.496-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:49:05.584Z[39m [36m[ws][39m [33mclosed before connect conn=37662371-dafc-4723-bae0-de02f017382d remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:49:21.182-08:00 [control-ui] request: GET /
+2026-02-18T17:49:21.418-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:49:21.458-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:49:21.564Z[39m [36m[ws][39m [33mclosed before connect conn=ac55d5cd-7e9b-499c-bdbb-1b0936a8506b remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:49:36.608-08:00 [control-ui] request: GET /
+2026-02-18T17:49:36.991-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:49:37.073-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:49:37.241Z[39m [36m[ws][39m [33mclosed before connect conn=72f48b87-241b-4093-b546-5cf0a8ba19a0 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:49:52.207-08:00 [control-ui] request: GET /
+2026-02-18T17:49:52.304-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:49:52.333-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:49:52.370Z[39m [36m[ws][39m [33mclosed before connect conn=f8a5640d-4d7e-456f-b5ab-52f7832902d9 remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+2026-02-18T17:50:07.398-08:00 [control-ui] request: GET /
+2026-02-18T17:50:07.565-08:00 [control-ui] token redirect: /?token=9cc1861c3efa7f37d9fcfb6ee4affdf2
+2026-02-18T17:50:07.597-08:00 [gateway] upgrade request: /, total upgrade listeners: 2
+[90m2026-02-19T01:50:07.672Z[39m [36m[ws][39m [33mclosed before connect conn=bfdb8227-15fe-4df4-8f7a-88745df55d3f remote=127.0.0.1 fwd=n/a origin=http://127.0.0.1:18789 host=127.0.0.1:18789 ua=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36 code=1006 reason=n/a[39m
+[90m2026-02-19T01:50:09.347Z[39m [36m[gateway][39m [36msignal SIGTERM received[39m
+[90m2026-02-19T01:50:09.416Z[39m [36m[gateway][39m [36mreceived SIGTERM; shutting down[39m
+[90m2026-02-19T01:50:09.992Z[39m [34m[gmail-watcher][39m [36mgmail watcher stopped[39m
+[90m2026-02-19T01:50:10.986Z[39m [36m[gateway][39m [31mshutdown error: Error [ERR_SERVER_NOT_RUNNING]: Server is not running.[39m

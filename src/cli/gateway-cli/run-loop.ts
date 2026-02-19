@@ -49,9 +49,14 @@ export async function runGatewayLoop(params: {
     // Allow extra time for draining active turns on restart.
     const forceExitMs = isRestart ? DRAIN_TIMEOUT_MS + SHUTDOWN_TIMEOUT_MS : SHUTDOWN_TIMEOUT_MS;
     const forceExitTimer = setTimeout(() => {
-      gatewayLog.error("shutdown timed out; exiting without full cleanup");
+      gatewayLog.error("shutdown timed out; forcing exit without full cleanup");
       cleanupSignals();
-      params.runtime.exit(0);
+      try {
+        // Force immediate termination if graceful exit hangs
+        process.kill(process.pid, "SIGKILL");
+      } catch {
+        params.runtime.exit(1);
+      }
     }, forceExitMs);
 
     void (async () => {

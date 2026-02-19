@@ -350,15 +350,10 @@ export async function canBindToHost(host: string): Promise<boolean> {
 
 export async function resolveGatewayListenHosts(
   bindHost: string,
-  opts?: { canBindToHost?: (host: string) => Promise<boolean> },
+  _opts?: { canBindToHost?: (host: string) => Promise<boolean> },
 ): Promise<string[]> {
-  if (bindHost !== "127.0.0.1") {
-    return [bindHost];
-  }
-  const canBind = opts?.canBindToHost ?? canBindToHost;
-  if (await canBind("::1")) {
-    return [bindHost, "::1"];
-  }
+  // Only bind to the requested host. Proactively binding to both 127.0.0.1 and ::1
+  // causes conflicts with multiple upgrade listeners in the current architecture.
   return [bindHost];
 }
 
