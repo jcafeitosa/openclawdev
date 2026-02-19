@@ -11,6 +11,7 @@ import {
   downgradeOpenAIReasoningBlocks,
   isCompactionFailureError,
   isGoogleModelApi,
+  isAntigravityClaude,
   sanitizeGoogleTurnOrdering,
   sanitizeSessionMessagesImages,
 } from "../pi-embedded-helpers.js";
@@ -246,12 +247,17 @@ export function sanitizeToolsForGoogle<
 >(params: {
   tools: AgentTool<TSchemaType, TResult>[];
   provider: string;
+  modelId?: string;
 }): AgentTool<TSchemaType, TResult>[] {
   // google-antigravity serves Anthropic models (e.g. claude-opus-4-6-thinking),
   // NOT Gemini. Applying Gemini schema cleaning strips JSON Schema keywords
   // (minimum, maximum, format, etc.) that Anthropic's API requires for
   // draft 2020-12 compliance. Only clean for actual Gemini providers.
-  if (params.provider !== "google-gemini-cli") {
+  if (isAntigravityClaude({ provider: params.provider, modelId: params.modelId })) {
+    return params.tools;
+  }
+  // If it's NOT a google API at all, skip cleaning.
+  if (!isGoogleModelApi(params.provider)) {
     return params.tools;
   }
   return params.tools.map((tool) => {
@@ -267,18 +273,23 @@ export function sanitizeToolsForGoogle<
   });
 }
 
-export function logToolSchemasForGoogle(params: { tools: AgentTool[]; provider: string }) {
-  if (params.provider !== "google-antigravity" && params.provider !== "google-gemini-cli") {
+export function logToolSchemasForGoogle(params: {
+  tools: AgentTool[];
+  provider: string;
+  modelId?: string;
+}) {
+  if (!isGoogleModelApi(params.provider)) {
     return;
   }
   const toolNames = params.tools.map((tool, index) => `${index}:${tool.name}`);
   const tools = sanitizeToolsForGoogle(params);
   log.info("google tool schema snapshot", {
     provider: params.provider,
+    modelId: params.modelId,
     toolCount: tools.length,
     tools: toolNames,
   });
-  if (params.provider !== "google-gemini-cli") {
+  if (isAntigravityClaude({ provider: params.provider, modelId: params.modelId })) {
     return;
   }
   for (const [index, tool] of tools.entries()) {
