@@ -204,7 +204,9 @@ function annotateInterSessionUserMessages(messages: AgentMessage[]): AgentMessag
   return touched ? out : messages;
 }
 
-function findUnsupportedSchemaKeywords(schema: unknown, path: string): string[] {
+type SchemaViolation = { path: string; keyword: string; value: unknown };
+
+function findUnsupportedSchemaKeywords(schema: unknown, path: string): SchemaViolation[] {
   if (!schema || typeof schema !== "object") {
     return [];
   }
@@ -214,7 +216,7 @@ function findUnsupportedSchemaKeywords(schema: unknown, path: string): string[] 
     );
   }
   const record = schema as Record<string, unknown>;
-  const violations: string[] = [];
+  const violations: SchemaViolation[] = [];
   const properties =
     record.properties && typeof record.properties === "object" && !Array.isArray(record.properties)
       ? (record.properties as Record<string, unknown>)
@@ -229,7 +231,7 @@ function findUnsupportedSchemaKeywords(schema: unknown, path: string): string[] 
       continue;
     }
     if (GOOGLE_SCHEMA_UNSUPPORTED_KEYWORDS.has(key)) {
-      violations.push(`${path}.${key}`);
+      violations.push({ path: `${path}.${key}`, keyword: key, value });
     }
     if (value && typeof value === "object") {
       violations.push(...findUnsupportedSchemaKeywords(value, `${path}.${key}`));
@@ -276,13 +278,16 @@ export function logToolSchemasForGoogle(params: { tools: AgentTool[]; provider: 
     toolCount: tools.length,
     tools: toolNames,
   });
+  if (params.provider !== "google-gemini-cli") {
+    return;
+  }
   for (const [index, tool] of tools.entries()) {
     const violations = findUnsupportedSchemaKeywords(tool.parameters, `${tool.name}.parameters`);
     if (violations.length > 0) {
       log.warn("google tool schema has unsupported keywords", {
         index,
         tool: tool.name,
-        violations: violations.slice(0, 12),
+        violations: violations.slice(0, 12).map((v) => `${v.path}=${JSON.stringify(v.value)}`),
         violationCount: violations.length,
       });
     }

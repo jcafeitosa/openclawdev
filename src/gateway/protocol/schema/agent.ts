@@ -23,7 +23,7 @@ export const SendParamsSchema = z
     accountId: z.string().optional(),
     /** Optional session key for mirroring delivered output back into the transcript. */
     sessionKey: z.string().optional(),
-    idempotencyKey: NonEmptyString,
+    idempotencyKey: NonEmptyString.optional(),
   })
   .strict();
 
@@ -44,7 +44,7 @@ export const PollParamsSchema = z
     threadId: z.string().optional(),
     channel: z.string().optional(),
     accountId: z.string().optional(),
-    idempotencyKey: NonEmptyString,
+    idempotencyKey: NonEmptyString.optional(),
   })
   .strict();
 
@@ -79,7 +79,7 @@ export const AgentParamsSchema = z
       })
       .strict()
       .optional(),
-    idempotencyKey: NonEmptyString,
+    idempotencyKey: NonEmptyString.optional(),
     label: SessionLabelString.optional(),
     spawnedBy: z.string().optional(),
   })

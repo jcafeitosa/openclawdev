@@ -36,7 +36,7 @@ export const ChatSendParamsSchema = z
     deliver: z.boolean().optional(),
     attachments: z.array(z.unknown()).optional(),
     timeoutMs: z.number().int().min(0).optional(),
-    idempotencyKey: NonEmptyString,
+    idempotencyKey: NonEmptyString.optional(),
   })
   .strict();
 

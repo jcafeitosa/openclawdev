@@ -42,7 +42,7 @@ export const NodeInvokeParamsSchema = z
     command: NonEmptyString,
     params: z.unknown().optional(),
     timeoutMs: z.number().int().min(0).optional(),
-    idempotencyKey: NonEmptyString,
+    idempotencyKey: NonEmptyString.optional(),
   })
   .strict();
 

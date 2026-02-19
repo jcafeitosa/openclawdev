@@ -11,6 +11,7 @@ import {
 import { normalizeReplyPayloadsForDelivery } from "../../infra/outbound/payloads.js";
 import { resolveOutboundTarget } from "../../infra/outbound/targets.js";
 import { normalizePollInput } from "../../polls.js";
+import { randomIdempotencyKey } from "../call.js";
 import {
   ErrorCodes,
   errorShape,
@@ -65,9 +66,9 @@ export const sendHandlers: GatewayRequestHandlers = {
       channel?: string;
       accountId?: string;
       sessionKey?: string;
-      idempotencyKey: string;
+      idempotencyKey?: string;
     };
-    const idem = request.idempotencyKey;
+    const idem = request.idempotencyKey?.trim() || randomIdempotencyKey();
     const dedupeKey = `send:${idem}`;
     const cached = context.dedupe.get(dedupeKey);
     if (cached) {
@@ -296,9 +297,9 @@ export const sendHandlers: GatewayRequestHandlers = {
       threadId?: string;
       channel?: string;
       accountId?: string;
-      idempotencyKey: string;
+      idempotencyKey?: string;
     };
-    const idem = request.idempotencyKey;
+    const idem = request.idempotencyKey?.trim() || randomIdempotencyKey();
     const cached = context.dedupe.get(`poll:${idem}`);
     if (cached) {
       respond(cached.ok, cached.payload, cached.error, {

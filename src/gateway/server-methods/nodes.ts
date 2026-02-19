@@ -8,6 +8,7 @@ import {
   requestNodePairing,
   verifyNodeToken,
 } from "../../infra/node-pairing.js";
+import { randomIdempotencyKey } from "../call.js";
 import { isNodeCommandAllowed, resolveNodeCommandAllowlist } from "../node-command-policy.js";
 import { sanitizeNodeInvokeParamsForForwarding } from "../node-invoke-sanitize.js";
 import {
@@ -357,8 +358,9 @@ export const nodeHandlers: GatewayRequestHandlers = {
       command: string;
       params?: unknown;
       timeoutMs?: number;
-      idempotencyKey: string;
+      idempotencyKey?: string;
     };
+    const idempotencyKey = p.idempotencyKey?.trim() || randomIdempotencyKey();
     const nodeId = String(p.nodeId ?? "").trim();
     const command = String(p.command ?? "").trim();
     if (!nodeId || !command) {
@@ -432,7 +434,7 @@ export const nodeHandlers: GatewayRequestHandlers = {
         command,
         params: forwardedParams.params,
         timeoutMs: p.timeoutMs,
-        idempotencyKey: p.idempotencyKey,
+        idempotencyKey,
       });
       if (!respondUnavailableOnNodeInvokeError(respond, res)) {
         return;

@@ -11,6 +11,7 @@ import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import { resolveSessionFilePath } from "../../config/sessions.js";
 import { resolveSendPolicy } from "../../sessions/send-policy.js";
 import { INTERNAL_MESSAGE_CHANNEL } from "../../utils/message-channel.js";
+import { randomIdempotencyKey } from "../call.js";
 import {
   abortChatRunById,
   abortChatRunsForSessionKey,
@@ -780,8 +781,9 @@ export const chatHandlers: GatewayRequestHandlers = {
         content?: unknown;
       }>;
       timeoutMs?: number;
-      idempotencyKey: string;
+      idempotencyKey?: string;
     };
+    const idempotencyKey = p.idempotencyKey?.trim() || randomIdempotencyKey();
     const sanitizedMessageResult = sanitizeChatSendMessageInput(p.message);
     if (!sanitizedMessageResult.ok) {
       respond(
@@ -825,7 +827,7 @@ export const chatHandlers: GatewayRequestHandlers = {
       overrideMs: p.timeoutMs,
     });
     const now = Date.now();
-    const clientRunId = p.idempotencyKey;
+    const clientRunId = idempotencyKey;
 
     const sendPolicy = resolveSendPolicy({
       cfg,

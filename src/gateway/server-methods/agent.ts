@@ -27,6 +27,7 @@ import {
   normalizeMessageChannel,
 } from "../../utils/message-channel.js";
 import { resolveAssistantIdentity } from "../assistant-identity.js";
+import { randomIdempotencyKey } from "../call.js";
 import { parseMessageWithAttachments } from "../chat-attachments.js";
 import { resolveAssistantAvatarUrl } from "../control-ui-shared.js";
 import { GATEWAY_CLIENT_CAPS, hasGatewayClientCap } from "../protocol/client-info.js";
@@ -189,14 +190,14 @@ export const agentHandlers: GatewayRequestHandlers = {
       groupSpace?: string;
       lane?: string;
       extraSystemPrompt?: string;
-      idempotencyKey: string;
       timeout?: number;
       label?: string;
       spawnedBy?: string;
       inputProvenance?: InputProvenance;
+      idempotencyKey?: string;
     };
     const cfg = loadConfig();
-    const idem = request.idempotencyKey;
+    const idem = request.idempotencyKey?.trim() || randomIdempotencyKey();
     const groupIdRaw = typeof request.groupId === "string" ? request.groupId.trim() : "";
     const groupChannelRaw =
       typeof request.groupChannel === "string" ? request.groupChannel.trim() : "";
