@@ -11,7 +11,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { Elysia } from "elysia";
+import { Elysia, type Context } from "elysia";
 import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveControlUiRootSync } from "../../infra/control-ui-assets.js";
@@ -144,7 +144,7 @@ export function controlUiRoutes(params: { basePath: string; root?: ControlUiRoot
   const basePath = normalizeControlUiBasePath(params.basePath);
   const rootState = params.root;
 
-  return new Elysia({ name: "control-ui-routes" }).all("/*", async ({ request }) => {
+  return new Elysia({ name: "control-ui-routes" }).all("/*", async ({ request }: Context) => {
     const url = new URL(request.url);
     const pathname = url.pathname;
 

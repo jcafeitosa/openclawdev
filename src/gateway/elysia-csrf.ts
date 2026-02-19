@@ -5,7 +5,7 @@
  * Bearer-authenticated and loopback requests bypass this check.
  */
 
-import { Elysia } from "elysia";
+import { Elysia, type Context } from "elysia";
 import { loadConfig } from "../config/config.js";
 import { getNodeRequest, getWebBearerToken } from "./elysia-node-compat.js";
 import { resolveGatewayClientIp } from "./net.js";
@@ -14,7 +14,7 @@ import { buildAllowedOrigins, checkRequestOrigin } from "./origin-guard.js";
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export function csrfGuard(params: { port: number }) {
-  return new Elysia({ name: "csrf-guard" }).onBeforeHandle(({ request, set }) => {
+  return new Elysia({ name: "csrf-guard" }).onBeforeHandle(({ request, set }: Context) => {
     const method = request.method;
     if (SAFE_METHODS.has(method)) {
       return;

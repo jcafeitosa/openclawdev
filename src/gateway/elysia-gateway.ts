@@ -5,11 +5,9 @@
  * Each route group is composed as an Elysia plugin.
  */
 
-import { createServer as createHttpServer, type Server as HttpServer } from "node:http";
-import { createServer as createHttpsServer } from "node:https";
-import type { TlsOptions } from "node:tls";
+import type { Server as HttpServer } from "node:http";
 import { node } from "@elysiajs/node";
-import { Elysia } from "elysia";
+import { Elysia, type Context } from "elysia";
 import type { CanvasHostHandler } from "../canvas-host/server.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
 import type { PluginRegistry } from "../plugins/registry.js";
@@ -61,7 +59,7 @@ export interface GatewayElysiaOptions {
   pluginRegistry: PluginRegistry;
   logHooks: SubsystemLogger;
   logPlugins: SubsystemLogger;
-  tlsOptions?: TlsOptions;
+  tlsOptions?: import("node:tls").TlsOptions;
 }
 
 /**
@@ -149,7 +147,7 @@ function canvasHostFallback(params: { canvasHost: CanvasHostHandler }) {
   const { canvasHost } = params;
   return new Elysia({ name: "canvas-host-fallback" }).all(
     "/__openclaw__/canvas/*",
-    async ({ request }) => {
+    async ({ request }: Context) => {
       const { getNodeRequest, getNodeResponse } = await import("./elysia-node-compat.js");
       const req = getNodeRequest(request);
       const res = getNodeResponse(request);
@@ -172,28 +170,31 @@ function canvasHostFallback(params: { canvasHost: CanvasHostHandler }) {
  */
 export async function listenGatewayElysia(
   app: ReturnType<typeof createGatewayElysiaApp>,
-  params: { port: number; hostname: string; tlsOptions?: TlsOptions },
+  params: { port: number; hostname: string; tlsOptions?: import("node:tls").TlsOptions },
 ): Promise<HttpServer> {
-  const httpServer = params.tlsOptions
-    ? createHttpsServer(params.tlsOptions, (req, _res) => {
-        if (req.headers.upgrade?.toLowerCase() === "websocket") {
-          return;
-        }
-        void app.handle(req);
-      })
-    : createHttpServer((req, _res) => {
-        if (req.headers.upgrade?.toLowerCase() === "websocket") {
-          return;
-        }
-        void app.handle(req);
-      });
-
   return new Promise((resolve, reject) => {
-    httpServer.on("error", (err) => {
-      reject(err);
-    });
-    httpServer.listen(params.port, params.hostname, () => {
-      resolve(httpServer);
-    });
+    // Let Elysia handle the server creation and HTTP adapter setup.
+    app.listen(
+      // oxlint-disable-next-line
+      { port: params.port, hostname: params.hostname, tls: params.tlsOptions as any },
+      (serverInfo: unknown) => {
+        const nodeServer = (serverInfo as { raw?: { node?: { server: HttpServer } } }).raw?.node
+          ?.server;
+        if (nodeServer) {
+          // IMPORTANT: Remove Elysia's internal upgrade listener.
+          // We handle all upgrades (Gateway and Canvas Host) manually in server-http.ts
+          // using prependListener to ensure correct protocol handling without framework interference.
+          const upgradeListeners = nodeServer.listeners("upgrade");
+          for (const l of upgradeListeners) {
+            nodeServer.removeListener("upgrade", l);
+          }
+          resolve(nodeServer);
+        } else {
+          reject(
+            new Error(`Failed to create gateway HTTP server on ${params.hostname}:${params.port}`),
+          );
+        }
+      },
+    );
   });
 }

@@ -154,6 +154,21 @@ export class OverviewIsland extends LitElement {
       onSessionKeyChange: (next) => this.handleSessionKeyChange(next),
       onConnect: () => void this.handleConnect(),
       onRefresh: () => void this.handleRefresh(),
+      onNewSession: () => {
+        const basePath =
+          ((globalThis as Record<string, unknown>).__OPENCLAW_CONTROL_UI_BASE_PATH__ as string) ??
+          "";
+        window.location.href = `${basePath}/chat?new=1`;
+      },
+      onViewLogs: () => {
+        const basePath =
+          ((globalThis as Record<string, unknown>).__OPENCLAW_CONTROL_UI_BASE_PATH__ as string) ??
+          "";
+        window.location.href = `${basePath}/logs`;
+      },
+      onViewDocs: () => {
+        window.open("https://docs.openclaw.ai", "_blank");
+      },
     };
 
     return html`${renderOverview(props)}`;

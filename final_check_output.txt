@@ -1,0 +1,23 @@
+$ oxlint --type-aware
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+   ,-[src/plugins/schema-validator.ts:3:46]
+ 2 | 
+ 3 | const Ajv = (AjvPkg as unknown as { default: any }).default || AjvPkg;
+   :                                              ^^^
+ 4 | const ajv = new Ajv({
+   `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/gateway/elysia-gateway.ts:178:81]
+ 177 |     app.listen(
+ 178 |       { port: params.port, hostname: params.hostname, tls: params.tlsOptions as any },
+     :                                                                                 ^^^
+ 179 |       (serverInfo: unknown) => {
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+Found 0 warnings and 2 errors.
+Finished in 42.3s on 3598 files with 136 rules using 8 threads.
+error: script "lint" exited with code 1

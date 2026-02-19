@@ -1,0 +1,21 @@
+
+> openclaw@2026.2.16 check
+> bun format:check && bun tsgo && bun lint
+
+$ oxfmt --check
+Checking formatting...
+
+src/gateway/elysia-csrf.ts (0ms)
+src/gateway/elysia-gateway.ts (0ms)
+src/gateway/routes/a2ui.ts (1ms)
+src/gateway/routes/control-ui.ts (2ms)
+src/gateway/routes/hooks.ts (1ms)
+ui/.astro/content-assets.mjs (0ms)
+ui/.astro/content-modules.mjs (0ms)
+ui/.astro/content.d.ts (0ms)
+ui/.astro/types.d.ts (0ms)
+ui/src/ui/components/chat-island.ts (1ms)
+
+Format issues found in above 10 files. Run without `--check` to fix.
+Finished in 22027ms on 5186 files using 8 threads.
+error: script "format:check" exited with code 1

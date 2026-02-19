@@ -7,7 +7,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Elysia } from "elysia";
+import { Elysia, type Context } from "elysia";
 import { CANVAS_WS_PATH } from "../../canvas-host/a2ui.js";
 import { detectMime } from "../../media/mime.js";
 
@@ -153,43 +153,46 @@ function injectCanvasLiveReload(html: string): string {
 }
 
 export function a2uiRoutes() {
-  return new Elysia({ name: "a2ui-routes" }).all(`${A2UI_PATH}/*`, async ({ request, set }) => {
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      set.status = 405;
-      set.headers["content-type"] = "text/plain; charset=utf-8";
-      return "Method Not Allowed";
-    }
+  return new Elysia({ name: "a2ui-routes" }).all(
+    `${A2UI_PATH}/*`,
+    async ({ request, set }: Context) => {
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        set.status = 405;
+        set.headers["content-type"] = "text/plain; charset=utf-8";
+        return "Method Not Allowed";
+      }
 
-    const a2uiRootReal = await resolveA2uiRootReal();
-    if (!a2uiRootReal) {
-      set.status = 503;
-      set.headers["content-type"] = "text/plain; charset=utf-8";
-      return "A2UI assets not found";
-    }
+      const a2uiRootReal = await resolveA2uiRootReal();
+      if (!a2uiRootReal) {
+        set.status = 503;
+        set.headers["content-type"] = "text/plain; charset=utf-8";
+        return "A2UI assets not found";
+      }
 
-    const url = new URL(request.url);
-    const rel = url.pathname.slice(A2UI_PATH.length);
-    const filePath = await resolveA2uiFilePath(a2uiRootReal, rel || "/");
-    if (!filePath) {
-      set.status = 404;
-      set.headers["content-type"] = "text/plain; charset=utf-8";
-      return "not found";
-    }
+      const url = new URL(request.url);
+      const rel = url.pathname.slice(A2UI_PATH.length);
+      const filePath = await resolveA2uiFilePath(a2uiRootReal, rel || "/");
+      if (!filePath) {
+        set.status = 404;
+        set.headers["content-type"] = "text/plain; charset=utf-8";
+        return "not found";
+      }
 
-    const lower = filePath.toLowerCase();
-    const mime =
-      lower.endsWith(".html") || lower.endsWith(".htm")
-        ? "text/html"
-        : ((await detectMime({ filePath })) ?? "application/octet-stream");
-    set.headers["cache-control"] = "no-store";
+      const lower = filePath.toLowerCase();
+      const mime =
+        lower.endsWith(".html") || lower.endsWith(".htm")
+          ? "text/html"
+          : ((await detectMime({ filePath })) ?? "application/octet-stream");
+      set.headers["cache-control"] = "no-store";
 
-    if (mime === "text/html") {
-      const html = await fs.readFile(filePath, "utf8");
-      set.headers["content-type"] = "text/html; charset=utf-8";
-      return injectCanvasLiveReload(html);
-    }
+      if (mime === "text/html") {
+        const html = await fs.readFile(filePath, "utf8");
+        set.headers["content-type"] = "text/html; charset=utf-8";
+        return injectCanvasLiveReload(html);
+      }
 
-    set.headers["content-type"] = mime;
-    return await fs.readFile(filePath);
-  });
+      set.headers["content-type"] = mime;
+      return await fs.readFile(filePath);
+    },
+  );
 }

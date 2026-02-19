@@ -26,6 +26,25 @@ function extractHashToken(): string | null {
   if (typeof globalThis.location === "undefined") {
     return null;
   }
+
+  // Priority 1: Query param (?token=...)
+  // This is how the gateway server redirects authenticated clients.
+  const search = new URLSearchParams(globalThis.location.search);
+  const searchToken = search.get("token");
+  if (searchToken) {
+    // Clear the token from the URL bar
+    search.delete("token");
+    const searchStr = search.toString();
+    const newUrl =
+      globalThis.location.pathname + (searchStr ? `?${searchStr}` : "") + globalThis.location.hash;
+    if (typeof globalThis.history !== "undefined") {
+      globalThis.history.replaceState(null, "", newUrl);
+    }
+    return searchToken;
+  }
+
+  // Priority 2: Hash fragment (#token=...)
+  // Used by CLI dashboard command to avoid server logs.
   const hash = globalThis.location.hash;
   if (!hash) {
     return null;
@@ -40,7 +59,7 @@ function extractHashToken(): string | null {
     globalThis.history.replaceState(
       null,
       "",
-      globalThis.location.pathname + globalThis.location.search,
+      globalThis.location.pathname + globalThis.location.search, // Preserve query params
     );
   }
   return token;

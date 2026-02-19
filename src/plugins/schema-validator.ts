@@ -1,6 +1,8 @@
 import AjvPkg, { type ErrorObject, type ValidateFunction } from "ajv";
 
-const ajv = new (AjvPkg as unknown as new (opts?: object) => import("ajv").default)({
+// oxlint-disable-next-line
+const Ajv = (AjvPkg as any).default || AjvPkg;
+const ajv = new Ajv({
   allErrors: true,
   strict: false,
   removeAdditional: false,

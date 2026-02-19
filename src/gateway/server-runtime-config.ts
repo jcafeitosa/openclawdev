@@ -1,8 +1,10 @@
-import type {
-  GatewayAuthConfig,
-  GatewayBindMode,
-  GatewayTailscaleConfig,
-  loadConfig,
+import crypto from "node:crypto";
+import {
+  type GatewayAuthConfig,
+  type GatewayBindMode,
+  type GatewayTailscaleConfig,
+  type loadConfig,
+  writeConfigFile,
 } from "../config/config.js";
 import {
   assertGatewayAuthConfigured,
@@ -79,8 +81,45 @@ export async function resolveGatewayRuntimeConfig(params: {
   const hasToken = typeof resolvedAuth.token === "string" && resolvedAuth.token.trim().length > 0;
   const hasPassword =
     typeof resolvedAuth.password === "string" && resolvedAuth.password.trim().length > 0;
+
+  // Auto-generate token if missing on loopback
+  if (
+    authMode === "token" &&
+    !hasToken &&
+    !resolvedAuth.allowTailscale &&
+    isLoopbackHost(bindHost)
+  ) {
+    const generatedToken = crypto.randomBytes(24).toString("hex");
+    // Update memory
+    resolvedAuth.token = generatedToken;
+    // Update disk safely
+    try {
+      // NOTE: We rely on the caller passing a reasonably fresh cfg.
+      // Ideally we would re-read loadConfig() here to be safe against race conditions,
+      // but params.cfg is what we are working with.
+      // Let's shallow copy to avoid mutating the passed object unexpectedly,
+      // although we intend to persist it.
+      const nextCfg = { ...params.cfg };
+      if (!nextCfg.gateway) {
+        nextCfg.gateway = {};
+      }
+      if (!nextCfg.gateway.auth) {
+        nextCfg.gateway.auth = {};
+      }
+      nextCfg.gateway.auth.token = generatedToken;
+      nextCfg.gateway.auth.mode = "token"; // ensure mode is explicit
+      await writeConfigFile(nextCfg);
+      // We can't easily log from here without passing a logger, but this is a side-effect.
+    } catch (err) {
+      // If writing fails, we still proceed with the in-memory generated token.
+      // The user might see a warning later or just have to re-generate next time.
+      console.warn(`[gateway] failed to persist auto-generated token: ${String(err)}`);
+    }
+  }
+
   const hasSharedSecret =
-    (authMode === "token" && hasToken) || (authMode === "password" && hasPassword);
+    (authMode === "token" && (hasToken || resolvedAuth.token)) ||
+    (authMode === "password" && hasPassword);
   const hooksConfig = resolveHooksConfig(params.cfg);
   const canvasHostEnabled =
     process.env.OPENCLAW_SKIP_CANVAS_HOST !== "1" && params.cfg.canvasHost?.enabled !== false;

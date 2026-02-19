@@ -220,6 +220,12 @@ export async function runNodeMain(params = {}) {
     platform: params.platform ?? process.platform,
   };
 
+  // If running via Bun, force usage of Node for the target process
+  // because Bun's child_process.spawn("bun", ...) doesn't behave like Node's.
+  if (path.basename(deps.execPath).startsWith("bun")) {
+    deps.execPath = "node";
+  }
+
   deps.distRoot = path.join(deps.cwd, "dist");
   deps.distEntry = path.join(deps.distRoot, "/entry.js");
   deps.buildStampPath = path.join(deps.distRoot, ".buildstamp");

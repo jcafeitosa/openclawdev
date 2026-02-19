@@ -29,6 +29,9 @@ export type OverviewProps = {
   onSessionKeyChange: (next: string) => void;
   onConnect: () => void;
   onRefresh: () => void;
+  onNewSession: () => void;
+  onViewLogs: () => void;
+  onViewDocs: () => void;
 };
 
 export function renderOverview(props: OverviewProps) {
@@ -515,6 +518,7 @@ export function renderOverview(props: OverviewProps) {
               <div class="grid grid-cols-2" style="gap: 12px">
                 <button
                   class="btn"
+                  @click=${() => props.onNewSession()}
                   style="
                     display: flex;
                     align-items: center;
@@ -542,6 +546,7 @@ export function renderOverview(props: OverviewProps) {
                 </button>
                 <button
                   class="btn"
+                  @click=${() => props.onRefresh()}
                   style="
                     display: flex;
                     align-items: center;
@@ -570,6 +575,7 @@ export function renderOverview(props: OverviewProps) {
                 </button>
                 <button
                   class="btn"
+                  @click=${() => props.onViewLogs()}
                   style="
                     display: flex;
                     align-items: center;
@@ -597,6 +603,7 @@ export function renderOverview(props: OverviewProps) {
                 </button>
                 <button
                   class="btn"
+                  @click=${() => props.onViewDocs()}
                   style="
                     display: flex;
                     align-items: center;

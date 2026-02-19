@@ -156,6 +156,17 @@ export class ChatIsland extends LitElement {
       onSplitRatioChange: (ratio: number) => {
         $splitRatio.set(ratio);
       },
+      onSelectModel: () => {
+        const el = document.querySelector("command-palette");
+        if (el && "open" in el) {
+          (el as unknown as { open: () => void }).open();
+        }
+      },
+      onAskPermissions: () => {
+        alert(
+          "Permission system coming soon - currently all actions are auto-approved for this agent.",
+        );
+      },
     };
 
     return html`${renderChat(props)}`;

@@ -1,0 +1,1133 @@
+
+> check
+> astro check
+
+22:46:19 [content] Syncing content
+22:46:19 [content] Synced content
+22:46:19 [types] Generated 67ms
+22:46:19 [check] Getting diagnostics for Astro files in /Users/juliocezar/Desenvolvimento/openclawdev/ui...
+[96m../src/runtime.ts[0m:[93m42[0m:[93m5[0m - [93mwarning[0m[90m ts(7027): [0mUnreachable code detected.
+
+[7m42[0m     throw new Error("unreachable"); // satisfies tests when mocked
+[7m  [0m [93m    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/agent-orchestrator.ts[0m:[93m241[0m:[93m13[0m - [93mwarning[0m[90m ts(6133): [0m'_implementationContext' is declared but its value is never read.
+
+[7m241[0m       const _implementationContext = decisions
+[7m   [0m [93m            ~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/agent-orchestrator.ts[0m:[93m98[0m:[93m13[0m - [93mwarning[0m[90m ts(6133): [0m'_openingBrief' is declared but its value is never read.
+
+[7m98[0m       const _openingBrief = `
+[7m  [0m [93m            ~~~~~~~~~~~~~[0m
+
+[96m../src/agents/bash-tools.process.ts[0m:[93m672[0m:[93m7[0m - [93mwarning[0m[90m ts(7027): [0mUnreachable code detected.
+
+[7m672[0m       return {
+[7m   [0m [93m      ~~~~~~[0m
+
+[96m../src/agents/bedrock-discovery.ts[0m:[93m4[0m:[93m8[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@aws-sdk/client-bedrock/dist-types/index.js"' has no exported member 'ListFoundationModelsCommandOutput'.
+
+[7m4[0m   type ListFoundationModelsCommandOutput,
+[7m [0m [91m       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/bedrock-discovery.ts[0m:[93m3[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@aws-sdk/client-bedrock/dist-types/index.js"' has no exported member 'ListFoundationModelsCommand'.
+
+[7m3[0m   ListFoundationModelsCommand,
+[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/bedrock-discovery.ts[0m:[93m2[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@aws-sdk/client-bedrock/dist-types/index.js"' has no exported member 'BedrockClient'.
+
+[7m2[0m   BedrockClient,
+[7m [0m [91m  ~~~~~~~~~~~~~[0m
+
+[96m../src/agents/cli-credentials.ts[0m:[93m496[0m:[93m33[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m496[0m     provider: "openai-codex" as OAuthProvider,
+[7m   [0m [93m                                ~~~~~~~~~~~~~[0m
+[96m../src/agents/cli-credentials.ts[0m:[93m208[0m:[93m35[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m208[0m       provider: "openai-codex" as OAuthProvider,
+[7m   [0m [93m                                  ~~~~~~~~~~~~~[0m
+[96m../src/agents/cli-credentials.ts[0m:[93m55[0m:[93m13[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m55[0m   provider: OAuthProvider;
+[7m  [0m [93m            ~~~~~~~~~~~~~[0m
+[96m../src/agents/cli-credentials.ts[0m:[93m5[0m:[93m33[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m5[0m import type { OAuthCredentials, OAuthProvider } from "@mariozechner/pi-ai";
+[7m [0m [93m                                ~~~~~~~~~~~~~[0m
+
+[96m../src/agents/identity.ts[0m:[93m69[0m:[93m56[0m - [93mwarning[0m[90m ts(6385): [0m'messagePrefix' is deprecated.
+
+[7m69[0m   const configured = opts?.configured ?? cfg.messages?.messagePrefix;
+[7m  [0m [93m                                                       ~~~~~~~~~~~~~[0m
+
+[96m../src/agents/metrics-routes.ts[0m:[93m144[0m:[93m23[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m144[0m   .get("/summary", ({ set }) => {
+[7m   [0m [91m                      ~~~[0m
+[96m../src/agents/metrics-routes.ts[0m:[93m104[0m:[93m19[0m - [91merror[0m[90m ts(7031): [0mBinding element 'query' implicitly has an 'any' type.
+
+[7m104[0m   .delete("/", ({ query }) => {
+[7m   [0m [91m                  ~~~~~[0m
+[96m../src/agents/metrics-routes.ts[0m:[93m19[0m:[93m23[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m19[0m   .get("/", ({ query, set }) => {
+[7m  [0m [91m                      ~~~[0m
+[96m../src/agents/metrics-routes.ts[0m:[93m19[0m:[93m16[0m - [91merror[0m[90m ts(7031): [0mBinding element 'query' implicitly has an 'any' type.
+
+[7m19[0m   .get("/", ({ query, set }) => {
+[7m  [0m [91m               ~~~~~[0m
+
+[96m../src/agents/pi-tools.ts[0m:[93m156[0m:[93m3[0m - [93mwarning[0m[90m ts(6385): [0m'cleanToolSchemaForGemini' is deprecated.
+
+[7m156[0m   cleanToolSchemaForGemini,
+[7m   [0m [93m  ~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/pi-tools.ts[0m:[93m45[0m:[93m10[0m - [93mwarning[0m[90m ts(6385): [0m'cleanToolSchemaForGemini' is deprecated.
+
+[7m45[0m import { cleanToolSchemaForGemini, normalizeToolParameters } from "./pi-tools.schema.js";
+[7m  [0m [93m         ~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/team-workspace.ts[0m:[93m62[0m:[93m9[0m - [93mwarning[0m[90m ts(6133): [0m'_parsed' is declared but its value is never read.
+
+[7m62[0m   const _parsed = parseAgentSessionKey(requesterSessionKey);
+[7m  [0m [93m        ~~~~~~~[0m
+
+[96m../src/agents/auth-profiles/oauth.ts[0m:[93m23[0m:[93m50[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m23[0m const resolveOAuthProvider = (provider: string): OAuthProvider | null =>
+[7m  [0m [93m                                                 ~~~~~~~~~~~~~[0m
+[96m../src/agents/auth-profiles/oauth.ts[0m:[93m20[0m:[93m57[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m20[0m const isOAuthProvider = (provider: string): provider is OAuthProvider =>
+[7m  [0m [93m                                                        ~~~~~~~~~~~~~[0m
+[96m../src/agents/auth-profiles/oauth.ts[0m:[93m5[0m:[93m3[0m - [93mwarning[0m[90m ts(6385): [0m'OAuthProvider' is deprecated.
+
+[7m5[0m   type OAuthProvider,
+[7m [0m [93m  ~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/auth-profiles/store.ts[0m:[93m28[0m:[93m10[0m - [93mwarning[0m[90m ts(6133): [0m'_syncAuthProfileStore' is declared but its value is never read.
+
+[7m28[0m function _syncAuthProfileStore(target: AuthProfileStore, source: AuthProfileStore): void {
+[7m  [0m [93m         ~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/auth-profiles/store.ts[0m:[93m16[0m:[93m5[0m - [93mwarning[0m[90m ts(6133): [0m'_authStoreBackend' is declared but its value is never read.
+
+[7m16[0m let _authStoreBackend: AuthStoreBackend | null = null;
+[7m  [0m [93m    ~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/chat/collaboration/coordinator.ts[0m:[93m230[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'message' is declared but its value is never read.
+
+[7m230[0m   message: string,
+[7m   [0m [93m  ~~~~~~~[0m
+[96m../src/agents/chat/collaboration/coordinator.ts[0m:[93m137[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'message' is declared but its value is never read.
+
+[7m137[0m   message: string,
+[7m   [0m [93m  ~~~~~~~[0m
+[96m../src/agents/chat/collaboration/coordinator.ts[0m:[93m67[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'message' is declared but its value is never read.
+
+[7m67[0m   message: string,
+[7m  [0m [93m  ~~~~~~~[0m
+
+[96m../src/agents/mcp/client-manager.ts[0m:[93m105[0m:[93m13[0m - [93mwarning[0m[90m ts(6133): [0m'_exhaustiveCheck' is declared but its value is never read.
+
+[7m105[0m       const _exhaustiveCheck: never = config.type;
+[7m   [0m [93m            ~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/mcp/client-manager.ts[0m:[93m87[0m:[93m23[0m - [93mwarning[0m[90m ts(6385): [0m'SSEClientTransport' is deprecated.
+
+[7m87[0m       transport = new SSEClientTransport(new URL(config.url));
+[7m  [0m [93m                      ~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/mcp/client-manager.ts[0m:[93m63[0m:[93m9[0m - [93mwarning[0m[90m ts(6385): [0m'SSEClientTransport' is deprecated.
+
+[7m63[0m       | SSEClientTransport
+[7m  [0m [93m        ~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/mcp/client-manager.ts[0m:[93m24[0m:[93m7[0m - [93mwarning[0m[90m ts(6385): [0m'SSEClientTransport' is deprecated.
+
+[7m24[0m     | SSEClientTransport
+[7m  [0m [93m      ~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/mcp/client-manager.ts[0m:[93m12[0m:[93m10[0m - [93mwarning[0m[90m ts(6385): [0m'SSEClientTransport' is deprecated.
+
+[7m12[0m import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+[7m  [0m [93m         ~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/pi-embedded-runner/compact.ts[0m:[93m591[0m:[93m11[0m - [93mwarning[0m[90m ts(6385): [0m'getDmHistoryLimitFromSessionKey' is deprecated.
+
+[7m591[0m           getDmHistoryLimitFromSessionKey(params.sessionKey, params.config),
+[7m   [0m [93m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/pi-embedded-runner/compact.ts[0m:[93m73[0m:[93m10[0m - [93mwarning[0m[90m ts(6385): [0m'getDmHistoryLimitFromSessionKey' is deprecated.
+
+[7m73[0m import { getDmHistoryLimitFromSessionKey, limitHistoryTurns } from "./history.js";
+[7m  [0m [93m         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/pi-embedded-runner/google.ts[0m:[93m261[0m:[93m19[0m - [93mwarning[0m[90m ts(6387): [0mThe signature '(schema: Record<string, unknown>): unknown' of 'cleanToolSchemaForGemini' is deprecated.
+
+[7m261[0m       parameters: cleanToolSchemaForGemini(
+[7m   [0m [93m                  ~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/pi-embedded-runner/google.ts[0m:[93m17[0m:[93m10[0m - [93mwarning[0m[90m ts(6385): [0m'cleanToolSchemaForGemini' is deprecated.
+
+[7m17[0m import { cleanToolSchemaForGemini } from "../pi-tools.schema.js";
+[7m  [0m [93m         ~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/pi-embedded-runner/run/attempt.ts[0m:[93m669[0m:[93m11[0m - [93mwarning[0m[90m ts(6385): [0m'getDmHistoryLimitFromSessionKey' is deprecated.
+
+[7m669[0m           getDmHistoryLimitFromSessionKey(params.sessionKey, params.config),
+[7m   [0m [93m          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/pi-embedded-runner/run/attempt.ts[0m:[93m82[0m:[93m10[0m - [93mwarning[0m[90m ts(6385): [0m'getDmHistoryLimitFromSessionKey' is deprecated.
+
+[7m82[0m import { getDmHistoryLimitFromSessionKey, limitHistoryTurns } from "../history.js";
+[7m  [0m [93m         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/schema/zod-tool-helpers.ts[0m:[93m2[0m:[93m1[0m - [93mwarning[0m[90m ts(6133): [0m'zodToToolJsonSchema' is declared but its value is never read.
+
+[7m2[0m import { zodToToolJsonSchema } from "./zod-tool-schema.js";
+[7m [0m [93m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/tools/browser-tool.schema.ts[0m:[93m69[0m:[93m32[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{}, $loose>' is deprecated.
+
+[7m69[0m   fields: z.array(z.object({}).passthrough()).optional(),
+[7m  [0m [93m                               ~~~~~~~~~~~[0m
+
+[96m../src/agents/tools/common.ts[0m:[93m243[0m:[93m52[0m - [93mwarning[0m[90m ts(6387): [0mThe signature '(start?: number | undefined, end?: number | undefined): Buffer<ArrayBuffer>' of 'buf.slice' is deprecated.
+
+[7m243[0m   const mimeType = (await detectMime({ buffer: buf.slice(0, 256) })) ?? "image/png";
+[7m   [0m [93m                                                   ~~~~~[0m
+
+[96m../src/agents/tools/plan-tool.ts[0m:[93m159[0m:[93m17[0m - [93mwarning[0m[90m ts(6133): [0m'_exhaustiveCheck' is declared but its value is never read.
+
+[7m159[0m           const _exhaustiveCheck: never = input.action;
+[7m   [0m [93m                ~~~~~~~~~~~~~~~~[0m
+
+[96m../src/agents/tools/sessions-batch-spawn-tool.ts[0m:[93m483[0m:[93m13[0m - [93mwarning[0m[90m ts(6133): [0m'_anyError' is declared but its value is never read.
+
+[7m483[0m       const _anyError = results.some((r) => r.status === "error");
+[7m   [0m [93m            ~~~~~~~~~[0m
+
+[96m../src/agents/tools/sessions-progress-tool.ts[0m:[93m141[0m:[93m11[0m - [93mwarning[0m[90m ts(6133): [0m'_aborted' is declared but its value is never read.
+
+[7m141[0m       let _aborted = false;
+[7m   [0m [93m          ~~~~~~~~[0m
+
+[96m../src/agents/tools/subagents-tool.ts[0m:[93m203[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'key' is declared but its value is never read.
+
+[7m203[0m   key: string,
+[7m   [0m [93m  ~~~[0m
+
+[96m../src/agents/workflows/feature-dev.ts[0m:[93m215[0m:[93m11[0m - [93mwarning[0m[90m ts(6133): [0m'_sessionKey' is declared but its value is never read.
+
+[7m215[0m     const _sessionKey = await this.orchestrator.spawnImplementationTeam({
+[7m   [0m [93m          ~~~~~~~~~~~[0m
+[96m../src/agents/workflows/feature-dev.ts[0m:[93m131[0m:[93m15[0m - [93mwarning[0m[90m ts(6133): [0m'_exhaustiveCheck' is declared but its value is never read.
+
+[7m131[0m         const _exhaustiveCheck: never = this.state.currentPhase;
+[7m   [0m [93m              ~~~~~~~~~~~~~~~~[0m
+[96m../src/agents/workflows/feature-dev.ts[0m:[93m39[0m:[93m7[0m - [93mwarning[0m[90m ts(6133): [0m'_PROMPTS' is declared but its value is never read.
+
+[7m39[0m const _PROMPTS = {
+[7m  [0m [93m      ~~~~~~~~[0m
+
+[96m../src/auto-reply/commands-registry.ts[0m:[93m11[0m:[93m3[0m - [93mwarning[0m[90m ts(6196): [0m'CommandArgMenuSpec' is declared but never used.
+
+[7m11[0m   CommandArgMenuSpec,
+[7m  [0m [93m  ~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/browser/pw-session.ts[0m:[93m366[0m:[93m35[0m - [91merror[0m[90m ts(7006): [0mParameter 'c' implicitly has an 'any' type.
+
+[7m366[0m   const pages = contexts.flatMap((c) => c.pages());
+[7m   [0m [91m                                  ~[0m
+[96m../src/browser/pw-session.ts[0m:[93m297[0m:[93m23[0m - [91merror[0m[90m ts(7006): [0mParameter 'page' implicitly has an 'any' type.
+
+[7m297[0m   context.on("page", (page) => ensurePageState(page));
+[7m   [0m [91m                      ~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m9[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'chromium'.
+
+[7m9[0m import { chromium } from "playwright-core";
+[7m [0m [91m         ~~~~~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m7[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'Response'.
+
+[7m7[0m   Response,
+[7m [0m [91m  ~~~~~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m6[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'Request'.
+
+[7m6[0m   Request,
+[7m [0m [91m  ~~~~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m5[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'Page'.
+
+[7m5[0m   Page,
+[7m [0m [91m  ~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m4[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'ConsoleMessage'.
+
+[7m4[0m   ConsoleMessage,
+[7m [0m [91m  ~~~~~~~~~~~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m3[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'BrowserContext'.
+
+[7m3[0m   BrowserContext,
+[7m [0m [91m  ~~~~~~~~~~~~~~[0m
+[96m../src/browser/pw-session.ts[0m:[93m2[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'Browser'.
+
+[7m2[0m   Browser,
+[7m [0m [91m  ~~~~~~~[0m
+
+[96m../src/browser/pw-tools-core.downloads.ts[0m:[93m170[0m:[93m18[0m - [91merror[0m[90m ts(7006): [0mParameter 'dialog' implicitly has an 'any' type.
+
+[7m170[0m     .then(async (dialog) => {
+[7m   [0m [91m                 ~~~~~~[0m
+[96m../src/browser/pw-tools-core.downloads.ts[0m:[93m140[0m:[93m33[0m - [91merror[0m[90m ts(7006): [0mParameter 'el' implicitly has an 'any' type.
+
+[7m140[0m           await input.evaluate((el) => {
+[7m   [0m [91m                                ~~[0m
+[96m../src/browser/pw-tools-core.downloads.ts[0m:[93m120[0m:[93m18[0m - [91merror[0m[90m ts(7006): [0mParameter 'fileChooser' implicitly has an 'any' type.
+
+[7m120[0m     .then(async (fileChooser) => {
+[7m   [0m [91m                 ~~~~~~~~~~~[0m
+[96m../src/browser/pw-tools-core.downloads.ts[0m:[93m4[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'Page'.
+
+[7m4[0m import type { Page } from "playwright-core";
+[7m [0m [91m              ~~~~[0m
+
+[96m../src/browser/pw-tools-core.interactions.ts[0m:[93m638[0m:[93m30[0m - [91merror[0m[90m ts(7006): [0mParameter 'el' implicitly has an 'any' type.
+
+[7m638[0m       await handle.evaluate((el) => {
+[7m   [0m [91m                             ~~[0m
+[96m../src/browser/pw-tools-core.interactions.ts[0m:[93m543[0m:[93m28[0m - [91merror[0m[90m ts(7006): [0mParameter 'labels' implicitly has an 'any' type.
+
+[7m543[0m       await page.evaluate((labels) => {
+[7m   [0m [91m                           ~~~~~~[0m
+
+[96m../src/browser/pw-tools-core.state.ts[0m:[93m2[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'devices'.
+
+[7m2[0m import { devices as playwrightDevices } from "playwright-core";
+[7m [0m [91m         ~~~~~~~[0m
+[96m../src/browser/pw-tools-core.state.ts[0m:[93m1[0m:[93m27[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'Page'.
+
+[7m1[0m import type { CDPSession, Page } from "playwright-core";
+[7m [0m [91m                          ~~~~[0m
+[96m../src/browser/pw-tools-core.state.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/playwright-core/index.js"' has no exported member 'CDPSession'.
+
+[7m1[0m import type { CDPSession, Page } from "playwright-core";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/browser/pw-tools-core.storage.ts[0m:[93m122[0m:[93m8[0m - [91merror[0m[90m ts(7031): [0mBinding element 'kind' implicitly has an 'any' type.
+
+[7m122[0m     ({ kind }) => {
+[7m   [0m [91m       ~~~~[0m
+[96m../src/browser/pw-tools-core.storage.ts[0m:[93m106[0m:[93m22[0m - [91merror[0m[90m ts(7031): [0mBinding element 'value' implicitly has an 'any' type.
+
+[7m106[0m     ({ kind, key: k, value }) => {
+[7m   [0m [91m                     ~~~~~[0m
+[96m../src/browser/pw-tools-core.storage.ts[0m:[93m106[0m:[93m19[0m - [91merror[0m[90m ts(7031): [0mBinding element 'k' implicitly has an 'any' type.
+
+[7m106[0m     ({ kind, key: k, value }) => {
+[7m   [0m [91m                  ~[0m
+[96m../src/browser/pw-tools-core.storage.ts[0m:[93m106[0m:[93m8[0m - [91merror[0m[90m ts(7031): [0mBinding element 'kind' implicitly has an 'any' type.
+
+[7m106[0m     ({ kind, key: k, value }) => {
+[7m   [0m [91m       ~~~~[0m
+[96m../src/browser/pw-tools-core.storage.ts[0m:[93m68[0m:[93m26[0m - [91merror[0m[90m ts(7031): [0mBinding element 'key2' implicitly has an 'any' type.
+
+[7m68[0m     ({ kind: kind2, key: key2 }) => {
+[7m  [0m [91m                         ~~~~[0m
+[96m../src/browser/pw-tools-core.storage.ts[0m:[93m68[0m:[93m14[0m - [91merror[0m[90m ts(7031): [0mBinding element 'kind2' implicitly has an 'any' type.
+
+[7m68[0m     ({ kind: kind2, key: key2 }) => {
+[7m  [0m [91m             ~~~~~[0m
+
+[96m../src/browser/routes/agent.snapshot.ts[0m:[93m298[0m:[93m14[0m - [93mwarning[0m[90m ts(80006): [0mThis may be converted to an async function.
+
+[7m298[0m           ? (() => {
+[7m   [0m [93m             ~~~~~~~[0m
+
+[96m../src/channels/plugins/config-schema.ts[0m:[93m1[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodTypeAny' is deprecated.
+
+[7m1[0m import type { ZodTypeAny } from "zod";
+[7m [0m [93m              ~~~~~~~~~~[0m
+
+[96m../src/cli/completion-cli.ts[0m:[93m95[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'binName' is declared but its value is never read.
+
+[7m95[0m   binName: string,
+[7m  [0m [93m  ~~~~~~~[0m
+
+[96m../src/cli/logs-cli.ts[0m:[93m237[0m:[93m9[0m - [93mwarning[0m[90m ts(7027): [0mUnreachable code detected.
+
+[7m237[0m         return;
+[7m   [0m [93m        ~~~~~~[0m
+
+[96m../src/commands/doctor-completion.ts[0m:[93m79[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'runtime' is declared but its value is never read.
+
+[7m79[0m   runtime: RuntimeEnv,
+[7m  [0m [93m  ~~~~~~~[0m
+
+[96m../src/commands/doctor-config-flow.ts[0m:[93m33[0m:[93m41[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssue' is deprecated.
+
+[7m33[0m function isUnrecognizedKeysIssue(issue: ZodIssue): issue is UnrecognizedKeysIssue {
+[7m  [0m [93m                                        ~~~~~~~~[0m
+[96m../src/commands/doctor-config-flow.ts[0m:[93m24[0m:[93m30[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssue' is deprecated.
+
+[7m24[0m type UnrecognizedKeysIssue = ZodIssue & {
+[7m  [0m [93m                             ~~~~~~~~[0m
+[96m../src/commands/doctor-config-flow.ts[0m:[93m3[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssue' is deprecated.
+
+[7m3[0m import type { ZodIssue } from "zod";
+[7m [0m [93m              ~~~~~~~~[0m
+
+[96m../src/commands/onboard-hooks.ts[0m:[93m10[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'runtime' is declared but its value is never read.
+
+[7m10[0m   runtime: RuntimeEnv,
+[7m  [0m [93m  ~~~~~~~[0m
+
+[96m../src/commands/onboard-storage.ts[0m:[93m58[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'runtime' is declared but its value is never read.
+
+[7m58[0m   runtime: RuntimeEnv,
+[7m  [0m [93m  ~~~~~~~[0m
+[96m../src/commands/onboard-storage.ts[0m:[93m57[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'config' is declared but its value is never read.
+
+[7m57[0m   config: OpenClawConfig,
+[7m  [0m [93m  ~~~~~~[0m
+
+[96m../src/commands/models/aliases.ts[0m:[93m57[0m:[93m9[0m - [93mwarning[0m[90m ts(6133): [0m'_updated' is declared but its value is never read.
+
+[7m57[0m   const _updated = await updateConfig((cfg) => {
+[7m  [0m [93m        ~~~~~~~~[0m
+
+[96m../src/commands/models/list.probe.ts[0m:[93m140[0m:[93m10[0m - [93mwarning[0m[90m ts(80006): [0mThis may be converted to an async function.
+
+[7m140[0m function buildProbeTargets(params: {
+[7m   [0m [93m         ~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/commands/models/scan.ts[0m:[93m299[0m:[93m9[0m - [93mwarning[0m[90m ts(6133): [0m'_updated' is declared but its value is never read.
+
+[7m299[0m   const _updated = await updateConfig((cfg) => {
+[7m   [0m [93m        ~~~~~~~~[0m
+
+[96m../src/config/schema.hints.ts[0m:[93m225[0m:[93m44[0m - [93mwarning[0m[90m ts(6385): [0m'_def' is deprecated.
+
+[7m225[0m     next = mapSensitivePaths(currentSchema._def.right as z.ZodType, path, next);
+[7m   [0m [93m                                           ~~~~[0m
+[96m../src/config/schema.hints.ts[0m:[93m224[0m:[93m44[0m - [93mwarning[0m[90m ts(6385): [0m'_def' is deprecated.
+
+[7m224[0m     next = mapSensitivePaths(currentSchema._def.left as z.ZodType, path, next);
+[7m   [0m [93m                                           ~~~~[0m
+[96m../src/config/schema.hints.ts[0m:[93m215[0m:[93m44[0m - [93mwarning[0m[90m ts(6385): [0m'_def' is deprecated.
+
+[7m215[0m     next = mapSensitivePaths(currentSchema._def.valueType as z.ZodType, nextPath, next);
+[7m   [0m [93m                                           ~~~~[0m
+
+[96m../src/config/zod-schema.agent-defaults.ts[0m:[93m169[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ model: ZodOptional<ZodObject<{ primary: ZodOptional<ZodString>; fallbacks: ZodOptional<ZodArray<ZodString>>; }, $strict>>; ... 32 more ...; sandbox: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m169[0m   .passthrough()
+[7m   [0m [93m   ~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-defaults.ts[0m:[93m165[0m:[93m8[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ maxConcurrent: ZodOptional<ZodNumber>; maxSpawnDepth: ZodOptional<ZodNumber>; maxChildrenPerAgent: ZodOptional<ZodNumber>; archiveAfterMinutes: ZodOptional<...>; model: ZodOptional<...>; thinking: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m165[0m       .passthrough()
+[7m   [0m [93m       ~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m624[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ id: ZodString; default: ZodOptional<ZodBoolean>; name: ZodOptional<ZodString>; workspace: ZodOptional<ZodString>; ... 10 more ...; tools: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m624[0m   .passthrough();
+[7m   [0m [93m   ~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m619[0m:[93m8[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ allowAgents: ZodOptional<ZodArray<ZodString>>; model: ZodOptional<ZodUnion<readonly [ZodString, ZodObject<{ primary: ZodOptional<ZodString>; fallbacks: ZodOptional<...>; }, $strict>]>>; thinking: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m619[0m       .passthrough()
+[7m   [0m [93m       ~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m586[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ enabled: ZodOptional<ZodBoolean>; sources: ZodOptional<ZodArray<ZodUnion<readonly [ZodLiteral<"memory">, ZodLiteral<"sessions">]>>>; ... 11 more ...; cache: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m586[0m   .passthrough()
+[7m   [0m [93m   ~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m397[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m397[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m386[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m386[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m292[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m292[0m       code: z.ZodIssueCode.custom,
+[7m   [0m [93m              ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m220[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m220[0m       code: z.ZodIssueCode.custom,
+[7m   [0m [93m              ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m173[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m173[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m164[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m164[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m156[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m156[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m145[0m:[93m21[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m145[0m             code: z.ZodIssueCode.custom,
+[7m   [0m [93m                    ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m135[0m:[93m21[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m135[0m             code: z.ZodIssueCode.custom,
+[7m   [0m [93m                    ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m79[0m:[93m19[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m79[0m           code: z.ZodIssueCode.custom,
+[7m  [0m [93m                  ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m71[0m:[93m19[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m71[0m           code: z.ZodIssueCode.custom,
+[7m  [0m [93m                  ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m60[0m:[93m19[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m60[0m           code: z.ZodIssueCode.custom,
+[7m  [0m [93m                  ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.agent-runtime.ts[0m:[93m43[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m43[0m         code: z.ZodIssueCode.custom,
+[7m  [0m [93m                ~~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.core.ts[0m:[93m397[0m:[93m19[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m397[0m           code: z.ZodIssueCode.custom,
+[7m   [0m [93m                  ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.core.ts[0m:[93m333[0m:[93m13[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m333[0m     code: z.ZodIssueCode.custom,
+[7m   [0m [93m            ~~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.hooks.ts[0m:[93m95[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ enabled: ZodOptional<ZodBoolean>; env: ZodOptional<ZodRecord<ZodString, ZodString>>; }, $loose>' is deprecated.
+
+[7m95[0m   .passthrough();
+[7m  [0m [93m   ~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m780[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m780[0m       code: z.ZodIssueCode.custom,
+[7m   [0m [93m              ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m634[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m634[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m612[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m612[0m       code: z.ZodIssueCode.custom,
+[7m   [0m [93m              ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m386[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m386[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m378[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m378[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m370[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m370[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m358[0m:[93m29[0m - [93mwarning[0m[90m ts(6385): [0m'(params?: string | { normalize?: boolean | undefined; abort?: boolean | undefined; protocol?: RegExp | undefined; pattern?: RegExp | undefined; hostname?: RegExp | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined): ZodString' is deprecated.
+
+[7m358[0m     activityUrl: z.string().url().optional(),
+[7m   [0m [93m                            ~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m211[0m:[93m17[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m211[0m         code: z.ZodIssueCode.custom,
+[7m   [0m [93m                ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m187[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m187[0m       code: z.ZodIssueCode.custom,
+[7m   [0m [93m              ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.providers-core.ts[0m:[93m92[0m:[93m15[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m92[0m       code: z.ZodIssueCode.custom,
+[7m  [0m [93m              ~~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.providers-whatsapp.ts[0m:[93m75[0m:[93m13[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m75[0m     code: z.ZodIssueCode.custom,
+[7m  [0m [93m            ~~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.providers.ts[0m:[93m41[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ defaults: ZodOptional<ZodObject<{ groupPolicy: ZodOptional<ZodEnum<{ open: "open"; allowlist: "allowlist"; disabled: "disabled"; }>>; heartbeat: ZodOptional<ZodObject<{ showOk: ZodOptional<ZodBoolean>; showAlerts: ZodOptional<...>; useIndicator: ZodOptional<...>; }, $strict>>; }, $strict>>; ... 9 more ...; msteams: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m41[0m   .passthrough() // Allow extension channel configs (nostr, matrix, zalo, etc.)
+[7m  [0m [93m   ~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.session.ts[0m:[93m95[0m:[93m23[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m95[0m               code: z.ZodIssueCode.custom,
+[7m  [0m [93m                      ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.session.ts[0m:[93m84[0m:[93m23[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m84[0m               code: z.ZodIssueCode.custom,
+[7m  [0m [93m                      ~~~~~~~~~~~~[0m
+
+[96m../src/config/zod-schema.ts[0m:[93m692[0m:[93m21[0m - [93mwarning[0m[90m ts(6385): [0m'ZodIssueCode' is deprecated.
+
+[7m692[0m             code: z.ZodIssueCode.custom,
+[7m   [0m [93m                    ~~~~~~~~~~~~[0m
+[96m../src/config/zod-schema.ts[0m:[93m98[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(params?: string | { normalize?: boolean | undefined; abort?: boolean | undefined; protocol?: RegExp | undefined; pattern?: RegExp | undefined; hostname?: RegExp | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined): ZodString' is deprecated.
+
+[7m98[0m   .url()
+[7m  [0m [93m   ~~~[0m
+
+[96m../src/discord/components.ts[0m:[93m27[0m:[93m37[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'TextInputStyle'.
+
+[7m27[0m import { ButtonStyle, MessageFlags, TextInputStyle } from "discord-api-types/v10";
+[7m  [0m [91m                                    ~~~~~~~~~~~~~~[0m
+[96m../src/discord/components.ts[0m:[93m27[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'MessageFlags'.
+
+[7m27[0m import { ButtonStyle, MessageFlags, TextInputStyle } from "discord-api-types/v10";
+[7m  [0m [91m                      ~~~~~~~~~~~~[0m
+[96m../src/discord/components.ts[0m:[93m27[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ButtonStyle'.
+
+[7m27[0m import { ButtonStyle, MessageFlags, TextInputStyle } from "discord-api-types/v10";
+[7m  [0m [91m         ~~~~~~~~~~~[0m
+
+[96m../src/discord/send.channels.ts[0m:[93m2[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m2[0m import { Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~[0m
+[96m../src/discord/send.channels.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIChannel'.
+
+[7m1[0m import type { APIChannel } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/discord/send.components.ts[0m:[93m8[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m8[0m import { ChannelType, Routes } from "discord-api-types/v10";
+[7m [0m [91m                      ~~~~~~[0m
+[96m../src/discord/send.components.ts[0m:[93m8[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ChannelType'.
+
+[7m8[0m import { ChannelType, Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+[96m../src/discord/send.components.ts[0m:[93m7[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIChannel'.
+
+[7m7[0m import type { APIChannel } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/discord/send.emojis-stickers.ts[0m:[93m1[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m1[0m import { Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~[0m
+
+[96m../src/discord/send.guild.ts[0m:[93m9[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m9[0m import { Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~[0m
+[96m../src/discord/send.guild.ts[0m:[93m7[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'RESTPostAPIGuildScheduledEventJSONBody'.
+
+[7m7[0m   RESTPostAPIGuildScheduledEventJSONBody,
+[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/discord/send.guild.ts[0m:[93m6[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIVoiceState'.
+
+[7m6[0m   APIVoiceState,
+[7m [0m [91m  ~~~~~~~~~~~~~[0m
+[96m../src/discord/send.guild.ts[0m:[93m5[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIRole'.
+
+[7m5[0m   APIRole,
+[7m [0m [91m  ~~~~~~~[0m
+[96m../src/discord/send.guild.ts[0m:[93m4[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIGuildScheduledEvent'.
+
+[7m4[0m   APIGuildScheduledEvent,
+[7m [0m [91m  ~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/discord/send.guild.ts[0m:[93m3[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIGuildMember'.
+
+[7m3[0m   APIGuildMember,
+[7m [0m [91m  ~~~~~~~~~~~~~~[0m
+[96m../src/discord/send.guild.ts[0m:[93m2[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIChannel'.
+
+[7m2[0m   APIChannel,
+[7m [0m [91m  ~~~~~~~~~~[0m
+
+[96m../src/discord/send.messages.ts[0m:[93m2[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m2[0m import { ChannelType, Routes } from "discord-api-types/v10";
+[7m [0m [91m                      ~~~~~~[0m
+[96m../src/discord/send.messages.ts[0m:[93m2[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ChannelType'.
+
+[7m2[0m import { ChannelType, Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+[96m../src/discord/send.messages.ts[0m:[93m1[0m:[93m27[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIMessage'.
+
+[7m1[0m import type { APIChannel, APIMessage } from "discord-api-types/v10";
+[7m [0m [91m                          ~~~~~~~~~~[0m
+[96m../src/discord/send.messages.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIChannel'.
+
+[7m1[0m import type { APIChannel, APIMessage } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/discord/send.outbound.ts[0m:[93m6[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m6[0m import { ChannelType, Routes } from "discord-api-types/v10";
+[7m [0m [91m                      ~~~~~~[0m
+[96m../src/discord/send.outbound.ts[0m:[93m6[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ChannelType'.
+
+[7m6[0m import { ChannelType, Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+[96m../src/discord/send.outbound.ts[0m:[93m5[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIChannel'.
+
+[7m5[0m import type { APIChannel } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/discord/send.permissions.ts[0m:[93m77[0m:[93m71[0m - [91merror[0m[90m ts(7006): [0mParameter 'role' implicitly has an 'any' type.
+
+[7m77[0m   const rolesById = new Map<string, APIRole>((guild.roles ?? []).map((role) => [role.id, role]));
+[7m  [0m [91m                                                                      ~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m28[0m:[93m63[0m - [91merror[0m[90m ts(18046): [0m'value' is of type 'unknown'.
+
+[7m28[0m   return PERMISSION_ENTRIES.filter(([, value]) => (bitfield & value) === value)
+[7m  [0m [91m                                                              ~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m10[0m:[93m77[0m - [91merror[0m[90m ts(18046): [0m'value' is of type 'unknown'.
+
+[7m10[0m const ALL_PERMISSIONS = PERMISSION_ENTRIES.reduce((acc, [, value]) => acc | value, 0n);
+[7m  [0m [91m                                                                            ~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m3[0m:[93m44[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m3[0m import { ChannelType, PermissionFlagsBits, Routes } from "discord-api-types/v10";
+[7m [0m [91m                                           ~~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m3[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'PermissionFlagsBits'.
+
+[7m3[0m import { ChannelType, PermissionFlagsBits, Routes } from "discord-api-types/v10";
+[7m [0m [91m                      ~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m3[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ChannelType'.
+
+[7m3[0m import { ChannelType, PermissionFlagsBits, Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m2[0m:[93m53[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIRole'.
+
+[7m2[0m import type { APIChannel, APIGuild, APIGuildMember, APIRole } from "discord-api-types/v10";
+[7m [0m [91m                                                    ~~~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m2[0m:[93m37[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIGuildMember'.
+
+[7m2[0m import type { APIChannel, APIGuild, APIGuildMember, APIRole } from "discord-api-types/v10";
+[7m [0m [91m                                    ~~~~~~~~~~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m2[0m:[93m27[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIGuild'.
+
+[7m2[0m import type { APIChannel, APIGuild, APIGuildMember, APIRole } from "discord-api-types/v10";
+[7m [0m [91m                          ~~~~~~~~[0m
+[96m../src/discord/send.permissions.ts[0m:[93m2[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIChannel'.
+
+[7m2[0m import type { APIChannel, APIGuild, APIGuildMember, APIRole } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/discord/send.reactions.ts[0m:[93m1[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m1[0m import { Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~[0m
+
+[96m../src/discord/send.shared.ts[0m:[93m11[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIEmbed'.
+
+[7m11[0m import { Routes, type APIEmbed } from "discord-api-types/v10";
+[7m  [0m [91m                      ~~~~~~~~[0m
+[96m../src/discord/send.shared.ts[0m:[93m11[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m11[0m import { Routes, type APIEmbed } from "discord-api-types/v10";
+[7m  [0m [91m         ~~~~~~[0m
+[96m../src/discord/send.shared.ts[0m:[93m10[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/rest/v10/index.js"' has no exported member 'RESTAPIPoll'.
+
+[7m10[0m import type { RESTAPIPoll } from "discord-api-types/rest/v10";
+[7m  [0m [91m              ~~~~~~~~~~~[0m
+[96m../src/discord/send.shared.ts[0m:[93m9[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/payloads/v10/index.js"' has no exported member 'PollLayoutType'.
+
+[7m9[0m import { PollLayoutType } from "discord-api-types/payloads/v10";
+[7m [0m [91m         ~~~~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/agent-components.ts[0m:[93m19[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ChannelType'.
+
+[7m19[0m import { ButtonStyle, ChannelType } from "discord-api-types/v10";
+[7m  [0m [91m                      ~~~~~~~~~~~[0m
+[96m../src/discord/monitor/agent-components.ts[0m:[93m19[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ButtonStyle'.
+
+[7m19[0m import { ButtonStyle, ChannelType } from "discord-api-types/v10";
+[7m  [0m [91m         ~~~~~~~~~~~[0m
+[96m../src/discord/monitor/agent-components.ts[0m:[93m18[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIStringSelectComponent'.
+
+[7m18[0m import type { APIStringSelectComponent } from "discord-api-types/v10";
+[7m  [0m [91m              ~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/exec-approvals.ts[0m:[93m12[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m12[0m import { ButtonStyle, Routes } from "discord-api-types/v10";
+[7m  [0m [91m                      ~~~~~~[0m
+[96m../src/discord/monitor/exec-approvals.ts[0m:[93m12[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ButtonStyle'.
+
+[7m12[0m import { ButtonStyle, Routes } from "discord-api-types/v10";
+[7m  [0m [91m         ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/listeners.ts[0m:[93m435[0m:[93m49[0m - [91merror[0m[90m ts(2694): [0mNamespace '"/Users/juliocezar/Desenvolvimento/openclawdev/node_modules/.bun/discord-api-types@0.38.39/node_modules/discord-api-types/v10"' has no exported member 'GatewayPresenceUpdate'.
+
+[7m435[0m         data as import("discord-api-types/v10").GatewayPresenceUpdate,
+[7m   [0m [91m                                                ~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/discord/monitor/listeners.ts[0m:[93m2[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m2[0m   ChannelType,
+[7m [0m [91m  ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/message-handler.preflight.ts[0m:[93m1[0m:[93m23[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'MessageType'.
+
+[7m1[0m import { ChannelType, MessageType, type User } from "@buape/carbon";
+[7m [0m [91m                      ~~~~~~~~~~~[0m
+[96m../src/discord/monitor/message-handler.preflight.ts[0m:[93m1[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m1[0m import { ChannelType, MessageType, type User } from "@buape/carbon";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/message-handler.preflight.types.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m1[0m import type { ChannelType, Client, User } from "@buape/carbon";
+[7m [0m [91m              ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/message-handler.process.ts[0m:[93m1[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m1[0m import { ChannelType } from "@buape/carbon";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/message-utils.ts[0m:[93m2[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'APIAttachment'.
+
+[7m2[0m import type { APIAttachment } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~~~~[0m
+[96m../src/discord/monitor/message-utils.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m1[0m import type { ChannelType, Client, Message } from "@buape/carbon";
+[7m [0m [91m              ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/native-command.ts[0m:[93m12[0m:[93m40[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ButtonStyle'.
+
+[7m12[0m import { ApplicationCommandOptionType, ButtonStyle } from "discord-api-types/v10";
+[7m  [0m [91m                                       ~~~~~~~~~~~[0m
+[96m../src/discord/monitor/native-command.ts[0m:[93m12[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'ApplicationCommandOptionType'.
+
+[7m12[0m import { ApplicationCommandOptionType, ButtonStyle } from "discord-api-types/v10";
+[7m  [0m [91m         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+[96m../src/discord/monitor/native-command.ts[0m:[93m3[0m:[93m3[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m3[0m   ChannelType,
+[7m [0m [91m  ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/presence-cache.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'GatewayPresenceUpdate'.
+
+[7m1[0m import type { GatewayPresenceUpdate } from "discord-api-types/v10";
+[7m [0m [91m              ~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/provider.ts[0m:[93m10[0m:[93m22[0m - [91merror[0m[90m ts(2614): [0mModule '"node_modules/undici/index.js"' has no exported member 'fetch'. Did you mean to use 'import fetch from "node_modules/undici/index.js"' instead?
+
+[7m10[0m import { ProxyAgent, fetch as undiciFetch } from "undici";
+[7m  [0m [91m                     ~~~~~[0m
+[96m../src/discord/monitor/provider.ts[0m:[93m10[0m:[93m10[0m - [91merror[0m[90m ts(2614): [0mModule '"node_modules/undici/index.js"' has no exported member 'ProxyAgent'. Did you mean to use 'import ProxyAgent from "node_modules/undici/index.js"' instead?
+
+[7m10[0m import { ProxyAgent, fetch as undiciFetch } from "undici";
+[7m  [0m [91m         ~~~~~~~~~~[0m
+[96m../src/discord/monitor/provider.ts[0m:[93m9[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m9[0m import { Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~[0m
+
+[96m../src/discord/monitor/system-events.ts[0m:[93m1[0m:[93m24[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'MessageType'.
+
+[7m1[0m import { type Message, MessageType } from "@buape/carbon";
+[7m [0m [91m                       ~~~~~~~~~~~[0m
+
+[96m../src/discord/monitor/threading.ts[0m:[93m2[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/discord-api-types/v10.js"' has no exported member 'Routes'.
+
+[7m2[0m import { Routes } from "discord-api-types/v10";
+[7m [0m [91m         ~~~~~~[0m
+[96m../src/discord/monitor/threading.ts[0m:[93m1[0m:[93m10[0m - [91merror[0m[90m ts(2305): [0mModule '"node_modules/@buape/carbon/dist/src/index.js"' has no exported member 'ChannelType'.
+
+[7m1[0m import { ChannelType, type Client } from "@buape/carbon";
+[7m [0m [91m         ~~~~~~~~~~~[0m
+
+[96m../src/gateway/elysia-csrf.ts[0m:[93m17[0m:[93m72[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m17[0m   return new Elysia({ name: "csrf-guard" }).onBeforeHandle(({ request, set }) => {
+[7m  [0m [91m                                                                       ~~~[0m
+[96m../src/gateway/elysia-csrf.ts[0m:[93m17[0m:[93m63[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m17[0m   return new Elysia({ name: "csrf-guard" }).onBeforeHandle(({ request, set }) => {
+[7m  [0m [91m                                                              ~~~~~~~[0m
+
+[96m../src/gateway/elysia-gateway.ts[0m:[93m178[0m:[93m67[0m - [91merror[0m[90m ts(7006): [0mParameter 'serverInfo' implicitly has an 'any' type.
+
+[7m178[0m     app.listen({ port: params.port, hostname: params.hostname }, (serverInfo) => {
+[7m   [0m [91m                                                                  ~~~~~~~~~~[0m
+[96m../src/gateway/elysia-gateway.ts[0m:[93m151[0m:[93m14[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m151[0m     async ({ request }) => {
+[7m   [0m [91m             ~~~~~~~[0m
+
+[96m../src/gateway/open-responses.schema.ts[0m:[93m54[0m:[93m21[0m - [93mwarning[0m[90m ts(6385): [0m'(params?: string | { normalize?: boolean | undefined; abort?: boolean | undefined; protocol?: RegExp | undefined; pattern?: RegExp | undefined; hostname?: RegExp | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined): ZodString' is deprecated.
+
+[7m54[0m     url: z.string().url(),
+[7m  [0m [93m                    ~~~[0m
+[96m../src/gateway/open-responses.schema.ts[0m:[93m34[0m:[93m21[0m - [93mwarning[0m[90m ts(6385): [0m'(params?: string | { normalize?: boolean | undefined; abort?: boolean | undefined; protocol?: RegExp | undefined; pattern?: RegExp | undefined; hostname?: RegExp | undefined; error?: string | ... 1 more ... | undefined; message?: string | undefined; } | undefined): ZodString' is deprecated.
+
+[7m34[0m     url: z.string().url(),
+[7m  [0m [93m                    ~~~[0m
+
+[96m../src/gateway/server-runtime-state.ts[0m:[93m137[0m:[93m9[0m - [91merror[0m[90m ts(2353): [0mObject literal may only specify known properties, and 'tlsOptions' does not exist in type '{ port: number; hostname: string; }'.
+
+[7m137[0m         tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
+[7m   [0m [91m        ~~~~~~~~~~[0m
+
+[96m../src/gateway/protocol/schema/channels.ts[0m:[93m90[0m:[93m4[0m - [93mwarning[0m[90m ts(6385): [0m'(): ZodObject<{ accountId: ZodString; name: ZodOptional<ZodString>; enabled: ZodOptional<ZodBoolean>; configured: ZodOptional<ZodBoolean>; ... 24 more ...; application: ZodOptional<...>; }, $loose>' is deprecated.
+
+[7m90[0m   .passthrough();
+[7m  [0m [93m   ~~~~~~~~~~~[0m
+
+[96m../src/gateway/routes/a2ui.ts[0m:[93m156[0m:[93m86[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m156[0m   return new Elysia({ name: "a2ui-routes" }).all(`${A2UI_PATH}/*`, async ({ request, set }) => {
+[7m   [0m [91m                                                                                     ~~~[0m
+[96m../src/gateway/routes/a2ui.ts[0m:[93m156[0m:[93m77[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m156[0m   return new Elysia({ name: "a2ui-routes" }).all(`${A2UI_PATH}/*`, async ({ request, set }) => {
+[7m   [0m [91m                                                                            ~~~~~~~[0m
+
+[96m../src/gateway/routes/control-ui.ts[0m:[93m147[0m:[93m71[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m147[0m   return new Elysia({ name: "control-ui-routes" }).all("/*", async ({ request }) => {
+[7m   [0m [91m                                                                      ~~~~~~~[0m
+[96m../src/gateway/routes/control-ui.ts[0m:[93m379[0m:[93m3[0m - [93mwarning[0m[90m ts(6133): [0m'url' is declared but its value is never read.
+
+[7m379[0m   url: URL,
+[7m   [0m [93m  ~~~[0m
+
+[96m../src/gateway/routes/hooks.ts[0m:[93m59[0m:[93m86[0m - [91merror[0m[90m ts(7031): [0mBinding element 'rawBody' implicitly has an 'any' type.
+
+[7m59[0m   return new Elysia({ name: "hooks-routes" }).all("/*", async ({ request, set, body: rawBody }) => {
+[7m  [0m [91m                                                                                     ~~~~~~~[0m
+[96m../src/gateway/routes/hooks.ts[0m:[93m59[0m:[93m75[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m59[0m   return new Elysia({ name: "hooks-routes" }).all("/*", async ({ request, set, body: rawBody }) => {
+[7m  [0m [91m                                                                          ~~~[0m
+[96m../src/gateway/routes/hooks.ts[0m:[93m59[0m:[93m66[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m59[0m   return new Elysia({ name: "hooks-routes" }).all("/*", async ({ request, set, body: rawBody }) => {
+[7m  [0m [91m                                                                 ~~~~~~~[0m
+
+[96m../src/gateway/routes/models.ts[0m:[93m301[0m:[93m21[0m - [91merror[0m[90m ts(7031): [0mBinding element 'params' implicitly has an 'any' type.
+
+[7m301[0m     .get("/:id", ({ params }) => {
+[7m   [0m [91m                    ~~~~~~[0m
+[96m../src/gateway/routes/models.ts[0m:[93m274[0m:[93m35[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m274[0m     .delete("/metrics", ({ query, set }) => {
+[7m   [0m [91m                                  ~~~[0m
+[96m../src/gateway/routes/models.ts[0m:[93m274[0m:[93m28[0m - [91merror[0m[90m ts(7031): [0mBinding element 'query' implicitly has an 'any' type.
+
+[7m274[0m     .delete("/metrics", ({ query, set }) => {
+[7m   [0m [91m                           ~~~~~[0m
+[96m../src/gateway/routes/models.ts[0m:[93m256[0m:[93m32[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m256[0m     .get("/metrics", ({ query, set }) => {
+[7m   [0m [91m                               ~~~[0m
+[96m../src/gateway/routes/models.ts[0m:[93m256[0m:[93m25[0m - [91merror[0m[90m ts(7031): [0mBinding element 'query' implicitly has an 'any' type.
+
+[7m256[0m     .get("/metrics", ({ query, set }) => {
+[7m   [0m [91m                        ~~~~~[0m
+[96m../src/gateway/routes/models.ts[0m:[93m245[0m:[93m33[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m245[0m     .get("/metrics/summary", ({ set }) => {
+[7m   [0m [91m                                ~~~[0m
+[96m../src/gateway/routes/models.ts[0m:[93m302[0m:[93m13[0m - [93mwarning[0m[90m ts(6133): [0m'_modelId' is declared but its value is never read.
+
+[7m302[0m       const _modelId = params.id;
+[7m   [0m [93m            ~~~~~~~~[0m
+
+[96m../src/gateway/routes/openai-compat.ts[0m:[93m161[0m:[93m38[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m161[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                                     ~~~[0m
+[96m../src/gateway/routes/openai-compat.ts[0m:[93m161[0m:[93m29[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m161[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                            ~~~~~~~[0m
+[96m../src/gateway/routes/openai-compat.ts[0m:[93m161[0m:[93m20[0m - [91merror[0m[90m ts(7031): [0mBinding element 'rawBody' implicitly has an 'any' type.
+
+[7m161[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                   ~~~~~~~[0m
+
+[96m../src/gateway/routes/openresponses.ts[0m:[93m308[0m:[93m38[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m308[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                                     ~~~[0m
+[96m../src/gateway/routes/openresponses.ts[0m:[93m308[0m:[93m29[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m308[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                            ~~~~~~~[0m
+[96m../src/gateway/routes/openresponses.ts[0m:[93m308[0m:[93m20[0m - [91merror[0m[90m ts(7031): [0mBinding element 'rawBody' implicitly has an 'any' type.
+
+[7m308[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                   ~~~~~~~[0m
+
+[96m../src/gateway/routes/slack-plugins.ts[0m:[93m26[0m:[93m84[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m26[0m   return new Elysia({ name: "slack-plugin-fallback" }).all("/*", async ({ request, set }) => {
+[7m  [0m [91m                                                                                   ~~~[0m
+[96m../src/gateway/routes/slack-plugins.ts[0m:[93m26[0m:[93m75[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m26[0m   return new Elysia({ name: "slack-plugin-fallback" }).all("/*", async ({ request, set }) => {
+[7m  [0m [91m                                                                          ~~~~~~~[0m
+
+[96m../src/gateway/routes/tools-invoke.ts[0m:[93m104[0m:[93m38[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m104[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                                     ~~~[0m
+[96m../src/gateway/routes/tools-invoke.ts[0m:[93m104[0m:[93m29[0m - [91merror[0m[90m ts(7031): [0mBinding element 'request' implicitly has an 'any' type.
+
+[7m104[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                            ~~~~~~~[0m
+[96m../src/gateway/routes/tools-invoke.ts[0m:[93m104[0m:[93m20[0m - [91merror[0m[90m ts(7031): [0mBinding element 'rawBody' implicitly has an 'any' type.
+
+[7m104[0m     async ({ body: rawBody, request, set }) => {
+[7m   [0m [91m                   ~~~~~~~[0m
+
+[96m../src/gateway/routes/twitter.ts[0m:[93m27[0m:[93m44[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m27[0m     .get("/relationships", async ({ query, set }) => {
+[7m  [0m [91m                                           ~~~[0m
+[96m../src/gateway/routes/twitter.ts[0m:[93m27[0m:[93m37[0m - [91merror[0m[90m ts(7031): [0mBinding element 'query' implicitly has an 'any' type.
+
+[7m27[0m     .get("/relationships", async ({ query, set }) => {
+[7m  [0m [91m                                    ~~~~~[0m
+[96m../src/gateway/routes/twitter.ts[0m:[93m13[0m:[93m33[0m - [91merror[0m[90m ts(7031): [0mBinding element 'set' implicitly has an 'any' type.
+
+[7m13[0m     .get("/dashboard", async ({ set }) => {
+[7m  [0m [91m                                ~~~[0m
+
+[96m../src/gateway/server-methods/collaboration.ts[0m:[93m2030[0m:[93m13[0m - [93mwarning[0m[90m ts(6133): [0m'_interventionTask' is declared but its value is never read.
+
+[7m2030[0m       const _interventionTask = `
+[7m    [0m [93m            ~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/infra/bonjour.ts[0m:[93m151[0m:[93m15[0m - [91merror[0m[90m ts(2748): [0mCannot access ambient const enums when 'isolatedModules' is enabled.
+
+[7m151[0m     protocol: Protocol.TCP,
+[7m   [0m [91m              ~~~~~~~~[0m
+
+[96m../src/infra/fetch.ts[0m:[93m41[0m:[93m20[0m - [93mwarning[0m[90m ts(80006): [0mThis may be converted to an async function.
+
+[7m41[0m   const wrapped = ((input: RequestInfo | URL, init?: RequestInit) => {
+[7m  [0m [93m                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/infra/unhandled-rejections.ts[0m:[93m165[0m:[93m7[0m - [93mwarning[0m[90m ts(7027): [0mUnreachable code detected.
+
+[7m165[0m       return;
+[7m   [0m [93m      ~~~~~~[0m
+[96m../src/infra/unhandled-rejections.ts[0m:[93m159[0m:[93m7[0m - [93mwarning[0m[90m ts(7027): [0mUnreachable code detected.
+
+[7m159[0m       return;
+[7m   [0m [93m      ~~~~~~[0m
+
+[96m../src/infra/net/fetch-guard.ts[0m:[93m1[0m:[93m15[0m - [91merror[0m[90m ts(2614): [0mModule '"node_modules/undici/index.js"' has no exported member 'Dispatcher'. Did you mean to use 'import Dispatcher from "node_modules/undici/index.js"' instead?
+
+[7m1[0m import type { Dispatcher } from "undici";
+[7m [0m [91m              ~~~~~~~~~~[0m
+
+[96m../src/infra/net/ssrf.ts[0m:[93m3[0m:[93m17[0m - [91merror[0m[90m ts(2614): [0mModule '"node_modules/undici/index.js"' has no exported member 'Dispatcher'. Did you mean to use 'import Dispatcher from "node_modules/undici/index.js"' instead?
+
+[7m3[0m import { Agent, Dispatcher } from "undici";
+[7m [0m [91m                ~~~~~~~~~~[0m
+[96m../src/infra/net/ssrf.ts[0m:[93m3[0m:[93m10[0m - [91merror[0m[90m ts(2614): [0mModule '"node_modules/undici/index.js"' has no exported member 'Agent'. Did you mean to use 'import Agent from "node_modules/undici/index.js"' instead?
+
+[7m3[0m import { Agent, Dispatcher } from "undici";
+[7m [0m [91m         ~~~~~[0m
+
+[96m../src/infra/outbound/outbound-policy.ts[0m:[93m104[0m:[93m34[0m - [93mwarning[0m[90m ts(6385): [0m'allowCrossContextSend' is deprecated.
+
+[7m104[0m   if (params.cfg.tools?.message?.allowCrossContextSend) {
+[7m   [0m [93m                                 ~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/media-understanding/runner.entries.ts[0m:[93m238[0m:[93m75[0m - [93mwarning[0m[90m ts(6385): [0m'deepgram' is deprecated.
+
+[7m238[0m   const compat = buildDeepgramCompatQuery({ ...config?.deepgram, ...entry.deepgram });
+[7m   [0m [93m                                                                          ~~~~~~~~[0m
+[96m../src/media-understanding/runner.entries.ts[0m:[93m238[0m:[93m56[0m - [93mwarning[0m[90m ts(6385): [0m'deepgram' is deprecated.
+
+[7m238[0m   const compat = buildDeepgramCompatQuery({ ...config?.deepgram, ...entry.deepgram });
+[7m   [0m [93m                                                       ~~~~~~~~[0m
+
+[96m../src/memory/manager.ts[0m:[93m362[0m:[93m11[0m - [93mwarning[0m[90m ts(80006): [0mThis may be converted to an async function.
+
+[7m362[0m   private mergeHybridResults(params: {
+[7m   [0m [93m          ~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/memory/qmd-manager.ts[0m:[93m71[0m:[93m20[0m - [93mwarning[0m[90m ts(6133): [0m'cfg' is declared but its value is never read.
+
+[7m71[0m   private readonly cfg: OpenClawConfig;
+[7m  [0m [93m                   ~~~[0m
+
+[96m../src/plugins/loader.ts[0m:[93m323[0m:[93m13[0m - [93mwarning[0m[90m ts(6385): [0m'(id: string): any' is deprecated.
+
+[7m323[0m       mod = getJiti()(candidate.source) as OpenClawPluginModule;
+[7m   [0m [93m            ~~~~~~~[0m
+
+[96m../src/plugins/schema-validator.ts[0m:[93m34[0m:[93m26[0m - [91merror[0m[90m ts(2339): [0mProperty 'compile' does not exist on type 'Ajv'.
+
+[7m34[0m     const validate = ajv.compile(params.schema);
+[7m  [0m [91m                         ~~~~~~~[0m
+
+[96m../src/routing/session-key.ts[0m:[93m2[0m:[93m37[0m - [93mwarning[0m[90m ts(6133): [0m'ParsedAgentSessionKey' is declared but its value is never read.
+
+[7m2[0m import { parseAgentSessionKey, type ParsedAgentSessionKey } from "../sessions/session-key-utils.js";
+[7m [0m [93m                                    ~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/services/agent-humanization/humanization-service.ts[0m:[93m643[0m:[93m32[0m - [93mwarning[0m[90m ts(6133): [0m'agentId' is declared but its value is never read.
+
+[7m643[0m   private async recordConflict(agentId: string, conflict: Record<string, unknown>): Promise<void> {
+[7m   [0m [93m                               ~~~~~~~[0m
+[96m../src/services/agent-humanization/humanization-service.ts[0m:[93m638[0m:[93m38[0m - [93mwarning[0m[90m ts(6133): [0m'agentId' is declared but its value is never read.
+
+[7m638[0m   private async updateMistakePattern(agentId: string, mistakeType: string): Promise<void> {
+[7m   [0m [93m                                     ~~~~~~~[0m
+[96m../src/services/agent-humanization/humanization-service.ts[0m:[93m633[0m:[93m11[0m - [93mwarning[0m[90m ts(6133): [0m'_today' is declared but its value is never read.
+
+[7m633[0m     const _today = new Date().toISOString().split("T")[0];
+[7m   [0m [93m          ~~~~~~[0m
+[96m../src/services/agent-humanization/humanization-service.ts[0m:[93m621[0m:[93m5[0m - [93mwarning[0m[90m ts(6133): [0m'autonomyLevel' is declared but its value is never read.
+
+[7m621[0m     autonomyLevel: AutonomyType,
+[7m   [0m [93m    ~~~~~~~~~~~~~[0m
+[96m../src/services/agent-humanization/humanization-service.ts[0m:[93m585[0m:[93m35[0m - [93mwarning[0m[90m ts(6133): [0m'complexity' is declared but its value is never read.
+
+[7m585[0m   private buildTaskRecommendation(complexity: string, energy: EnergyState, factor: number): string {
+[7m   [0m [93m                                  ~~~~~~~~~~[0m
+[96m../src/services/agent-humanization/humanization-service.ts[0m:[93m42[0m:[93m11[0m - [93mwarning[0m[90m ts(6133): [0m'initialized' is declared but its value is never read.
+
+[7m42[0m   private initialized: boolean = false;
+[7m  [0m [93m          ~~~~~~~~~~~[0m
+
+[96m../src/services/agent-humanization/hooks/collaboration-observer.ts[0m:[93m77[0m:[93m7[0m - [93mwarning[0m[90m ts(6133): [0m'_CONSTRUCTIVE_CHALLENGE_BONUS' is declared but its value is never read.
+
+[7m77[0m const _CONSTRUCTIVE_CHALLENGE_BONUS = 0.03;
+[7m  [0m [93m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[96m../src/services/agent-humanization/managers/autonomy-manager.ts[0m:[93m91[0m:[93m5[0m - [93mwarning[0m[90m ts(6133): [0m'autonomyLevel' is declared but its value is never read.
+
+[7m91[0m     autonomyLevel: AutonomyType,
+[7m  [0m [93m    ~~~~~~~~~~~~~[0m
+
+[96m../src/services/agent-humanization/managers/energy-manager.ts[0m:[93m111[0m:[93m27[0m - [93mwarning[0m[90m ts(6133): [0m'complexity' is declared but its value is never read.
+
+[7m111[0m   buildTaskRecommendation(complexity: string, energy: EnergyState, factor: number): string {
+[7m   [0m [93m                          ~~~~~~~~~~[0m
+
+
+<--- Last few GCs --->
+
+[48166:0x7fdc1a80a000]   117378 ms: Mark-Compact 2039.3 (2053.0) -> 2037.1 (2054.8) MB, pooled: 1 MB, 2102.37 / 0.00 ms  (average mu = 0.073, current mu = 0.026) allocation failure; scavenge might not succeed
+[48166:0x7fdc1a80a000]   133649 ms: Mark-Compact 2041.1 (2055.0) -> 2038.5 (2055.8) MB, pooled: 0 MB, 15935.83 / 0.00 ms  (average mu = 0.027, current mu = 0.021) allocation failure; scavenge might not succeed
+
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+----- Native stack trace -----
+
+ 1: 0x103c77e23 node::OOMErrorHandler(char const*, v8::OOMDetails const&) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 2: 0x103ea818d v8::internal::V8::FatalProcessOutOfMemory(v8::internal::Isolate*, char const*, v8::OOMDetails const&) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 3: 0x104124a17 v8::internal::Heap::FatalProcessOutOfMemory(char const*) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 4: 0x10412815a v8::internal::Heap::RecomputeLimits(v8::internal::GarbageCollector, v8::base::TimeTicks) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 5: 0x10413c126 v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags)::$_1::operator()() const [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 6: 0x10413b9bf void heap::base::Stack::SetMarkerAndCallbackImpl<v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags)::$_1>(heap::base::Stack*, void*, void const*) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 7: 0x104bbfa38 PushAllRegistersAndIterateStack [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 8: 0x1041224b9 v8::internal::Heap::CollectGarbage(v8::internal::AllocationSpace, v8::internal::GarbageCollectionReason, v8::GCCallbackFlags) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+ 9: 0x104115d45 v8::internal::HeapAllocator::AllocateRawWithRetryOrFailSlowPath(int, v8::internal::AllocationType, v8::internal::AllocationOrigin, v8::internal::AllocationAlignment) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+10: 0x1040f5385 v8::internal::Factory::NewFillerObject(int, v8::internal::AllocationAlignment, v8::internal::AllocationType, v8::internal::AllocationOrigin) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+11: 0x104617aa8 v8::internal::Runtime_AllocateInYoungGeneration(int, unsigned long*, v8::internal::Isolate*) [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+12: 0x104cbe836 Builtins_CEntry_Return1_ArgvOnStack_NoBuiltinExit [/Users/juliocezar/.local/share/fnm/node-versions/v24.12.0/installation/bin/node]
+13: 0x12354ddc0 
+14: 0x1246f934b 
+15: 0x1233cb3bf 
+16: 0x124aa9df3 

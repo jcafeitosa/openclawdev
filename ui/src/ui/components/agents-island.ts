@@ -227,6 +227,20 @@ export class AgentsIsland extends LitElement {
     }
   }
 
+  private async handleConfigSave() {
+    this.configSaving = true;
+    try {
+      // The individual methods like handleModelChange already update the config on the gateway.
+      // This button can be used for explicit flush or just to reload.
+      await this.loadAgents();
+      this.configDirty = false;
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      this.configSaving = false;
+    }
+  }
+
   private async handleSkillToggle(agentId: string, skillName: string, enabled: boolean) {
     try {
       await gateway.call("agents.skills.toggle", { agentId, skillName, enabled });
@@ -325,9 +339,7 @@ export class AgentsIsland extends LitElement {
       onToolsOverridesChange: (agentId, alsoAllow, deny) =>
         void this.handleToolsOverridesChange(agentId, alsoAllow, deny),
       onConfigReload: () => void this.loadAgents(),
-      onConfigSave: () => {
-        /* handled via agents.config.save */
-      },
+      onConfigSave: () => void this.handleConfigSave(),
       onModelChange: (agentId, modelId) => void this.handleModelChange(agentId, modelId),
       onModelFallbacksChange: (agentId, fallbacks) =>
         void this.handleModelFallbacksChange(agentId, fallbacks),

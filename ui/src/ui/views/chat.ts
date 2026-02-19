@@ -69,6 +69,8 @@ export type ChatProps = {
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
+  onAskPermissions?: () => void;
+  onSelectModel?: () => void;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
