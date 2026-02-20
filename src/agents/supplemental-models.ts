@@ -25,7 +25,11 @@ const DISCOVERY_TIMEOUT_MS = 8000;
  * on inference calls. Add entries here when Anthropic announces EOL dates.
  */
 const ANTHROPIC_EOL_MODEL_IDS = new Set([
+  // EOL: January 5, 2026
+  "claude-3-opus-20240229",
   // EOL: February 19, 2026
+  "claude-3-5-haiku-20241022",
+  "claude-3-5-haiku-latest",
   "claude-3-7-sonnet-20250219",
   "claude-3-7-sonnet-latest",
 ]);
