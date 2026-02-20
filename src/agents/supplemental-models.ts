@@ -19,6 +19,17 @@ const DISCOVERY_TIMEOUT_MS = 8000;
 
 // ─── Anthropic ─────────────────────────────────────────────────────
 
+/**
+ * Anthropic model IDs that have reached end-of-life and must be excluded
+ * from discovery. The /v1/models API still returns them, but they return 404
+ * on inference calls. Add entries here when Anthropic announces EOL dates.
+ */
+const ANTHROPIC_EOL_MODEL_IDS = new Set([
+  // EOL: February 19, 2026
+  "claude-3-7-sonnet-20250219",
+  "claude-3-7-sonnet-latest",
+]);
+
 interface AnthropicModel {
   id: string;
   display_name?: string;
@@ -71,7 +82,7 @@ async function discoverAnthropicModels(apiKey: string): Promise<ModelCatalogEntr
 
     for (const m of data.data) {
       const id = m.id?.trim();
-      if (!id) {
+      if (!id || ANTHROPIC_EOL_MODEL_IDS.has(id)) {
         continue;
       }
       const isReasoning = id.includes("opus") || id.includes("sonnet") || id.includes("haiku");
