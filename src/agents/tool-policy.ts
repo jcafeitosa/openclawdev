@@ -257,7 +257,10 @@ export function stripPluginOnlyAllowlist(
     if (isCoreEntry) {
       hasCoreEntry = true;
     }
-    if (!isCoreEntry && !isPluginEntry) {
+    // Entries defined in the static TOOL_GROUPS map are known optional groups
+    // (e.g. group:memory when the memory plugin isn't loaded). Skip them.
+    const isKnownStaticGroup = Object.prototype.hasOwnProperty.call(TOOL_GROUPS, entry);
+    if (!isCoreEntry && !isPluginEntry && !isKnownStaticGroup) {
       unknownAllowlist.push(entry);
     }
   }

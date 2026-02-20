@@ -2,6 +2,7 @@ export function parseRestartRequestParams(params: unknown): {
   sessionKey: string | undefined;
   note: string | undefined;
   restartDelayMs: number | undefined;
+  skipRestart: boolean;
 } {
   const sessionKey =
     typeof (params as { sessionKey?: unknown }).sessionKey === "string"
@@ -16,5 +17,6 @@ export function parseRestartRequestParams(params: unknown): {
     typeof restartDelayMsRaw === "number" && Number.isFinite(restartDelayMsRaw)
       ? Math.max(0, Math.floor(restartDelayMsRaw))
       : undefined;
-  return { sessionKey, note, restartDelayMs };
+  const skipRestart = (params as { skipRestart?: unknown }).skipRestart === true;
+  return { sessionKey, note, restartDelayMs, skipRestart };
 }

@@ -120,15 +120,40 @@ DISCUSSION THREAD:
   let delegationContext = "";
   try {
     const activeDelegations = listDelegationsForAgent(params.agentId);
-    const inProgress = activeDelegations.filter(
-      (d) => d.state === "assigned" || d.state === "in_progress",
+    const received = activeDelegations.filter(
+      (d) =>
+        (d.state === "assigned" || d.state === "in_progress") && d.toAgentId === params.agentId,
     );
-    if (inProgress.length > 0) {
-      delegationContext = "\nACTIVE DELEGATIONS:\n";
-      for (const d of inProgress) {
-        const dir = d.fromAgentId === params.agentId ? "delegated to" : "received from";
-        const other = d.fromAgentId === params.agentId ? d.toAgentId : d.fromAgentId;
-        delegationContext += `- [${d.priority}] ${dir} ${other}: ${d.task}\n`;
+    const delegatedOut = activeDelegations.filter(
+      (d) =>
+        (d.state === "assigned" || d.state === "in_progress") && d.fromAgentId === params.agentId,
+    );
+    if (received.length > 0) {
+      delegationContext = `\nMANDATORY DELEGATION PROTOCOL:
+You have ${received.length} active delegation(s). These are your PRIMARY work items.\n`;
+      for (const d of received) {
+        delegationContext += `
+DELEGATION #${d.id} from ${d.fromAgentId} [${d.priority}]:
+  Task: ${d.task}
+  Status: ${d.state}
+`;
+      }
+      delegationContext += `
+REQUIRED ACTIONS:
+1. Call delegation.accept(delegationId) to start working
+2. Execute the task described above
+3. When done, call delegation.complete(delegationId, resultStatus, resultSummary)
+4. If you cannot complete the task, call delegation.reject(delegationId, reasoning)
+5. If you need help, call delegation.request(task, justification) to escalate to your superior
+
+CRITICAL: Never end your session without completing or rejecting your delegations.
+If you encounter a blocker you cannot resolve, use delegation.request to escalate.
+`;
+    }
+    if (delegatedOut.length > 0) {
+      delegationContext += "\nDELEGATIONS YOU ASSIGNED:\n";
+      for (const d of delegatedOut) {
+        delegationContext += `- [${d.priority}] delegated to ${d.toAgentId}: ${d.task} (${d.state})\n`;
       }
     }
   } catch {
@@ -156,6 +181,13 @@ You are now implementing decisions that were made by the full team.
 - Update the team if you encounter issues with the design
 - Use the delegation tool to delegate subtasks or request help from superiors
 - If you lack specific expertise, CONSULT THE EXPERT DIRECTORY and message the appropriate agent.
+- **CROSS-HIERARCHY ACCESS:** You are authorized to message any agent (from worker to C-level) to resolve technical blockers or clarify domain-specific questions. Do not hesitate to use \`sessions_send\` for direct expert consultation.
+
+ESCALATION PROTOCOL:
+- If a task exceeds your capability or requires cross-domain expertise: use delegation.request to escalate to your superior
+- If you are blocked for >2 tool calls without progress: escalate immediately via delegation.request
+- If the task conflicts with team decisions: flag via collaboration.proposal.challenge with the session key
+- If you need clarification on a decision: use collaboration tool with type clarification
 `;
 
   return {

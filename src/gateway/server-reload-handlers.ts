@@ -1,4 +1,5 @@
 import { initCapabilitiesRegistry } from "../agents/capabilities-registry.js";
+import { refreshAutoModelSelection } from "../agents/model-auto-select.js";
 import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
 import type { CliDeps } from "../cli/deps.js";
@@ -79,6 +80,7 @@ export function createGatewayReloadHandlers(params: {
 
     if (plan.reinitCapabilities) {
       initCapabilitiesRegistry(nextConfig);
+      refreshAutoModelSelection(nextConfig);
       broadcastHierarchyFullRefresh();
     }
 

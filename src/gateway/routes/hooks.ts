@@ -19,6 +19,7 @@ import {
   resolveHookDeliver,
   getHookChannelError,
 } from "../hooks.js";
+import { safeParseUrl } from "../net.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -65,7 +66,7 @@ export function hooksRoutes(params: {
         return;
       }
 
-      const url = new URL(request.url);
+      const url = safeParseUrl(request.url) ?? new URL("http://localhost");
       const basePath = hooksConfig.basePath;
       if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
         return; // Not a hooks path — pass through

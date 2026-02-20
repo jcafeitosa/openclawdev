@@ -18,7 +18,12 @@ import {
 } from "./auth-profiles.js";
 import { normalizeProviderId } from "./model-selection.js";
 
-export { ensureAuthProfileStore, resolveAuthProfileOrder } from "./auth-profiles.js";
+export {
+  ensureAuthProfileStore,
+  resolveAuthProfileOrder,
+  listProfilesForProvider,
+  resolveApiKeyForProfile,
+} from "./auth-profiles.js";
 
 const AWS_BEARER_ENV = "AWS_BEARER_TOKEN_BEDROCK";
 const AWS_ACCESS_KEY_ENV = "AWS_ACCESS_KEY_ID";

@@ -3,11 +3,17 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { getOAuthProvider } from "@mariozechner/pi-ai";
 import {
+  listProfilesForProvider,
+  markAuthProfileGood,
+  removeAuthProfile,
   removeAuthProfilesForProvider,
   upsertAuthProfile,
 } from "../../agents/auth-profiles/profiles.js";
 import { ensureAuthProfileStore } from "../../agents/auth-profiles/store.js";
+import { clearAuthProfileCooldown } from "../../agents/auth-profiles/usage.js";
+import { invalidateModelSelectionCache } from "../../agents/model-auto-select.js";
 import { invalidateModelCatalogCache } from "../../agents/model-catalog.js";
 import { normalizeProviderId } from "../../agents/model-selection.js";
 import { isRemoteEnvironment } from "../../commands/oauth-env.js";
@@ -23,6 +29,31 @@ import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
 const log = createSubsystemLogger("auth");
+
+/**
+ * Resolve the profile ID to use when saving credentials for a provider.
+ * Prefers the existing lastGood profile, then the first existing profile for this provider,
+ * and falls back to `${provider}:default`.
+ */
+function resolveProfileIdForProvider(normalizedId: string): string {
+  const store = ensureAuthProfileStore();
+  const lastGoodId = store.lastGood?.[normalizedId];
+  if (lastGoodId && store.profiles[lastGoodId]) {
+    return lastGoodId;
+  }
+  const existing = listProfilesForProvider(store, normalizedId);
+  return existing.length > 0 ? existing[0] : `${normalizedId}:default`;
+}
+
+/**
+ * After saving a credential, mark the profile as good (update lastGood)
+ * and clear any stale cooldown so the provider becomes immediately usable.
+ */
+async function markProfileReady(normalizedId: string, profileId: string): Promise<void> {
+  const store = ensureAuthProfileStore();
+  await markAuthProfileGood({ store, provider: normalizedId, profileId });
+  await clearAuthProfileCooldown({ store, profileId });
+}
 
 // --- In-memory OAuth flow tracking ---
 
@@ -41,13 +72,66 @@ type OAuthFlowState = {
   codePromptMessage?: string;
   /** Resolves the pending prompter.text() call with the user-submitted code */
   codeResolve?: (code: string) => void;
+  /** True when the provider uses a local callback server (code may be captured automatically) */
+  hasCallbackServer?: boolean;
+  /** Latest progress message from the provider */
+  progressMessage?: string;
 };
 
 const pendingOAuthFlows = new Map<string, OAuthFlowState>();
 
-// Clean up flows older than 10 minutes
+/**
+ * Parse an authorization input that might be a full URL, `code#state`, query string,
+ * or a bare code. Normalizes to `code#state` format for pi-ai's loginAnthropic.
+ *
+ * Inspired by pi-ai's openai-codex parseAuthorizationInput pattern.
+ */
+function parseAuthorizationInput(input: string): string {
+  const value = input.trim();
+  if (!value) {
+    return value;
+  }
+
+  // Full callback URL: extract code and state from query params
+  try {
+    const url = new URL(value);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    if (code && state) {
+      return `${code}#${state}`;
+    }
+    if (code) {
+      return code;
+    }
+  } catch {
+    // Not a URL, continue checking other formats
+  }
+
+  // Already in code#state format
+  if (value.includes("#")) {
+    return value;
+  }
+
+  // Query string format: code=X&state=Y
+  if (value.includes("code=")) {
+    const params = new URLSearchParams(value);
+    const code = params.get("code");
+    const state = params.get("state");
+    if (code && state) {
+      return `${code}#${state}`;
+    }
+    if (code) {
+      return code;
+    }
+  }
+
+  // Bare code
+  return value;
+}
+
+// Clean up flows older than 15 minutes
 function cleanupStaleFlows(): void {
-  const cutoff = Date.now() - 10 * 60 * 1000;
+  const cutoff = Date.now() - 15 * 60 * 1000;
   for (const [id, flow] of pendingOAuthFlows) {
     if (flow.createdAt < cutoff) {
       pendingOAuthFlows.delete(id);
@@ -142,7 +226,7 @@ export const authHandlers: GatewayRequestHandlers = {
     // Strip surrounding quotes if present
     const cleanCredential = credential.replace(/^["']|["']$/g, "");
     const normalizedId = normalizeProviderId(providerDef.id);
-    const profileId = `${normalizedId}:default`;
+    const profileId = resolveProfileIdForProvider(normalizedId);
 
     try {
       if (credentialType === "api_key") {
@@ -165,9 +249,12 @@ export const authHandlers: GatewayRequestHandlers = {
         });
       }
 
+      await markProfileReady(normalizedId, profileId);
+
       // Invalidate cached catalog so the new credential is picked up,
       // then reload so newly configured providers are discovered.
       invalidateModelCatalogCache();
+      invalidateModelSelectionCache();
       try {
         await context.loadGatewayModelCatalog();
       } catch {
@@ -238,11 +325,135 @@ export const authHandlers: GatewayRequestHandlers = {
       );
 
       if (!plugin) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `no plugin found for provider: ${providerId}`),
+        // Fallback: use pi-ai's native OAuth provider (anthropic, github-copilot, etc.)
+        const piAiProvider = getOAuthProvider(normalizedId);
+        if (!piAiProvider) {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, `no plugin found for provider: ${providerId}`),
+          );
+          return;
+        }
+
+        const usesCallback = piAiProvider.usesCallbackServer ?? false;
+        log.info(
+          `startOAuth: using pi-ai native OAuth for provider=${normalizedId} (callbackServer=${usesCallback})`,
         );
+        const flowId = randomBytes(8).toString("hex");
+        const flow: OAuthFlowState = {
+          status: "waiting_url",
+          createdAt: Date.now(),
+          hasCallbackServer: usesCallback,
+        };
+        pendingOAuthFlows.set(flowId, flow);
+
+        let urlResolve!: (value: void) => void;
+        const urlPromise = new Promise<void>((resolve) => {
+          urlResolve = resolve;
+        });
+
+        // Helper: create a code-paste promise that the UI resolves via auth.submitOAuthCode.
+        // Can be called multiple times (retry after error) by creating a fresh Promise.
+        const createCodePromise = (message: string): Promise<string> => {
+          flow.needsCode = true;
+          flow.codePromptMessage = message;
+          return new Promise<string>((resolve) => {
+            flow.codeResolve = resolve;
+          });
+        };
+
+        let earlyRejectPiAi!: (err: Error) => void;
+        const earlyFailurePiAi = new Promise<void>((_, reject) => {
+          earlyRejectPiAi = reject;
+        });
+
+        // Build login callbacks for ALL provider types
+        const loginCallbacks: import("@mariozechner/pi-ai").OAuthLoginCallbacks = {
+          onAuth: ({ url }) => {
+            flow.authUrl = url;
+            flow.flowType = "pkce";
+            flow.status = "pending";
+            urlResolve();
+          },
+          onPrompt: async (prompt) => {
+            // Last-resort manual code input (Anthropic always hits this;
+            // callback-server providers only hit this if both server and
+            // onManualCodeInput fail).
+            return createCodePromise(
+              prompt.message || "Paste the authorization code or full redirect URL:",
+            );
+          },
+          onProgress: (message) => {
+            flow.progressMessage = message;
+            log.info(`startOAuth [${normalizedId}]: ${message}`);
+          },
+        };
+
+        // For providers with a local callback server (Gemini CLI, Antigravity, OpenAI Codex):
+        // provide onManualCodeInput so the paste-input shows immediately as a fallback.
+        // This RACES with the local callback server — whichever completes first wins.
+        if (usesCallback) {
+          loginCallbacks.onManualCodeInput = async () => {
+            return createCodePromise(
+              "Paste the redirect URL or authorization code (the callback server is also listening):",
+            );
+          };
+        }
+
+        piAiProvider
+          .login(loginCallbacks)
+          .then(async (credentials) => {
+            flow.status = "success";
+            const profileId = resolveProfileIdForProvider(normalizedId);
+            log.info(
+              `startOAuth [${normalizedId}]: OAuth flow completed successfully → ${profileId}`,
+            );
+            upsertAuthProfile({
+              profileId,
+              credential: {
+                type: "oauth",
+                provider: normalizedId,
+                ...credentials,
+              },
+            });
+            await markProfileReady(normalizedId, profileId);
+            invalidateModelCatalogCache();
+            invalidateModelSelectionCache();
+            try {
+              await context.loadGatewayModelCatalog();
+            } catch {
+              // Non-fatal
+            }
+          })
+          .catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            log.error(`startOAuth [${normalizedId}]: OAuth flow failed: ${message}`);
+            flow.status = "error";
+            flow.error = message;
+            earlyRejectPiAi(err instanceof Error ? err : new Error(message));
+          });
+
+        const timeoutPiAi = new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error("Timed out waiting for OAuth URL")), 15_000),
+        );
+
+        try {
+          await Promise.race([urlPromise, earlyFailurePiAi, timeoutPiAi]);
+        } catch (err) {
+          pendingOAuthFlows.delete(flowId);
+          respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
+          return;
+        }
+
+        respond(true, {
+          flowId,
+          authUrl: flow.authUrl,
+          flowType: flow.flowType ?? "pkce",
+          needsCode: flow.needsCode,
+          codePromptMessage: flow.codePromptMessage,
+          hasCallbackServer: usesCallback,
+        });
         return;
       }
 
@@ -265,7 +476,7 @@ export const authHandlers: GatewayRequestHandlers = {
       pendingOAuthFlows.set(flowId, flow);
 
       // Promise that resolves when the auth URL is captured
-      let urlResolve: (value: void) => void;
+      let urlResolve!: (value: void) => void;
       const urlPromise = new Promise<void>((resolve) => {
         urlResolve = resolve;
       });
@@ -315,7 +526,7 @@ export const authHandlers: GatewayRequestHandlers = {
       });
 
       // Track early failure: if the plugin throws before openUrl, reject immediately
-      let earlyReject: (err: Error) => void;
+      let earlyReject!: (err: Error) => void;
       const earlyFailure = new Promise<void>((_, reject) => {
         earlyReject = reject;
       });
@@ -325,22 +536,25 @@ export const authHandlers: GatewayRequestHandlers = {
         .then(async (result) => {
           flow.status = "success";
           flow.result = result;
-          // Save profiles
+          // Save profiles and mark them as good
           for (const profile of result.profiles) {
             upsertAuthProfile({
               profileId: profile.profileId,
               credential: profile.credential,
             });
+            const pid = normalizeProviderId(profile.credential.provider);
+            await markProfileReady(pid, profile.profileId);
           }
           // Invalidate cached catalog so the new OAuth credential is picked up
           invalidateModelCatalogCache();
+          invalidateModelSelectionCache();
           try {
             await context.loadGatewayModelCatalog();
           } catch {
             // Non-fatal
           }
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           flow.status = "error";
           flow.error = String(err);
           // Signal early failure so the handler doesn't wait for the timeout
@@ -366,6 +580,8 @@ export const authHandlers: GatewayRequestHandlers = {
         userCode: flow.userCode,
         verificationUri: flow.verificationUri,
         flowType: flow.flowType ?? "pkce",
+        needsCode: flow.needsCode,
+        codePromptMessage: flow.codePromptMessage,
       });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
@@ -378,12 +594,12 @@ export const authHandlers: GatewayRequestHandlers = {
    */
   "auth.submitOAuthCode": ({ params, respond }) => {
     const flowId = typeof params.flowId === "string" ? params.flowId : "";
-    const code = typeof params.code === "string" ? params.code.trim() : "";
+    const rawCode = typeof params.code === "string" ? params.code.trim() : "";
     if (!flowId) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "missing flowId"));
       return;
     }
-    if (!code) {
+    if (!rawCode) {
       respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "missing code"));
       return;
     }
@@ -401,6 +617,14 @@ export const authHandlers: GatewayRequestHandlers = {
       );
       return;
     }
+
+    // Normalize input for non-callback-server providers (e.g. Anthropic expects code#state).
+    // For callback-server providers (Gemini CLI, Antigravity, OpenAI Codex), pass the raw
+    // input through so pi-ai's own parseRedirectUrl can handle full URLs correctly.
+    const code = flow.hasCallbackServer ? rawCode : parseAuthorizationInput(rawCode);
+    log.info(
+      `submitOAuthCode: ${flow.hasCallbackServer ? "raw" : "normalized"} input (${code.length} chars)`,
+    );
 
     flow.codeResolve(code);
     flow.needsCode = false;
@@ -429,11 +653,62 @@ export const authHandlers: GatewayRequestHandlers = {
       error: flow.error,
       needsCode: flow.needsCode ?? false,
       codePromptMessage: flow.codePromptMessage,
+      hasCallbackServer: flow.hasCallbackServer ?? false,
+      progressMessage: flow.progressMessage,
     });
 
     // Clean up completed flows
     if (flow.status === "success" || flow.status === "error") {
       pendingOAuthFlows.delete(flowId);
+    }
+  },
+
+  /**
+   * Remove specific auth profiles by ID.
+   * Accepts an array of profile IDs and removes each one individually.
+   */
+  "auth.removeProfiles": async ({ params, respond, context }) => {
+    const profileIds = Array.isArray(params.profileIds) ? params.profileIds : [];
+    if (profileIds.length === 0) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "missing profileIds"));
+      return;
+    }
+
+    // Validate all entries are strings
+    const ids = profileIds.filter((id): id is string => typeof id === "string" && id.trim() !== "");
+    if (ids.length === 0) {
+      respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "no valid profileIds"));
+      return;
+    }
+
+    try {
+      let removed = 0;
+      for (const id of ids) {
+        if (removeAuthProfile({ profileId: id })) {
+          removed++;
+        }
+      }
+
+      if (removed === 0) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "no matching profiles found"),
+        );
+        return;
+      }
+
+      invalidateModelCatalogCache();
+      invalidateModelSelectionCache();
+      try {
+        await context.loadGatewayModelCatalog();
+      } catch {
+        // Non-fatal
+      }
+
+      respond(true, { ok: true, removed });
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }
   },
 
@@ -461,6 +736,7 @@ export const authHandlers: GatewayRequestHandlers = {
       // Invalidate cached catalog so removed provider models are purged,
       // then reload to reflect the current credential state.
       invalidateModelCatalogCache();
+      invalidateModelSelectionCache();
       try {
         await context.loadGatewayModelCatalog();
       } catch {

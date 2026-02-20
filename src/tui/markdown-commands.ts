@@ -14,6 +14,7 @@ import type {
   CommandDefinitionLoadResult,
 } from "../commands/definitions/types.js";
 import { resolveStateDir } from "../config/paths.js";
+import { getChildLogger } from "../logging.js";
 
 /** Cached markdown command definitions. */
 let cachedResult: CommandDefinitionLoadResult | null = null;
@@ -37,7 +38,9 @@ export function getMarkdownCommandDefinitions(params?: {
 
   if (result.errors.length > 0) {
     for (const err of result.errors) {
-      console.warn(`Command definition error in ${err.filePath}: ${err.error}`);
+      getChildLogger({ module: "markdown-commands" }).warn(
+        `Command definition error in ${err.filePath}: ${err.error}`,
+      );
     }
   }
 

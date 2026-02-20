@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { Elysia, type Context } from "elysia";
 import { CANVAS_WS_PATH } from "../../canvas-host/a2ui.js";
 import { detectMime } from "../../media/mime.js";
+import { safeParseUrl } from "../net.js";
 
 const A2UI_PATH = "/__openclaw__/a2ui";
 
@@ -169,7 +170,7 @@ export function a2uiRoutes() {
         return "A2UI assets not found";
       }
 
-      const url = new URL(request.url);
+      const url = safeParseUrl(request.url) ?? new URL("http://localhost");
       const rel = url.pathname.slice(A2UI_PATH.length);
       const filePath = await resolveA2uiFilePath(a2uiRootReal, rel || "/");
       if (!filePath) {

@@ -8,6 +8,7 @@ export {
   dedupeProfileIds,
   listProfilesForProvider,
   markAuthProfileGood,
+  removeAuthProfile,
   setAuthProfileOrder,
   upsertAuthProfile,
   upsertAuthProfileWithLock,

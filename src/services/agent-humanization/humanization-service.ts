@@ -12,6 +12,7 @@
  */
 
 import { Redis } from "ioredis";
+import { getChildLogger } from "../../logging.js";
 import type {
   AgentHumanizationProfile,
   AgentRelationship,
@@ -28,6 +29,8 @@ import type {
   AutonomyConfig,
 } from "./models/types.js";
 import { AutonomyType, RiskLevel } from "./models/types.js";
+
+const log = getChildLogger({ module: "humanization-service" });
 
 // Minimal Pool interface to avoid requiring 'pg' as a direct dependency.
 // The full 'pg' Pool is expected at runtime.
@@ -53,16 +56,18 @@ export class HumanizationService {
     try {
       // Test PostgreSQL connection
       const pgTest = await this.db.query("SELECT NOW()");
-      console.log("✅ PostgreSQL connected:", pgTest.rows[0]);
+      log.info(`PostgreSQL connected: ${JSON.stringify(pgTest.rows[0])}`);
 
       // Test Redis connection
       const redisTest = await this.redis.ping();
-      console.log("✅ Redis connected:", redisTest);
+      log.info(`Redis connected: ${redisTest}`);
 
       this.initialized = true;
-      console.log("✅ Humanization Service initialized");
+      log.info("Humanization Service initialized");
     } catch (error) {
-      console.error("❌ Failed to initialize service:", error);
+      log.error(
+        `Failed to initialize service: ${error instanceof Error ? error.message : String(error)}`,
+      );
       throw error;
     }
   }
@@ -74,8 +79,8 @@ export class HumanizationService {
   async processRequest(request: HumanizationRequest): Promise<HumanizationResponse> {
     const { agentId, context, details, timestamp } = request;
 
-    console.log(`\n🤖 Processing humanization request for agent: ${agentId}`);
-    console.log(`   Context: ${context}`);
+    log.info(`Processing humanization request for agent: ${agentId}`);
+    log.info(`Context: ${context}`);
 
     // Get agent's humanization profile
     const profile = await this.getAgentProfile(agentId);
@@ -632,24 +637,22 @@ export class HumanizationService {
   private async recordLearning(agentId: string, lesson: Record<string, unknown>): Promise<void> {
     const _today = new Date().toISOString().split("T")[0];
     // Implementation would insert into agent_learning_logs
-    console.log(`📚 Recorded learning for ${agentId}: ${String(lesson.lesson)}`);
+    log.info(`Recorded learning for ${agentId}: ${String(lesson.lesson)}`);
   }
 
   private async updateMistakePattern(agentId: string, mistakeType: string): Promise<void> {
     // Implementation would update agent_mistake_patterns
-    console.log(`❌ Updated mistake pattern: ${mistakeType}`);
+    log.info(`Updated mistake pattern: ${mistakeType}`);
   }
 
   private async recordConflict(agentId: string, conflict: Record<string, unknown>): Promise<void> {
     // Implementation would insert into agent_conflict_history
-    console.log(
-      `🔴 Recorded conflict: ${String(conflict.type)} (level: ${String(conflict.level)})`,
-    );
+    log.info(`Recorded conflict: ${String(conflict.type)} (level: ${String(conflict.level)})`);
   }
 
   private async updateEnergyState(agentId: string, _data: Record<string, unknown>): Promise<void> {
     // Implementation would update agent_energy_state and insert into TimescaleDB
-    console.log(`⚡ Updated energy state for ${agentId}`);
+    log.info(`Updated energy state for ${agentId}`);
   }
 
   private async cacheResponse(
@@ -667,6 +670,6 @@ export class HumanizationService {
   async close(): Promise<void> {
     await this.db.end();
     this.redis.disconnect();
-    console.log("✅ Humanization Service closed");
+    log.info("Humanization Service closed");
   }
 }

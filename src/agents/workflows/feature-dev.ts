@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { callGateway } from "../../gateway/call.js";
+import { getChildLogger } from "../../logging.js";
 import { type AgentOrchestrator, createAgentOrchestrator } from "../agent-orchestrator.js";
 
 // --- Types ---
@@ -201,7 +202,9 @@ Instructions:
 
         this.state.context.implementationResults = summary;
       } catch (err) {
-        console.error("Failed to fetch implementation history:", err);
+        getChildLogger({ module: "feature-dev" }).error(
+          `Failed to fetch implementation history: ${err instanceof Error ? err.message : String(err)}`,
+        );
         this.state.context.implementationResults = "Failed to fetch implementation history.";
       }
     }

@@ -351,32 +351,36 @@ export const configHandlers: GatewayRequestHandlers = {
     }
     await writeConfigFile(validated.config, writeOptions);
 
-    const { sessionKey, note, restartDelayMs, deliveryContext, threadId } =
+    const { sessionKey, note, restartDelayMs, skipRestart, deliveryContext, threadId } =
       resolveConfigRestartRequest(params);
-    const payload = buildConfigRestartSentinelPayload({
-      kind: "config-patch",
-      mode: "config.patch",
-      sessionKey,
-      deliveryContext,
-      threadId,
-      note,
-    });
-    const sentinelPath = await tryWriteRestartSentinelPayload(payload);
-    const restart = scheduleGatewaySigusr1Restart({
-      delayMs: restartDelayMs,
-      reason: "config.patch",
-    });
+
+    // When skipRestart is true, the caller trusts the config file watcher to handle
+    // hot-reloadable changes (e.g. model selection) without a full gateway restart.
+    let restart: ReturnType<typeof scheduleGatewaySigusr1Restart> | null = null;
+    let sentinelPath: string | null = null;
+    if (!skipRestart) {
+      const payload = buildConfigRestartSentinelPayload({
+        kind: "config-patch",
+        mode: "config.patch",
+        sessionKey,
+        deliveryContext,
+        threadId,
+        note,
+      });
+      sentinelPath = await tryWriteRestartSentinelPayload(payload);
+      restart = scheduleGatewaySigusr1Restart({
+        delayMs: restartDelayMs,
+        reason: "config.patch",
+      });
+    }
     respond(
       true,
       {
         ok: true,
         path: CONFIG_PATH,
         config: redactConfigObject(validated.config, schemaPatch.uiHints),
-        restart,
-        sentinel: {
-          path: sentinelPath,
-          payload,
-        },
+        ...(restart ? { restart } : {}),
+        ...(sentinelPath ? { sentinel: { path: sentinelPath } } : {}),
       },
       undefined,
     );

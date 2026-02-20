@@ -9,6 +9,7 @@ import {
   archiveSessionTranscripts,
   cleanupArchivedSessionTranscripts,
 } from "../../gateway/session-utils.fs.js";
+import { getChildLogger } from "../../logging.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import {
   deliveryContextFromSession,
@@ -595,7 +596,9 @@ async function saveSessionStoreUnlocked(
           // Final attempt failed — skip this save.  The write lock ensures
           // the next save will retry with fresh data.  Log for diagnostics.
           if (i === 4) {
-            console.warn(`[session-store] rename failed after 5 attempts: ${storePath}`);
+            getChildLogger({ module: "session-store" }).warn(
+              `rename failed after 5 attempts: ${storePath}`,
+            );
           }
         }
       }

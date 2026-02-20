@@ -133,6 +133,64 @@ export function removeAuthProfilesForProvider(params: {
   return toRemove.length;
 }
 
+/**
+ * Remove a single auth profile by ID.
+ * Cleans up lastGood (promotes next available), usageStats, and order references.
+ * Returns true if the profile was found and removed.
+ */
+export function removeAuthProfile(params: { profileId: string; agentDir?: string }): boolean {
+  const store = ensureAuthProfileStore(params.agentDir);
+  const credential = store.profiles[params.profileId];
+  if (!credential) {
+    return false;
+  }
+
+  const providerKey = normalizeProviderId(credential.provider);
+  delete store.profiles[params.profileId];
+
+  // Clean up lastGood: if it pointed to the removed profile, promote next available
+  if (store.lastGood) {
+    for (const [key, val] of Object.entries(store.lastGood)) {
+      if (val === params.profileId) {
+        // Find another profile for the same provider
+        const remaining = Object.entries(store.profiles)
+          .filter(([, cred]) => normalizeProviderId(cred.provider) === key)
+          .map(([id]) => id);
+        if (remaining.length > 0) {
+          store.lastGood[key] = remaining[0];
+        } else {
+          delete store.lastGood[key];
+        }
+      }
+    }
+    if (Object.keys(store.lastGood).length === 0) {
+      store.lastGood = undefined;
+    }
+  }
+
+  // Clean up usageStats
+  if (store.usageStats?.[params.profileId]) {
+    delete store.usageStats[params.profileId];
+    if (Object.keys(store.usageStats).length === 0) {
+      store.usageStats = undefined;
+    }
+  }
+
+  // Clean up order references
+  if (store.order?.[providerKey]) {
+    store.order[providerKey] = store.order[providerKey].filter((id) => id !== params.profileId);
+    if (store.order[providerKey].length === 0) {
+      delete store.order[providerKey];
+    }
+    if (Object.keys(store.order).length === 0) {
+      store.order = undefined;
+    }
+  }
+
+  saveAuthProfileStore(store, params.agentDir);
+  return true;
+}
+
 export async function markAuthProfileGood(params: {
   store: AuthProfileStore;
   provider: string;

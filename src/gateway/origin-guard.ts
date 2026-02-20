@@ -1,4 +1,4 @@
-import { isLoopbackAddress } from "./net.js";
+import { isLoopbackAddress, safeParseUrl } from "./net.js";
 
 export type OriginGuardConfig = {
   /** Explicit whitelist of allowed origins (e.g., ["http://127.0.0.1:18789"]) */
@@ -69,12 +69,8 @@ function extractOriginFromReferer(referer: string | undefined): string | undefin
   if (!referer) {
     return undefined;
   }
-  try {
-    const url = new URL(referer);
-    return url.origin;
-  } catch {
-    return undefined;
-  }
+  const url = safeParseUrl(referer);
+  return url?.origin;
 }
 
 /** Check if an origin matches any entry in the allowed list (case-insensitive). */

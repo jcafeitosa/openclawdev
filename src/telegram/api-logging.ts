@@ -11,6 +11,8 @@ type TelegramApiLoggingParams<T> = {
   runtime?: RuntimeEnv;
   logger?: TelegramApiLogger;
   shouldLog?: (err: unknown) => boolean;
+  /** If true, catch and log errors but don't rethrow. */
+  suppress?: boolean;
 };
 
 const fallbackLogger = createSubsystemLogger("telegram/api");
@@ -31,7 +33,8 @@ export async function withTelegramApiErrorLogging<T>({
   runtime,
   logger,
   shouldLog,
-}: TelegramApiLoggingParams<T>): Promise<T> {
+  suppress,
+}: TelegramApiLoggingParams<T>): Promise<T | undefined> {
   try {
     return await fn();
   } catch (err) {
@@ -39,6 +42,9 @@ export async function withTelegramApiErrorLogging<T>({
       const errText = formatErrorMessage(err);
       const log = resolveTelegramApiLogger(runtime, logger);
       log(danger(`telegram ${operation} failed: ${errText}`));
+    }
+    if (suppress) {
+      return undefined;
     }
     throw err;
   }

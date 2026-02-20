@@ -3,6 +3,7 @@ import path from "node:path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ExtensionAPI, FileOperations } from "@mariozechner/pi-coding-agent";
 import { extractSections } from "../../auto-reply/reply/post-compaction-context.js";
+import { getChildLogger } from "../../logging.js";
 import {
   BASE_CHUNK_RATIO,
   MIN_CHUNK_RATIO,
@@ -263,8 +264,8 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
           });
           if (pruned.droppedChunks > 0) {
             const newContentRatio = (newContentTokens / contextWindowTokens) * 100;
-            console.warn(
-              `Compaction safeguard: new content uses ${newContentRatio.toFixed(
+            getChildLogger({ module: "compaction-safeguard" }).warn(
+              `new content uses ${newContentRatio.toFixed(
                 1,
               )}% of context; dropped ${pruned.droppedChunks} older chunk(s) ` +
                 `(${pruned.droppedMessages} messages) to fit history budget.`,
@@ -294,8 +295,8 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
                   previousSummary: preparation.previousSummary,
                 });
               } catch (droppedError) {
-                console.warn(
-                  `Compaction safeguard: failed to summarize dropped messages, continuing without: ${
+                getChildLogger({ module: "compaction-safeguard" }).warn(
+                  `failed to summarize dropped messages, continuing without: ${
                     droppedError instanceof Error ? droppedError.message : String(droppedError)
                   }`,
                 );
@@ -361,7 +362,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
         },
       };
     } catch (error) {
-      console.warn(
+      getChildLogger({ module: "compaction-safeguard" }).warn(
         `Compaction summarization failed; truncating history: ${
           error instanceof Error ? error.message : String(error)
         }`,

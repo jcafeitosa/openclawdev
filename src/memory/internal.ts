@@ -157,7 +157,7 @@ export async function buildFileEntry(
   return {
     path: path.relative(workspaceDir, absPath).replace(/\\/g, "/"),
     absPath,
-    mtimeMs: stat.mtimeMs,
+    mtimeMs: Math.floor(stat.mtimeMs),
     size: stat.size,
     hash,
   };

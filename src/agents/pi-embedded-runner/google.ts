@@ -283,7 +283,7 @@ export function logToolSchemasForGoogle(params: {
   }
   const toolNames = params.tools.map((tool, index) => `${index}:${tool.name}`);
   const tools = sanitizeToolsForGoogle(params);
-  log.info("google tool schema snapshot", {
+  log.debug("google tool schema snapshot", {
     provider: params.provider,
     modelId: params.modelId,
     toolCount: tools.length,

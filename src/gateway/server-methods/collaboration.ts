@@ -2,6 +2,10 @@ import crypto from "node:crypto";
 import { resolveAgentRole } from "../../agents/agent-scope.js";
 import { listAgentIds, resolveAgentConfig } from "../../agents/agent-scope.js";
 import { persistMessage, loadMessages } from "../../agents/collaboration-messaging.js";
+import {
+  loadAllCollabSessions,
+  saveCollabSession,
+} from "../../agents/collaboration-session-storage.js";
 import { getCollaborationMetrics } from "../../agents/collaboration-storage.js";
 import { getAllDelegations } from "../../agents/delegation-registry.js";
 import {
@@ -80,6 +84,42 @@ export type CollaborativeSession = {
 };
 
 const collaborativeSessions = new Map<string, CollaborativeSession>();
+
+// ---------- persistence ----------
+
+let restoreAttempted = false;
+
+function persistSession(session: CollaborativeSession) {
+  void saveCollabSession(session);
+}
+
+async function restoreOnce() {
+  if (restoreAttempted) {
+    return;
+  }
+  restoreAttempted = true;
+  try {
+    const restored = await loadAllCollabSessions();
+    const now = Date.now();
+    const STALE_THRESHOLD_MS = 2 * 60 * 60_000; // 2 hours
+    for (const [key, session] of restored.entries()) {
+      if (!collaborativeSessions.has(key)) {
+        // Mark stale debating sessions as archived
+        if (session.status === "debating" && now - session.createdAt > STALE_THRESHOLD_MS) {
+          session.status = "archived";
+          persistSession(session);
+        }
+        collaborativeSessions.set(key, session);
+      }
+    }
+  } catch {
+    // ignore restore failures
+  }
+}
+
+export async function initCollaborationRegistry() {
+  await restoreOnce();
+}
 
 /**
  * POLL SYSTEM
@@ -256,6 +296,7 @@ export function initializeCollaborativeSession(params: {
   };
 
   collaborativeSessions.set(sessionKey, session);
+  persistSession(session);
   return session;
 }
 
@@ -309,6 +350,7 @@ export function publishProposal(params: {
     session.status = "debating";
   }
 
+  persistSession(session);
   return {
     decisionId: decision.id,
     sessionKey: params.sessionKey,
@@ -347,6 +389,8 @@ export function challengeProposal(params: {
   if (session.status === "planning") {
     session.status = "debating";
   }
+
+  persistSession(session);
 }
 
 /**
@@ -390,6 +434,8 @@ export function agreeToProposal(params: {
   if (session.status === "planning") {
     session.status = "debating";
   }
+
+  persistSession(session);
 }
 
 /**
@@ -433,6 +479,8 @@ export function finalizeDecision(params: {
     timestamp: Date.now(),
   });
   session.status = "decided";
+
+  persistSession(session);
 }
 
 /**
@@ -742,6 +790,7 @@ export function resetCollaborationStateForTests(): void {
   collaborativeSessions.clear();
   polls.clear();
   reviewRequests.clear();
+  restoreAttempted = false;
 }
 
 // --- RPC Handlers ---
@@ -875,6 +924,7 @@ export const collaborationHandlers: GatewayRequestHandlers = {
           const maxRounds = session.maxRounds ?? 7;
           if ((session.roundCount ?? 0) >= maxRounds && !session.autoEscalated) {
             session.autoEscalated = true;
+            persistSession(session);
             const cfg2 = loadConfig();
             const teamChatKey2 = resolveMainSessionKey(cfg2);
             injectChatMessage({
@@ -950,6 +1000,7 @@ export const collaborationHandlers: GatewayRequestHandlers = {
           const maxRounds = session.maxRounds ?? 7;
           if ((session.roundCount ?? 0) >= maxRounds && !session.autoEscalated) {
             session.autoEscalated = true;
+            persistSession(session);
             const cfg2 = loadConfig();
             const teamChatKey2 = resolveMainSessionKey(cfg2);
             injectChatMessage({
@@ -1804,6 +1855,7 @@ export const collaborationHandlers: GatewayRequestHandlers = {
         content: `DISPUTE ESCALATED to ${superiorId} (${targetRole}). Reason: ${p.reason}. Their decision is BINDING.`,
         timestamp: Date.now(),
       });
+      persistSession(session);
 
       // Announce in team chat
       try {
@@ -1913,6 +1965,7 @@ export const collaborationHandlers: GatewayRequestHandlers = {
         content: `Invited ${p.agentId} to join the session`,
         timestamp: Date.now(),
       });
+      persistSession(session);
 
       // Announce in team chat (unless focused/private session)
       if (!p.sessionKey.startsWith("focused:")) {
@@ -2078,6 +2131,7 @@ Output ONLY your intervention message.
         content: intervention,
         timestamp: Date.now(),
       });
+      persistSession(session);
 
       broadcastHierarchyFullRefresh();
 

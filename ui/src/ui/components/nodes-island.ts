@@ -6,7 +6,7 @@
 import { StoreController } from "@nanostores/lit";
 import { LitElement, html, type TemplateResult } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { gateway } from "../../services/gateway.ts";
+import { gateway, $gatewayEvent } from "../../services/gateway.ts";
 import { $connected } from "../../stores/app.ts";
 import type { DevicePairingList } from "../controllers/devices.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "../controllers/exec-approvals.ts";
@@ -35,6 +35,8 @@ export class NodesIsland extends LitElement {
   @state() private execApprovalsTarget: "gateway" | "node" = "gateway";
   @state() private execApprovalsTargetNodeId: string | null = null;
 
+  private eventUnsub: (() => void) | null = null;
+
   protected createRenderRoot() {
     return this;
   }
@@ -43,6 +45,18 @@ export class NodesIsland extends LitElement {
     super.connectedCallback();
     void this.loadNodes();
     void this.loadDevices();
+    this.eventUnsub = $gatewayEvent.subscribe((evt) => {
+      if (!evt || evt.event !== "device.pair.requested") {
+        return;
+      }
+      void this.loadDevices();
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.eventUnsub?.();
+    this.eventUnsub = null;
   }
 
   private async loadNodes() {

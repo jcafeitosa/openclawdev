@@ -118,7 +118,7 @@ export async function buildSessionEntry(absPath: string): Promise<SessionFileEnt
     return {
       path: sessionPathForFile(absPath),
       absPath,
-      mtimeMs: stat.mtimeMs,
+      mtimeMs: Math.floor(stat.mtimeMs),
       size: stat.size,
       hash: hashText(content + "\n" + lineMap.join(",")),
       content,

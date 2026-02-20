@@ -9,6 +9,7 @@
  * - Bridge between session-based and channel-based messaging
  */
 
+import { getChildLogger } from "../../logging.js";
 import { coordinateMessage } from "./collaboration/coordinator.js";
 import { getActiveSession } from "./collaboration/session-manager.js";
 import { emitNewMessage } from "./events/channel-events.js";
@@ -265,7 +266,9 @@ export async function handleIncomingMessage(params: {
         await heartbeat(agentId, params.channelId);
       }
     } catch (error) {
-      console.error(`Agent ${agentId} failed to respond:`, error);
+      getChildLogger({ module: "agent-integration" }).error(
+        `Agent ${agentId} failed to respond: ${error instanceof Error ? error.message : String(error)}`,
+      );
       await stopTyping(agentId, params.channelId, params.threadId);
     }
   }

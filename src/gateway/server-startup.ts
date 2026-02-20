@@ -20,6 +20,7 @@ import { loadInternalHooks } from "../hooks/loader.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 import type { loadOpenClawPlugins } from "../plugins/loader.js";
 import { type PluginServicesHandle, startPluginServices } from "../plugins/services.js";
+import { startFreeModelProbeScheduler } from "./free-model-health.js";
 import { startBrowserControlServerIfEnabled } from "./server-browser.js";
 import {
   scheduleRestartSentinelWake,
@@ -180,6 +181,10 @@ export async function startGatewaySidecars(params: {
       void scheduleRestartSentinelWake({ deps: params.deps });
     }, 750);
   }
+
+  // Start background free-model health-check probe (runs after 30s delay,
+  // then every 24h).  Verifies free models actually respond to PING/PONG.
+  startFreeModelProbeScheduler(params.cfg);
 
   return { browserControl, pluginServices };
 }

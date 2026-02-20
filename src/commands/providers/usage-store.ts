@@ -7,7 +7,10 @@ import {
   isDatabaseConnected,
   type LlmUsageInsert,
 } from "../../infra/database/index.js";
+import { getChildLogger } from "../../logging.js";
 import { calculateCost } from "./registry.js";
+
+const log = getChildLogger({ module: "usage-store" });
 import type { ProviderUsage, UsageEntry, UsagePeriod, UsageTotals } from "./types.js";
 
 /**
@@ -75,7 +78,7 @@ export async function recordUsage(entry: UsageEntry): Promise<boolean> {
 
     return true;
   } catch (error) {
-    console.error("Failed to record usage:", error);
+    log.error(`Failed to record usage: ${error instanceof Error ? error.message : String(error)}`);
     return false;
   }
 }
@@ -171,7 +174,7 @@ export async function queryUsage(params: {
       lastUsed: row.last_used?.toISOString(),
     }));
   } catch (error) {
-    console.error("Failed to query usage:", error);
+    log.error(`Failed to query usage: ${error instanceof Error ? error.message : String(error)}`);
     return [];
   }
 }
@@ -256,7 +259,9 @@ export async function deleteOldUsage(olderThanDays: number): Promise<number> {
 
     return result.count;
   } catch (error) {
-    console.error("Failed to delete old usage:", error);
+    log.error(
+      `Failed to delete old usage: ${error instanceof Error ? error.message : String(error)}`,
+    );
     return 0;
   }
 }

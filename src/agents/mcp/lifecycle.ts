@@ -5,6 +5,7 @@
  * list tools, call tools, and graceful shutdown.
  */
 
+import { getChildLogger } from "../../logging.js";
 import type { AnyAgentTool } from "../tools/common.js";
 import { McpClient } from "./client.js";
 import { mcpToolsToAgentTools } from "./tool-bridge.js";
@@ -42,7 +43,9 @@ export class McpServerManager {
           connected: false,
           error: message,
         });
-        console.warn(`MCP server "${name}" failed to start: ${message}`);
+        getChildLogger({ module: "mcp-lifecycle" }).warn(
+          `MCP server "${name}" failed to start: ${message}`,
+        );
       }
     });
 

@@ -6,6 +6,9 @@
  */
 
 import { callGateway } from "../gateway/call.js";
+import { getChildLogger } from "../logging.js";
+
+const log = getChildLogger({ module: "agent-orchestrator" });
 
 export type OrchestratorDecision = {
   topic: string;
@@ -287,17 +290,17 @@ export async function exampleTeamDebate() {
     context: "Design OAuth2 flow for new platform with mobile + web clients",
   });
 
-  console.log("Debate started:", debateSessionKey);
+  log.info(`Debate started: ${debateSessionKey}`);
 
   // Wait for proposals
   await new Promise((resolve) => setTimeout(resolve, 5000));
 
   const state = await orchestrator.getDebateState(debateSessionKey);
-  console.log("Debate state:", state);
+  log.info(`Debate state: ${JSON.stringify(state)}`);
 
   // After consensus
   const decisions = await orchestrator.getDebateDecisions(debateSessionKey);
-  console.log("Final decisions:", decisions);
+  log.info(`Final decisions: ${JSON.stringify(decisions)}`);
 
   // Spawn implementation team
   const implSessionKey = await orchestrator.spawnImplementationTeam({
@@ -310,5 +313,5 @@ export async function exampleTeamDebate() {
     label: "OAuth2 Implementation",
   });
 
-  console.log("Implementation team spawned:", implSessionKey);
+  log.info(`Implementation team spawned: ${implSessionKey}`);
 }

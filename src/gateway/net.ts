@@ -111,6 +111,62 @@ export function isPrivateOrLoopbackAddress(ip: string | undefined): boolean {
   return false;
 }
 
+/**
+ * Format a hostname or IP address for use in a URL.
+ * Brackets IPv6 addresses if not already bracketed.
+ */
+export function formatUrlHost(host: string): string {
+  const h = host.trim();
+  // Handle case where host is already bracketed or contains no colons (IPv4/hostname)
+  if (h.startsWith("[") && h.endsWith("]")) {
+    return h;
+  }
+  if (h.includes(":") && !h.includes(".") && !h.startsWith("[")) {
+    return `[${h}]`;
+  }
+  // IPv4-mapped IPv6 like ::ffff:127.0.0.1 should also be bracketed if used as host in URL
+  if (h.includes(":") && h.startsWith("::ffff:") && !h.startsWith("[")) {
+    return `[${h}]`;
+  }
+  return h;
+}
+
+/**
+ * Safely parse a URL string, especially useful for IPv6 addresses from request headers.
+ */
+export function safeParseUrl(url: string, base?: string): URL | null {
+  try {
+    return new URL(url, base);
+  } catch {
+    // If it's an IPv6 host issue, try bracketing it if we can find the host part.
+    // request.url in Elysia/Node might be "http://::1:18789/" which is invalid.
+    try {
+      const match = url.match(/^(https?:\/\/)([^/]+)(.*)$/);
+      if (match) {
+        const [, protocol, host, rest] = match;
+        if (host && host.includes(":") && !host.startsWith("[")) {
+          const lastColon = host.lastIndexOf(":");
+          const firstColon = host.indexOf(":");
+          // If there are multiple colons and no port, or if we suspect IPv6 + port
+          if (firstColon !== lastColon) {
+            // Check if there is a port at the end
+            const portMatch = host.match(/:(\d+)$/);
+            if (portMatch) {
+              const port = portMatch[1];
+              const ip = host.slice(0, -(port.length + 1));
+              return new URL(`${protocol}[${ip}]:${port}${rest}`, base);
+            }
+            return new URL(`${protocol}[${host}]${rest}`, base);
+          }
+        }
+      }
+    } catch {
+      // ignore nested failure
+    }
+    return null;
+  }
+}
+
 function normalizeIPv4MappedAddress(ip: string): string {
   if (ip.startsWith("::ffff:")) {
     return ip.slice("::ffff:".length);
@@ -353,7 +409,8 @@ export async function resolveGatewayListenHosts(
   _opts?: { canBindToHost?: (host: string) => Promise<boolean> },
 ): Promise<string[]> {
   // Only bind to the requested host. Proactively binding to both 127.0.0.1 and ::1
-  // causes conflicts with multiple upgrade listeners in the current architecture.
+  // causes conflicts: Bun/Elysia does not handle IPv6 hostname strings correctly
+  // and emits uncaught exceptions when attempting getaddrinfo on "[::1]".
   return [bindHost];
 }
 

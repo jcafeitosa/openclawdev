@@ -161,6 +161,7 @@ export async function runAgentTurnWithFallback(params: {
         provider: params.followupRun.run.provider,
         model: params.followupRun.run.model,
         agentDir: params.followupRun.run.agentDir,
+        emergencyFree: true,
         fallbacksOverride: resolveAgentModelFallbacksOverride(
           params.followupRun.run.config,
           resolveAgentIdFromSessionKey(params.followupRun.run.sessionKey),

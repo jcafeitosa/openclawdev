@@ -1,9 +1,13 @@
 import { html, nothing } from "lit";
 import type { AuthProviderEntry, OAuthFlowState } from "../controllers/auth.ts";
 import type {
+  FreeModelEntry,
+  FreeModelsSummary,
   ModelCostTier,
+  ProfileHealthEntry,
   ProviderHealthEntry,
   ProviderModelEntry,
+  ProviderSubscription,
   UsageWindowEntry,
 } from "../controllers/providers-health.ts";
 import { icons } from "../icons.ts";
@@ -49,6 +53,18 @@ export type ProvidersProps = {
   onCancelOAuth: () => void;
   onSubmitOAuthCode: (code: string) => void;
   onRemoveCredential: (provider: string) => void;
+  selectedProfiles: Set<string>;
+  removingProfiles: boolean;
+  onToggleProfileSelection: (profileId: string) => void;
+  onRemoveSelectedProfiles: () => void;
+  onSelectAllModels: (modelKeys: string[], select: boolean) => void;
+  freeModels: FreeModelEntry[];
+  freeModelsSummary: FreeModelsSummary | null;
+  providerSubscriptions: Record<string, ProviderSubscription>;
+  probingFreeModels: boolean;
+  activeBillingProviders: Set<string>;
+  onProbeFreeModels: () => void;
+  onToggleBilling: (providerId: string) => void;
   onCheckHealth: (providerId: string) => void;
   onLoadRanked: () => void;
 };
@@ -77,6 +93,7 @@ export function renderProviders(props: ProvidersProps) {
     </section>
 
     ${renderSystemModelConfig(props)}
+    ${renderFreeModelsSection(props)}
 
     <section class="card">
       <div class="row" style="justify-content: space-between; align-items: flex-start;">
@@ -109,19 +126,21 @@ export function renderProviders(props: ProvidersProps) {
       }
 
       <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
-        ${
-          props.entries.length === 0
-            ? renderEmptyState({
-                icon: icons.plug,
-                title: "No providers detected",
-                subtitle: "Configure API keys to enable providers.",
-              })
-            : props.entries.map((entry) =>
-                renderProviderCard(entry, props.expandedId === entry.id, props, () =>
-                  props.onToggleExpand(entry.id),
-                ),
-              )
-        }
+        ${(() => {
+          const visible = props.showAll ? props.entries : props.entries.filter((e) => e.detected);
+          if (visible.length === 0) {
+            return renderEmptyState({
+              icon: icons.plug,
+              title: "No providers detected",
+              subtitle: "Configure API keys to enable providers.",
+            });
+          }
+          return visible.map((entry) =>
+            renderProviderCard(entry, props.expandedId === entry.id, props, () =>
+              props.onToggleExpand(entry.id),
+            ),
+          );
+        })()}
       </div>
     </section>
   `;
@@ -132,9 +151,41 @@ function resolveAuthInfo(entry: ProviderHealthEntry, _props: ProvidersProps) {
   const hasApiKey = authModes.includes("api-key");
   const hasToken = authModes.includes("token");
   const hasOAuth = authModes.includes("oauth");
-  const hasAwsSdk = !hasApiKey && !hasToken && authModes.includes("aws-sdk");
-  const canConfigure = hasApiKey || hasToken;
+  const hasAwsSdk = authModes.includes("aws-sdk");
+  // A provider is configurable if it supports any of our active auth methods
+  const canConfigure = hasApiKey || hasToken || (hasOAuth && entry.oauthAvailable) || hasAwsSdk;
   return { authModes, hasApiKey, hasToken, hasOAuth, hasAwsSdk, canConfigure };
+}
+
+function renderSubscriptionBadge(entry: ProviderHealthEntry) {
+  if (!entry.subscriptionTier || entry.subscriptionTier === "unknown") {
+    return nothing;
+  }
+  if (entry.subscriptionTier === "paid") {
+    const tooltip =
+      entry.subscriptionConfidence === "high"
+        ? "Paid billing detected (high confidence)"
+        : "Paid billing detected (low confidence)";
+    return html`<span
+      class="chip"
+      style="font-size: 10px; background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 25%, transparent);"
+      title=${tooltip}
+    >
+      Paid
+    </span>`;
+  }
+  // free tier
+  const tooltip =
+    entry.subscriptionConfidence === "high"
+      ? "Free tier detected (high confidence)"
+      : "Free tier detected (low confidence)";
+  return html`<span
+    class="chip"
+    style="font-size: 10px; background: color-mix(in srgb, var(--info) 12%, transparent); color: var(--info); border-color: color-mix(in srgb, var(--info) 25%, transparent);"
+    title=${tooltip}
+  >
+    Free tier
+  </span>`;
 }
 
 function renderProviderCard(
@@ -171,6 +222,7 @@ function renderProviderCard(
                   `
                 : nothing
             }
+            ${renderSubscriptionBadge(entry)}
           </div>
           ${renderQuickStatus(entry)}
         </div>
@@ -192,8 +244,9 @@ function renderProviderCard(
               style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); grid-column: 1 / -1;"
               @click=${(e: Event) => e.stopPropagation()}
             >
-              ${renderCredentialInfo(entry)}
+              ${renderCredentialInfo(entry, props)}
               ${renderConfigureSection(entry, props, isConfiguring)}
+              ${renderBillingSection(entry, props)}
               ${renderModelsSection(entry, props)}
               ${renderUsageSection(entry)}
               ${renderHealthCheckSection(entry, props)}
@@ -241,19 +294,36 @@ function renderOAuthFlowStatus(entry: ProviderHealthEntry, props: ProvidersProps
   }
 
   if (flow.status === "waiting" && flow.needsCode) {
+    const isCallbackServer = flow.hasCallbackServer ?? false;
+    const promptMsg =
+      flow.codePromptMessage ??
+      (isCallbackServer
+        ? "Complete sign-in in the browser. The code will be captured automatically, or you can paste the redirect URL below."
+        : "Complete sign-in in the browser, then paste the authorization code (or full redirect URL) shown on the callback page.");
+
     return html`
       <div style="margin-top: 8px; padding: 10px; border: 1px dashed var(--info); border-radius: 6px; background: color-mix(in srgb, var(--info) 5%, transparent);">
         <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px;">
-          Paste authorization code
+          ${isCallbackServer ? "Waiting for callback..." : "Paste authorization code"}
         </div>
+        ${
+          isCallbackServer
+            ? html`
+                <div style="display: flex; align-items: center; gap: 6px; font-size: 12px; margin-bottom: 6px">
+                  <span class="spinner" style="width: 12px; height: 12px"></span>
+                  <span class="muted">Listening for automatic callback</span>
+                </div>
+              `
+            : nothing
+        }
         <div class="muted" style="font-size: 12px; margin-bottom: 8px;">
-          ${flow.codePromptMessage ?? "Complete sign-in in the browser, then paste the authorization code shown on the page."}
+          ${promptMsg}
         </div>
         <div style="display: flex; gap: 8px; align-items: center;">
           <input
             type="text"
             class="input"
-            placeholder="Paste code here..."
+            placeholder="Paste code or redirect URL here..."
             style="flex: 1; font-size: 13px; font-family: monospace;"
             @click=${(e: Event) => e.stopPropagation()}
             @keydown=${(e: KeyboardEvent) => {
@@ -271,8 +341,8 @@ function renderOAuthFlowStatus(entry: ProviderHealthEntry, props: ProvidersProps
             class="btn btn-sm btn-primary"
             @click=${(e: Event) => {
               e.stopPropagation();
-              const container = (e.target as HTMLElement).closest("div")!;
-              const input = container.querySelector("input") as HTMLInputElement;
+              const wrapper = (e.target as HTMLElement).parentElement;
+              const input = wrapper?.querySelector("input") as HTMLInputElement | null;
               const code = input?.value.trim();
               if (code) {
                 props.onSubmitOAuthCode(code);
@@ -313,7 +383,31 @@ function renderOAuthFlowStatus(entry: ProviderHealthEntry, props: ProvidersProps
     `;
   }
 
+  // Code submitted — waiting for token exchange
+  if (
+    flow.status === "waiting" &&
+    (flow as OAuthFlowState & { codeSubmitted?: boolean }).codeSubmitted
+  ) {
+    return html`
+      <div
+        style="
+          margin-top: 8px;
+          padding: 10px;
+          border: 1px dashed var(--info);
+          border-radius: 6px;
+          background: color-mix(in srgb, var(--info) 5%, transparent);
+        "
+      >
+        <div style="display: flex; align-items: center; gap: 8px; font-size: 13px">
+          <span class="spinner"></span>
+          <span style="font-weight: 600">Exchanging authorization code for tokens...</span>
+        </div>
+      </div>
+    `;
+  }
+
   if (flow.status === "waiting") {
+    const progressMsg = flow.progressMessage;
     return html`
       <div style="margin-top: 8px; padding: 10px; border: 1px dashed var(--info); border-radius: 6px; background: color-mix(in srgb, var(--info) 5%, transparent);">
         <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 6px;">
@@ -321,7 +415,7 @@ function renderOAuthFlowStatus(entry: ProviderHealthEntry, props: ProvidersProps
           <span style="font-weight: 600;">Waiting for authentication...</span>
         </div>
         <div class="muted" style="font-size: 12px; margin-bottom: 8px;">
-          A browser window should have opened. Complete the sign-in flow there, then return here.
+          ${progressMsg ?? "A browser window should have opened. Complete the sign-in flow there, then return here."}
         </div>
         ${
           flow.authUrl
@@ -370,15 +464,27 @@ function renderOAuthFlowStatus(entry: ProviderHealthEntry, props: ProvidersProps
         <div style="font-size: 13px; color: var(--danger); margin-bottom: 6px;">
           OAuth failed: ${flow.error ?? "Unknown error"}
         </div>
-        <button
-          class="btn btn-sm"
-          @click=${(e: Event) => {
-            e.stopPropagation();
-            props.onCancelOAuth();
-          }}
-        >
-          Dismiss
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button
+            class="btn btn-sm btn-primary"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              props.onCancelOAuth();
+              props.onStartOAuth(entry.id);
+            }}
+          >
+            Retry
+          </button>
+          <button
+            class="btn btn-sm"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              props.onCancelOAuth();
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
       </div>
     `;
   }
@@ -423,13 +529,13 @@ function renderConfigureSection(
     if (hasOAuth && entry.oauthAvailable) {
       buttons.push(html`
         <button
-          class="btn btn-sm"
+          class="btn btn-sm btn-primary"
           @click=${(e: Event) => {
             e.stopPropagation();
             props.onStartOAuth(entry.id);
           }}
         >
-          ${entry.detected ? "Reconfigure OAuth" : "Sign in with OAuth"}
+          ${entry.detected ? "Re-authenticate OAuth" : "Sign in with OAuth"}
         </button>
       `);
     }
@@ -638,13 +744,18 @@ function renderQuickStatus(entry: ProviderHealthEntry) {
   </div>`;
 }
 
-function renderCredentialInfo(entry: ProviderHealthEntry) {
+function renderCredentialInfo(entry: ProviderHealthEntry, props: ProvidersProps) {
   if (!entry.detected) {
     return html`
       <div class="muted" style="font-size: 13px">
         Provider not detected. Configure credentials to enable.
       </div>
     `;
+  }
+
+  // When multiple profiles exist, show individual profile list
+  if (entry.profiles && entry.profiles.length > 1) {
+    return renderMultiProfileCredentials(entry, entry.profiles, props);
   }
 
   return html`
@@ -703,6 +814,127 @@ function renderCredentialInfo(entry: ProviderHealthEntry) {
             `
             : nothing
         }
+      </div>
+    </div>
+  `;
+}
+
+function renderProfileTokenBadge(profile: ProfileHealthEntry) {
+  if (profile.tokenValidity === "valid") {
+    return html`<span
+      class="chip"
+      style="font-size: 11px; background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok);"
+    >
+      ${
+        profile.tokenRemainingMs != null && profile.tokenRemainingMs > 0
+          ? `Valid (${formatCountdown(profile.tokenRemainingMs)})`
+          : "Valid"
+      }
+    </span>`;
+  }
+  if (profile.tokenValidity === "expiring") {
+    return html`<span
+      class="chip"
+      style="font-size: 11px; background: color-mix(in srgb, var(--warn) 12%, transparent); color: var(--warn);"
+    >
+      Expiring${profile.tokenRemainingMs != null ? ` (${formatCountdown(profile.tokenRemainingMs)})` : ""}
+    </span>`;
+  }
+  if (profile.tokenValidity === "expired") {
+    return html`
+      <span
+        class="chip"
+        style="
+          font-size: 11px;
+          background: color-mix(in srgb, var(--danger) 12%, transparent);
+          color: var(--danger);
+        "
+      >
+        Expired
+      </span>
+    `;
+  }
+  return nothing;
+}
+
+function renderMultiProfileCredentials(
+  entry: ProviderHealthEntry,
+  profiles: ProfileHealthEntry[],
+  props: ProvidersProps,
+) {
+  const selectedCount = profiles.filter((p) => props.selectedProfiles.has(p.profileId)).length;
+
+  return html`
+    <div style="margin-bottom: 12px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <div style="font-weight: 600; font-size: 13px;">
+          Credentials (${profiles.length} accounts)
+        </div>
+        ${
+          selectedCount > 0
+            ? html`
+            <button
+              class="btn btn-sm"
+              style="color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent);"
+              ?disabled=${props.removingProfiles}
+              @click=${(e: Event) => {
+                e.stopPropagation();
+                props.onRemoveSelectedProfiles();
+              }}
+            >
+              ${props.removingProfiles ? "Removing..." : `Remove Selected (${selectedCount})`}
+            </button>
+          `
+            : nothing
+        }
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        ${profiles.map((profile) => {
+          const isSelected = props.selectedProfiles.has(profile.profileId);
+          return html`
+            <div
+              style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--bg-elevated); border: 1px solid ${isSelected ? "color-mix(in srgb, var(--danger) 40%, transparent)" : "transparent"};"
+            >
+              <label
+                style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; cursor: pointer;"
+                @click=${(e: Event) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  ?checked=${isSelected}
+                  @change=${() => props.onToggleProfileSelection(profile.profileId)}
+                />
+                <span
+                  style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px;"
+                  title=${profile.profileId}
+                >
+                  ${profile.profileId}
+                </span>
+              </label>
+              <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                <span class="chip" style="font-size: 11px;">${profile.type}</span>
+                ${renderProfileTokenBadge(profile)}
+                ${
+                  profile.isActive
+                    ? html`
+                        <span
+                          class="chip"
+                          style="
+                            font-size: 10px;
+                            background: color-mix(in srgb, var(--ok) 15%, transparent);
+                            color: var(--ok);
+                            border-color: color-mix(in srgb, var(--ok) 30%, transparent);
+                          "
+                        >
+                          Active
+                        </span>
+                      `
+                    : nothing
+                }
+              </div>
+            </div>
+          `;
+        })}
       </div>
     </div>
   `;
@@ -776,6 +1008,48 @@ function costTierColor(tier: ModelCostTier): string {
   }
 }
 
+function renderBillingSection(entry: ProviderHealthEntry, props: ProvidersProps) {
+  if (!entry.detected) {
+    return nothing;
+  }
+  const providerId = entry.id.toLowerCase();
+  const hasBilling = props.activeBillingProviders.has(providerId);
+  const sub = props.providerSubscriptions[providerId];
+  const isAutoDetected = sub?.method === "probe-inference" && hasBilling;
+
+  return html`
+    <div style="margin-bottom: 12px;">
+      <div style="font-weight: 600; font-size: 13px; margin-bottom: 6px;">Free Model Discovery</div>
+      <label
+        style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;"
+        @click=${(e: Event) => e.stopPropagation()}
+        title="When checked, only tagged-free models are probed for this provider (paid models are skipped during free model discovery)."
+      >
+        <input
+          type="checkbox"
+          ?checked=${hasBilling}
+          @change=${() => props.onToggleBilling(providerId)}
+        />
+        Active billing
+        ${
+          isAutoDetected
+            ? html`
+                <span class="muted" style="font-size: 11px">(auto-detected)</span>
+              `
+            : nothing
+        }
+      </label>
+      <div class="muted" style="font-size: 11px; margin-top: 4px;">
+        ${
+          hasBilling
+            ? "Only tagged-free models are probed. Paid models are skipped."
+            : "All models are probed to discover secretly-free ones."
+        }
+      </div>
+    </div>
+  `;
+}
+
 function renderModelsSection(entry: ProviderHealthEntry, props: ProvidersProps) {
   if (!entry.detected || entry.models.length === 0) {
     if (entry.detected) {
@@ -794,13 +1068,39 @@ function renderModelsSection(entry: ProviderHealthEntry, props: ProvidersProps) 
     matchesCostFilter(m.costTier, props.modelsCostFilter),
   );
 
+  const filteredKeys = filteredModels.map((m) => m.key);
+  const allFilteredSelected =
+    filteredKeys.length > 0 &&
+    filteredKeys.every((k) => allowlistEmpty || props.modelAllowlist.has(k));
+  const someFilteredSelected = filteredKeys.some((k) => props.modelAllowlist.has(k));
+
   return html`
     <div style="margin-bottom: 12px;">
       <div
         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;"
       >
-        <div style="font-weight: 600; font-size: 13px;">
-          Models (${entry.models.length})
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-weight: 600; font-size: 13px;">
+            Models (${entry.models.length})
+          </div>
+          ${
+            filteredModels.length > 0
+              ? html`
+              <label
+                style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px; color: var(--text-secondary);"
+                @click=${(e: Event) => e.stopPropagation()}
+              >
+                <input
+                  type="checkbox"
+                  .checked=${allFilteredSelected}
+                  .indeterminate=${someFilteredSelected && !allFilteredSelected}
+                  @change=${() => props.onSelectAllModels(filteredKeys, !allFilteredSelected)}
+                />
+                ${allFilteredSelected ? "Deselect all" : "Select all"}
+              </label>
+            `
+              : nothing
+          }
         </div>
         <button
           class="btn btn-sm"
@@ -1217,6 +1517,298 @@ function renderSystemModelConfig(props: ProvidersProps) {
             `
           : nothing
       }
+    </section>
+  `;
+}
+
+function renderProbeStatusBadge(status?: string) {
+  if (!status || status === "unknown") {
+    return html`
+      <span
+        class="chip"
+        style="
+          font-size: 10px;
+          background: color-mix(in srgb, var(--muted) 12%, transparent);
+          color: var(--muted);
+        "
+        >not probed</span
+      >
+    `;
+  }
+  if (status === "ok") {
+    return html`
+      <span
+        class="chip"
+        style="
+          font-size: 10px;
+          background: color-mix(in srgb, var(--ok) 12%, transparent);
+          color: var(--ok);
+        "
+        >verified</span
+      >
+    `;
+  }
+  if (status === "no_credentials") {
+    return html`
+      <span
+        class="chip"
+        style="
+          font-size: 10px;
+          background: color-mix(in srgb, var(--warn) 12%, transparent);
+          color: var(--warn);
+        "
+        >no creds</span
+      >
+    `;
+  }
+  if (status === "rate_limit") {
+    return html`
+      <span
+        class="chip"
+        style="
+          font-size: 10px;
+          background: color-mix(in srgb, var(--warn) 12%, transparent);
+          color: var(--warn);
+        "
+        >rate limited</span
+      >
+    `;
+  }
+  // failed, timeout, auth, billing, unexpected_response
+  return html`<span class="chip" style="font-size: 10px; background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger);">${status.replace(/_/g, " ")}</span>`;
+}
+
+function renderFreeModelsSection(props: ProvidersProps) {
+  if (props.freeModels.length === 0) {
+    return nothing;
+  }
+
+  const detectedProviderIds = new Set(
+    props.entries.filter((e) => e.detected).map((e) => e.id.toLowerCase()),
+  );
+
+  // Group free models by provider
+  const byProvider = new Map<string, FreeModelEntry[]>();
+  for (const m of props.freeModels) {
+    const provider = m.provider.toLowerCase();
+    const list = byProvider.get(provider) ?? [];
+    list.push(m);
+    byProvider.set(provider, list);
+  }
+
+  // Sort: configured providers first, then alphabetically
+  const providers = [...byProvider.entries()].toSorted((a, b) => {
+    const aDetected = detectedProviderIds.has(a[0]);
+    const bDetected = detectedProviderIds.has(b[0]);
+    if (aDetected !== bDetected) {
+      return aDetected ? -1 : 1;
+    }
+    return a[0].localeCompare(b[0]);
+  });
+
+  const summary = props.freeModelsSummary;
+  const configuredCount = providers
+    .filter(([p]) => detectedProviderIds.has(p))
+    .reduce((sum, [, m]) => sum + m.length, 0);
+  const unconfiguredCount = props.freeModels.length - configuredCount;
+  const discoveredCount = props.freeModels.filter((m) => m.discoveredFree).length;
+
+  return html`
+    <section class="card" style="margin-bottom: 18px;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div class="card-title" style="display: flex; align-items: center; gap: 8px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; color: var(--info);">
+              <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z" />
+            </svg>
+            Free Models
+          </div>
+          <div class="card-sub">
+            ${props.freeModels.length} free model${props.freeModels.length !== 1 ? "s" : ""} across ${byProvider.size} provider${byProvider.size !== 1 ? "s" : ""}
+            ${
+              summary
+                ? html` &mdash;
+                  <span style="color: var(--ok);">${summary.verifiedCount} verified</span>${
+                    summary.failedCount > 0
+                      ? html`, <span style="color: var(--danger);">${summary.failedCount} failed</span>`
+                      : nothing
+                  }${
+                    summary.noCredentialsCount > 0
+                      ? html`, <span class="muted">${summary.noCredentialsCount} no creds</span>`
+                      : nothing
+                  }${
+                    (summary.discoveredFreeCount ?? 0) > 0
+                      ? html`, <span style="color: #a855f7;">${summary.discoveredFreeCount} discovered</span>`
+                      : nothing
+                  }`
+                : configuredCount > 0 && unconfiguredCount > 0
+                  ? html` &mdash; <span style="color: var(--ok);">${configuredCount} ready</span>, <span class="muted">${unconfiguredCount} need credentials</span>`
+                  : configuredCount > 0
+                    ? html`
+                        &mdash; <span style="color: var(--ok)">all ready to use</span>
+                      `
+                    : html`
+                        &mdash; <span class="muted">configure credentials to use</span>
+                      `
+            }
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          ${
+            summary?.lastFullProbe
+              ? html`<span class="muted" style="font-size: 11px;">Probed ${formatTimeAgo(summary.lastFullProbe)}</span>`
+              : nothing
+          }
+          <button
+            class="btn btn-sm"
+            ?disabled=${props.probingFreeModels}
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              props.onProbeFreeModels();
+            }}
+            title="Run PING/PONG health check on all models to verify free ones and discover secretly-free models"
+          >
+            ${
+              props.probingFreeModels
+                ? html`
+                    <span class="spinner" style="width: 12px; height: 12px; margin-right: 4px"></span> Probing...
+                  `
+                : "Probe All"
+            }
+          </button>
+        </div>
+      </div>
+
+      ${
+        discoveredCount > 0
+          ? html`
+          <div style="margin-top: 8px; padding: 8px 12px; border-radius: 6px; background: color-mix(in srgb, #a855f7 6%, transparent); border: 1px solid color-mix(in srgb, #a855f7 20%, transparent);">
+            <span style="font-size: 12px; color: #a855f7; font-weight: 600;">${discoveredCount} secretly-free model${discoveredCount !== 1 ? "s" : ""} discovered</span>
+            <span class="muted" style="font-size: 12px;"> &mdash; These models responded to PONG on providers without active billing.</span>
+          </div>`
+          : nothing
+      }
+
+      <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+        ${providers.map(([providerId, models]) => {
+          const isDetected = detectedProviderIds.has(providerId);
+          const providerEntry = props.entries.find((e) => e.id.toLowerCase() === providerId);
+          const providerName = providerEntry?.name ?? providerId;
+          const verifiedInProvider = models.filter((m) => m.probeStatus === "ok").length;
+          const discoveredInProvider = models.filter((m) => m.discoveredFree).length;
+
+          return html`
+            <div style="border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; ${!isDetected ? "opacity: 0.7;" : ""}">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                <span style="font-weight: 600; font-size: 13px;">${providerName}</span>
+                ${
+                  isDetected
+                    ? html`
+                        <span
+                          class="chip"
+                          style="
+                            font-size: 10px;
+                            background: color-mix(in srgb, var(--ok) 12%, transparent);
+                            color: var(--ok);
+                          "
+                          >configured</span
+                        >
+                      `
+                    : html`
+                        <span
+                          class="chip"
+                          style="
+                            font-size: 10px;
+                            background: color-mix(in srgb, var(--muted) 12%, transparent);
+                            color: var(--muted);
+                          "
+                          >not configured</span
+                        >
+                      `
+                }
+                <span class="muted" style="font-size: 12px;">${models.length} model${models.length !== 1 ? "s" : ""}${verifiedInProvider > 0 ? `, ${verifiedInProvider} verified` : ""}${discoveredInProvider > 0 ? `, ${discoveredInProvider} discovered` : ""}</span>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 3px;">
+                ${models.map((m) => {
+                  const key = `${providerId}/${m.id}`;
+                  const isInAllowlist = props.modelAllowlist.has(key);
+                  const isDiscovered = m.discoveredFree === true;
+                  return html`
+                    <div
+                      style="display: flex; align-items: center; gap: 6px; padding: 3px 6px; border-radius: 4px; background: ${isDiscovered ? "color-mix(in srgb, #a855f7 5%, var(--bg-elevated))" : "var(--bg-elevated)"}; cursor: ${isDetected ? "pointer" : "default"};"
+                      title="${key}${isInAllowlist ? " (in allowlist)" : isDetected ? " (click to add)" : " (configure provider first)"}${isDiscovered ? " — Discovered free (not tagged)" : ""}"
+                      @click=${
+                        isDetected
+                          ? () => {
+                              if (!isInAllowlist) {
+                                props.onToggleModel(key);
+                              }
+                            }
+                          : undefined
+                      }
+                    >
+                      <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px;">
+                        ${m.name ?? m.id}
+                        ${
+                          isInAllowlist
+                            ? html`
+                                <span style="color: var(--ok); margin-left: 2px; font-size: 10px">&#10003;</span>
+                              `
+                            : nothing
+                        }
+                      </span>
+                      <div style="display: flex; align-items: center; gap: 3px; flex-shrink: 0;">
+                        ${
+                          isDiscovered
+                            ? html`
+                                <span
+                                  class="chip"
+                                  style="
+                                    font-size: 10px;
+                                    background: color-mix(in srgb, #a855f7 12%, transparent);
+                                    color: #a855f7;
+                                    border-color: color-mix(in srgb, #a855f7 25%, transparent);
+                                  "
+                                  >discovered</span
+                                >
+                              `
+                            : nothing
+                        }
+                        ${renderProbeStatusBadge(m.probeStatus)}
+                        ${
+                          m.probeLatencyMs != null && m.probeStatus === "ok"
+                            ? html`<span class="chip" style="font-size: 10px;">${m.probeLatencyMs < 1000 ? `${m.probeLatencyMs}ms` : `${(m.probeLatencyMs / 1000).toFixed(1)}s`}</span>`
+                            : nothing
+                        }
+                        ${
+                          m.contextWindow
+                            ? html`<span class="chip" style="font-size: 10px;" title="Context window">${formatContextWindow(m.contextWindow)}</span>`
+                            : nothing
+                        }
+                        ${
+                          m.reasoning
+                            ? html`
+                                <span
+                                  class="chip"
+                                  style="
+                                    font-size: 10px;
+                                    background: color-mix(in srgb, var(--ok) 12%, transparent);
+                                    color: var(--ok);
+                                  "
+                                  >reasoning</span
+                                >
+                              `
+                            : nothing
+                        }
+                      </div>
+                    </div>
+                  `;
+                })}
+              </div>
+            </div>
+          `;
+        })}
+      </div>
     </section>
   `;
 }

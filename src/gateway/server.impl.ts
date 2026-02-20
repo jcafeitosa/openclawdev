@@ -1,7 +1,10 @@
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { initCapabilitiesRegistry } from "../agents/capabilities-registry.js";
+import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { initDelegationRegistry } from "../agents/delegation-registry.js";
+import { initAutoModelSelection } from "../agents/model-auto-select.js";
+import { buildConfiguredAllowlistKeys } from "../agents/model-selection.js";
 import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
@@ -59,10 +62,12 @@ import { createAgentEventHandler } from "./server-chat.js";
 import { createGatewayCloseHandler } from "./server-close.js";
 import { buildGatewayCronService } from "./server-cron.js";
 import { startGatewayDiscovery } from "./server-discovery-runtime.js";
+import { initHierarchyEventBroadcaster } from "./server-hierarchy-events.js";
 import { applyGatewayLaneConcurrency } from "./server-lanes.js";
 import { startGatewayMaintenanceTimers } from "./server-maintenance.js";
 import { GATEWAY_EVENTS, listGatewayMethods } from "./server-methods-list.js";
 import { coreGatewayHandlers } from "./server-methods.js";
+import { initCollaborationRegistry } from "./server-methods/collaboration.js";
 import { createExecApprovalHandlers } from "./server-methods/exec-approval.js";
 import { safeParseJson } from "./server-methods/nodes.helpers.js";
 import { hasConnectedMobileNode } from "./server-mobile-nodes.js";
@@ -241,6 +246,7 @@ export async function startGatewayServer(
   );
   initSubagentRegistry();
   await initDelegationRegistry();
+  await initCollaborationRegistry();
   initCapabilitiesRegistry(cfgAtStart);
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);
@@ -482,6 +488,7 @@ export async function startGatewayServer(
       agentRunSeq,
       nodeSendToSession,
     }));
+    initHierarchyEventBroadcaster(broadcast);
   }
 
   const agentUnsub = minimalTestGateway
@@ -642,6 +649,20 @@ export async function startGatewayServer(
       logChannels,
       logBrowser,
     }));
+  }
+
+  // Initialize auto-model-selection cache (role-based: orchestrator/lead/specialist/worker)
+  if (!minimalTestGateway) {
+    try {
+      const gatewayCatalog = await loadGatewayModelCatalog();
+      const allowedKeys = buildConfiguredAllowlistKeys({
+        cfg: cfgAtStart,
+        defaultProvider: DEFAULT_PROVIDER,
+      });
+      initAutoModelSelection(gatewayCatalog, allowedKeys, cfgAtStart);
+    } catch (err) {
+      log.warn(`auto-model-selection init failed: ${String(err)}`);
+    }
   }
 
   // Run gateway_start plugin hook (fire-and-forget)

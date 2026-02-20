@@ -1,4 +1,5 @@
 import type { AllowlistMatch } from "../channels/allowlist-match.js";
+import { getChildLogger } from "../logging.js";
 
 export type NormalizedAllowFrom = {
   entries: string[];
@@ -20,9 +21,9 @@ function warnInvalidAllowFromEntries(entries: string[]) {
       continue;
     }
     warnedInvalidEntries.add(entry);
-    console.warn(
+    getChildLogger({ module: "telegram" }).warn(
       [
-        "[telegram] Invalid allowFrom entry:",
+        "Invalid allowFrom entry:",
         JSON.stringify(entry),
         "- allowFrom/groupAllowFrom authorization requires numeric Telegram sender IDs only.",
         'If you had "@username" entries, re-run onboarding (it resolves @username to IDs) or replace them manually.',

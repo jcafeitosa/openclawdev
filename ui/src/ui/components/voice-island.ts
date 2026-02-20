@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { gateway } from "../../services/gateway.ts";
+import { gateway, $gatewayEvent } from "../../services/gateway.ts";
 import { renderVoice, type VoiceProps } from "../views/voice.ts";
 
 @customElement("voice-island")
@@ -13,6 +13,8 @@ export class VoiceIsland extends LitElement {
   @state() private wakeWord: string | null = null;
   @state() private talkMode: string | null = null;
 
+  private eventUnsub: (() => void) | null = null;
+
   protected createRenderRoot() {
     return this;
   }
@@ -20,6 +22,20 @@ export class VoiceIsland extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     void this.loadData();
+    this.eventUnsub = $gatewayEvent.subscribe((evt) => {
+      if (!evt) {
+        return;
+      }
+      if (evt.event === "voicewake.changed" || evt.event === "talk.mode") {
+        void this.loadData();
+      }
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.eventUnsub?.();
+    this.eventUnsub = null;
   }
 
   private async loadData() {

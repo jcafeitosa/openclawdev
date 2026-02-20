@@ -11,6 +11,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { getChildLogger } from "../../logging.js";
 import { type McpConfig, McpConfigSchema } from "./types.js";
 
 const CONFIG_FILENAMES = [".mcp.json", "mcp.json"] as const;
@@ -61,7 +62,9 @@ async function readConfigSafe(filePath: string): Promise<McpConfig | null> {
     return McpConfigSchema.parse(json);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`Failed to load MCP config from ${filePath}: ${message}`);
+    getChildLogger({ module: "mcp-config" }).warn(
+      `Failed to load MCP config from ${filePath}: ${message}`,
+    );
     return null;
   }
 }

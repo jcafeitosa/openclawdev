@@ -5,8 +5,14 @@
  * Each route group is composed as an Elysia plugin.
  */
 
-import type { Server as HttpServer } from "node:http";
-import { node } from "@elysiajs/node";
+import {
+  createServer as createHttpServer,
+  type IncomingMessage,
+  type Server as HttpServer,
+  type ServerResponse,
+} from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { Readable } from "node:stream";
 import { Elysia, type Context } from "elysia";
 import type { CanvasHostHandler } from "../canvas-host/server.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
@@ -24,6 +30,7 @@ import { openResponsesRoutes } from "./routes/openresponses.js";
 import { slackPluginFallback } from "./routes/slack-plugins.js";
 import { toolsInvokeRoutes } from "./routes/tools-invoke.js";
 import { twitterRoutes } from "./routes/twitter.js";
+import { listenGatewayHttpServer } from "./server/http-listen.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -69,7 +76,7 @@ export interface GatewayElysiaOptions {
  * or use `getNodeHandler()` for additional bind hosts via Node http.createServer.
  */
 export function createGatewayElysiaApp(opts: GatewayElysiaOptions) {
-  const app = new Elysia({ adapter: node() })
+  const app = new Elysia()
     // CSRF origin guard for state-changing requests
     .use(csrfGuard({ port: opts.port }));
 
@@ -164,37 +171,132 @@ function canvasHostFallback(params: { canvasHost: CanvasHostHandler }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Node HTTP ↔ Elysia Fetch bridge
+// ---------------------------------------------------------------------------
+// Bun supports `node:http` natively. We create a real Node HTTP server and
+// bridge each request to Elysia's compiled fetch handler. This avoids the
+// @elysiajs/node adapter which, under Bun, resolves crossws/server to its
+// Bun adapter (via conditional exports) and produces a BunServer instead of
+// the expected Node HttpServer.
+//
+// The Request object carries `.runtime.node.{req, res}` so that the existing
+// elysia-node-compat helpers (getNodeRequest, getNodeResponse) keep working.
+// ---------------------------------------------------------------------------
+
+/** Minimal Request subclass carrying Node.js req/res refs for compat */
+class NodeBridgeRequest extends Request {
+  declare runtime: { name: "node"; node: { req: IncomingMessage; res: ServerResponse } };
+
+  constructor(
+    url: string | URL,
+    init: RequestInit & { duplex?: string },
+    nodeReq: IncomingMessage,
+    nodeRes: ServerResponse,
+  ) {
+    super(url, init);
+    Object.defineProperty(this, "runtime", {
+      value: { name: "node" as const, node: { req: nodeReq, res: nodeRes } },
+      writable: false,
+      enumerable: false,
+    });
+  }
+}
+
+function toHeaders(nodeReq: IncomingMessage): Headers {
+  const h = new Headers();
+  for (const [key, value] of Object.entries(nodeReq.headers)) {
+    if (value === undefined) {
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const v of value) {
+        h.append(key, v);
+      }
+    } else {
+      h.set(key, value);
+    }
+  }
+  return h;
+}
+
+function createNodeFetchBridge(
+  fetchHandler: (req: Request) => Response | Promise<Response>,
+): (req: IncomingMessage, res: ServerResponse) => void {
+  return (nodeReq: IncomingMessage, nodeRes: ServerResponse) => {
+    const host = nodeReq.headers.host ?? "localhost";
+    const url = `http://${host}${nodeReq.url ?? "/"}`;
+    const headers = toHeaders(nodeReq);
+    const hasBody = nodeReq.method !== "GET" && nodeReq.method !== "HEAD";
+
+    const request = new NodeBridgeRequest(
+      url,
+      {
+        method: nodeReq.method ?? "GET",
+        headers,
+        body: hasBody ? (Readable.toWeb(nodeReq) as ReadableStream) : null,
+        duplex: hasBody ? "half" : undefined,
+      },
+      nodeReq,
+      nodeRes,
+    );
+
+    void (async () => {
+      try {
+        const response = await fetchHandler(request);
+
+        // Canvas host / slack handlers may write directly to nodeRes
+        if (nodeRes.headersSent) {
+          return;
+        }
+
+        nodeRes.statusCode = response.status;
+        response.headers.forEach((value, key) => {
+          nodeRes.setHeader(key, value);
+        });
+
+        if (response.body) {
+          for await (const chunk of response.body) {
+            if (nodeRes.destroyed) {
+              break;
+            }
+            nodeRes.write(chunk);
+          }
+        }
+        nodeRes.end();
+      } catch {
+        if (!nodeRes.headersSent) {
+          nodeRes.statusCode = 500;
+          nodeRes.end("Internal Server Error");
+        }
+      }
+    })();
+  };
+}
+
 /**
  * Listen the Elysia app on a specific host:port.
- * Returns the underlying Node.js HTTP server.
+ * Returns a Node.js HTTP server bridged to Elysia's fetch handler.
+ *
+ * Creates a real `node:http` server (supported natively by Bun) so that the
+ * existing `ws` WebSocketServer and upgrade handlers keep working. Each HTTP
+ * request is forwarded to Elysia's compiled fetch handler.
  */
 export async function listenGatewayElysia(
   app: ReturnType<typeof createGatewayElysiaApp>,
   params: { port: number; hostname: string; tlsOptions?: import("node:tls").TlsOptions },
 ): Promise<HttpServer> {
-  return new Promise((resolve, reject) => {
-    // Let Elysia handle the server creation and HTTP adapter setup.
-    app.listen(
-      // oxlint-disable-next-line
-      { port: params.port, hostname: params.hostname, tls: params.tlsOptions as any },
-      (serverInfo: unknown) => {
-        const nodeServer = (serverInfo as { raw?: { node?: { server: HttpServer } } }).raw?.node
-          ?.server;
-        if (nodeServer) {
-          // IMPORTANT: Remove Elysia's internal upgrade listener.
-          // We handle all upgrades (Gateway and Canvas Host) manually in server-http.ts
-          // using prependListener to ensure correct protocol handling without framework interference.
-          const upgradeListeners = nodeServer.listeners("upgrade");
-          for (const l of upgradeListeners) {
-            nodeServer.removeListener("upgrade", l);
-          }
-          resolve(nodeServer);
-        } else {
-          reject(
-            new Error(`Failed to create gateway HTTP server on ${params.hostname}:${params.port}`),
-          );
-        }
-      },
-    );
+  const bridge = createNodeFetchBridge(app.fetch);
+
+  const httpServer = params.tlsOptions
+    ? createHttpsServer(params.tlsOptions, bridge)
+    : createHttpServer(bridge);
+
+  await listenGatewayHttpServer({
+    httpServer,
+    bindHost: params.hostname,
+    port: params.port,
   });
+
+  return httpServer;
 }

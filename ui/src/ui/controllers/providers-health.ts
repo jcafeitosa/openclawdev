@@ -17,6 +17,75 @@ export type ProviderModelEntry = {
   reasoning?: boolean;
   input?: string[];
   costTier: ModelCostTier;
+  isFree?: boolean;
+};
+
+export type FreeModelProbeStatus =
+  | "ok"
+  | "failed"
+  | "timeout"
+  | "rate_limit"
+  | "auth"
+  | "billing"
+  | "unexpected_response"
+  | "no_credentials"
+  | "unknown";
+
+export type FreeModelEntry = {
+  id: string;
+  name: string;
+  provider: string;
+  contextWindow?: number;
+  reasoning?: boolean;
+  isFree?: boolean;
+  tags?: string[];
+  // Probe health data
+  probeStatus?: FreeModelProbeStatus;
+  probeLatencyMs?: number;
+  lastProbed?: number;
+  probeError?: string;
+  // Extended metadata
+  pricing?: { input: number; output: number };
+  capabilities?: {
+    coding: boolean;
+    reasoning: boolean;
+    vision: boolean;
+    general: boolean;
+    fast: boolean;
+    creative: boolean;
+    performanceTier: string;
+    costTier: string;
+    primary?: string;
+  };
+  /** True when this model was not tagged as free but responded to probe on a non-billing provider. */
+  discoveredFree?: boolean;
+};
+
+export type ProviderSubscription = {
+  tier: "free" | "paid" | "unknown";
+  detectedAt: number;
+  method: "probe-inference" | "manual";
+  confidence: "high" | "low";
+};
+
+export type FreeModelsSummary = {
+  totalModels: number;
+  verifiedCount: number;
+  failedCount: number;
+  noCredentialsCount: number;
+  discoveredFreeCount: number;
+  lastFullProbe: number;
+  activeBillingProviders: string[];
+  providerSubscriptions?: Record<string, ProviderSubscription>;
+};
+
+export type ProfileHealthEntry = {
+  profileId: string;
+  type: string;
+  tokenValidity: string;
+  tokenExpiresAt: number | null;
+  tokenRemainingMs: number | null;
+  isActive: boolean;
 };
 
 export type ProviderHealthEntry = {
@@ -44,6 +113,11 @@ export type ProviderHealthEntry = {
   envVars?: string[];
   configured?: boolean;
   oauthAvailable?: boolean;
+  profiles?: ProfileHealthEntry[];
+  subscriptionTier?: "free" | "paid" | "unknown";
+  subscriptionConfidence?: "high" | "low";
+  subscriptionDetectedAt?: number;
+  subscriptionMethod?: "probe-inference" | "manual";
 };
 
 export type ProvidersHealthHost = {
@@ -91,6 +165,18 @@ type RawEntry = {
   envVars?: string[];
   configured?: boolean;
   oauthAvailable?: boolean;
+  profiles?: Array<{
+    profileId: string;
+    type: string;
+    tokenValidity?: string;
+    tokenExpiresAt?: number;
+    tokenRemainingMs?: number;
+    isActive?: boolean;
+  }>;
+  subscriptionTier?: string;
+  subscriptionConfidence?: string;
+  subscriptionDetectedAt?: number;
+  subscriptionMethod?: string;
 };
 
 function mapEntry(raw: RawEntry, models: ProviderModelEntry[] = []): ProviderHealthEntry {
@@ -125,6 +211,19 @@ function mapEntry(raw: RawEntry, models: ProviderModelEntry[] = []): ProviderHea
     envVars: raw.envVars,
     configured: raw.configured,
     oauthAvailable: raw.oauthAvailable,
+    profiles: raw.profiles?.map((p) => ({
+      profileId: p.profileId,
+      type: p.type,
+      tokenValidity: p.tokenValidity ?? "unknown",
+      tokenExpiresAt: p.tokenExpiresAt ?? null,
+      tokenRemainingMs: p.tokenRemainingMs ?? null,
+      isActive: p.isActive ?? false,
+    })),
+    subscriptionTier: raw.subscriptionTier as ProviderHealthEntry["subscriptionTier"],
+    subscriptionConfidence:
+      raw.subscriptionConfidence as ProviderHealthEntry["subscriptionConfidence"],
+    subscriptionDetectedAt: raw.subscriptionDetectedAt,
+    subscriptionMethod: raw.subscriptionMethod as ProviderHealthEntry["subscriptionMethod"],
   };
 }
 
@@ -137,6 +236,7 @@ type RawModel = {
   contextWindow?: number;
   reasoning?: boolean;
   input?: string[];
+  isFree?: boolean;
 };
 
 // Client-side cost tier lookup based on well-known model IDs.
@@ -186,7 +286,11 @@ const COST_TIER_PATTERNS: Array<{ pattern: string; tier: ModelCostTier }> = [
   { pattern: "qwen", tier: "cheap" },
 ];
 
-function resolveModelCostTier(modelId: string): ModelCostTier {
+function resolveModelCostTier(modelId: string, isFree?: boolean): ModelCostTier {
+  // Backend isFree flag takes precedence (from discovery scanners)
+  if (isFree) {
+    return "free";
+  }
   const lower = modelId.toLowerCase();
   // OpenRouter free-tier models have ":free" suffix
   if (lower.endsWith(":free")) {
@@ -305,7 +409,8 @@ export async function loadProvidersHealth(host: ProvidersHealthHost): Promise<vo
         contextWindow: m.contextWindow,
         reasoning: m.reasoning,
         input: m.input,
-        costTier: resolveModelCostTier(m.id),
+        costTier: resolveModelCostTier(m.id, m.isFree),
+        isFree: m.isFree,
       });
       modelsByProvider.set(provider, list);
     }
@@ -396,6 +501,7 @@ export async function saveModelSelection(host: ProvidersHealthHost): Promise<voi
       raw: JSON.stringify(patch),
       baseHash: host.providersConfigHash,
       note: "Model selection updated from Providers UI",
+      skipRestart: true,
     });
 
     // Clear dirty flag before reloading so the fresh config is accepted
@@ -477,6 +583,7 @@ export async function saveComposerTaskModelPreferences(
     }),
     baseHash,
     note: "Composer model selectors updated defaults",
+    skipRestart: true,
   });
 
   await loadPrimaryModel(host);

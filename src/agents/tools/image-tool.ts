@@ -276,6 +276,7 @@ async function runImagePrompt(params: {
   const result = await runWithImageModelFallback({
     cfg: effectiveCfg,
     modelOverride: params.modelOverride,
+    agentDir: params.agentDir,
     run: async (provider, modelId) => {
       const model = modelRegistry.find(provider, modelId) as Model<Api> | null;
       if (!model) {

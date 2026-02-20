@@ -13,6 +13,7 @@ import { isDiagnosticFlagEnabled } from "../infra/diagnostic-flags.js";
 import { formatErrorMessage, formatUncaughtError } from "../infra/errors.js";
 import { createTelegramRetryRunner } from "../infra/retry-policy.js";
 import type { RetryConfig } from "../infra/retry.js";
+import { getChildLogger } from "../logging.js";
 import { redactSensitiveText } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { mediaKindFromMime } from "../media/constants.js";
@@ -272,8 +273,8 @@ async function withTelegramHtmlParseFallback<T>(params: {
       throw err;
     }
     if (params.verbose) {
-      console.warn(
-        `telegram ${params.label} failed with HTML parse error, retrying as plain text: ${formatErrorMessage(
+      getChildLogger({ module: "telegram-send" }).warn(
+        `${params.label} failed with HTML parse error, retrying as plain text: ${formatErrorMessage(
           err,
         )}`,
       );
@@ -343,7 +344,7 @@ function createTelegramRequestWithDiag(params: {
     return call.catch((err) => {
       logHttpError(label ?? "request", err);
       throw err;
-    });
+    }) as Promise<T>;
   };
 }
 
@@ -378,8 +379,8 @@ async function withTelegramThreadFallback<T>(
       throw err;
     }
     if (verbose) {
-      console.warn(
-        `telegram ${label} failed with message_thread_id, retrying without thread: ${formatErrorMessage(err)}`,
+      getChildLogger({ module: "telegram-send" }).warn(
+        `${label} failed with message_thread_id, retrying without thread: ${formatErrorMessage(err)}`,
       );
     }
     const retriedParams = removeMessageThreadIdParam(params);

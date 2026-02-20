@@ -20,6 +20,12 @@ export type OAuthFlowState = {
   needsCode?: boolean;
   /** Prompt message from the plugin */
   codePromptMessage?: string;
+  /** True when the provider uses a local callback server (code may be captured automatically) */
+  hasCallbackServer?: boolean;
+  /** Latest progress message from the provider */
+  progressMessage?: string;
+  /** True after the user submitted a code (token exchange in progress) */
+  codeSubmitted?: boolean;
 };
 
 export type AuthHost = ProvidersHealthHost & {
@@ -101,6 +107,9 @@ export async function startOAuthFlow(host: AuthHost, provider: string): Promise<
           userCode?: string;
           verificationUri?: string;
           flowType?: string;
+          needsCode?: boolean;
+          codePromptMessage?: string;
+          hasCallbackServer?: boolean;
         }
       | undefined;
 
@@ -115,6 +124,9 @@ export async function startOAuthFlow(host: AuthHost, provider: string): Promise<
       provider,
       status: "waiting",
       authUrl: data.authUrl,
+      needsCode: data.needsCode,
+      codePromptMessage: data.codePromptMessage,
+      hasCallbackServer: data.hasCallbackServer,
     };
 
     // Open the auth URL in a new tab

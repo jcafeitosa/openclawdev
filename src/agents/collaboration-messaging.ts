@@ -8,6 +8,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
+
+const log = getChildLogger({ module: "collaboration-messaging" });
 
 export type AgentMessage = {
   id: string;
@@ -41,7 +44,7 @@ export async function persistMessage(msg: AgentMessage): Promise<void> {
     const line = JSON.stringify(msg) + "\n";
     await fs.appendFile(filePath, line, "utf-8");
   } catch (err) {
-    console.error("Failed to persist agent message:", err);
+    log.error(`Failed to persist agent message: ${String(err)}`);
   }
 }
 
@@ -86,7 +89,7 @@ export async function loadMessages(filter?: {
     });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.error("Failed to load agent messages:", err);
+      log.error(`Failed to load agent messages: ${String(err)}`);
     }
     return [];
   }
@@ -121,6 +124,6 @@ export async function markMessagesRead(messageIds: string[]): Promise<void> {
 
     await fs.writeFile(filePath, newLines.join("\n") + "\n", "utf-8");
   } catch (err) {
-    console.error("Failed to mark messages as read:", err);
+    log.error(`Failed to mark messages as read: ${String(err)}`);
   }
 }

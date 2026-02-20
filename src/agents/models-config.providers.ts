@@ -1,5 +1,8 @@
 import type { OpenClawConfig } from "../config/config.js";
 import type { ModelDefinitionConfig } from "../config/types.models.js";
+import { getChildLogger } from "../logging.js";
+
+const log = getChildLogger({ module: "models-config-providers" });
 import {
   DEFAULT_COPILOT_API_BASE_URL,
   resolveCopilotApiToken,
@@ -199,12 +202,12 @@ async function discoverOllamaModels(baseUrl?: string): Promise<ModelDefinitionCo
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
-      console.warn(`Failed to discover Ollama models: ${response.status}`);
+      log.warn(`Failed to discover Ollama models: ${response.status}`);
       return [];
     }
     const data = (await response.json()) as OllamaTagsResponse;
     if (!data.models || data.models.length === 0) {
-      console.warn("No Ollama models found on local instance");
+      log.warn("No Ollama models found on local instance");
       return [];
     }
     return data.models.map((model) => {
@@ -222,7 +225,7 @@ async function discoverOllamaModels(baseUrl?: string): Promise<ModelDefinitionCo
       };
     });
   } catch (error) {
-    console.warn(`Failed to discover Ollama models: ${String(error)}`);
+    log.warn(`Failed to discover Ollama models: ${String(error)}`);
     return [];
   }
 }
@@ -246,13 +249,13 @@ async function discoverVllmModels(
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) {
-      console.warn(`Failed to discover vLLM models: ${response.status}`);
+      log.warn(`Failed to discover vLLM models: ${response.status}`);
       return [];
     }
     const data = (await response.json()) as VllmModelsResponse;
     const models = data.data ?? [];
     if (models.length === 0) {
-      console.warn("No vLLM models found on local instance");
+      log.warn("No vLLM models found on local instance");
       return [];
     }
 
@@ -275,7 +278,7 @@ async function discoverVllmModels(
         } satisfies ModelDefinitionConfig;
       });
   } catch (error) {
-    console.warn(`Failed to discover vLLM models: ${String(error)}`);
+    log.warn(`Failed to discover vLLM models: ${String(error)}`);
     return [];
   }
 }

@@ -14,6 +14,7 @@ import {
   type HeartbeatSummary,
   resolveHeartbeatSummaryForAgent,
 } from "../infra/heartbeat-runner.js";
+import { getChildLogger } from "../logging.js";
 import { buildChannelAccountBindings, resolvePreferredAccountId } from "../routing/bindings.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -75,7 +76,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 const debugHealth = (...args: unknown[]) => {
   if (isTruthyEnvValue(process.env.OPENCLAW_DEBUG_HEALTH)) {
-    console.warn("[health:debug]", ...args);
+    getChildLogger({ module: "health-debug" }).warn(args.map(String).join(" "));
   }
 };
 

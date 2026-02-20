@@ -10,6 +10,7 @@ import path from "node:path";
 import type { OpenClawConfig } from "../../config/config.js";
 import { resolveStateDir } from "../../config/paths.js";
 import type { AgentConfig } from "../../config/types.agents.js";
+import { getChildLogger } from "../../logging.js";
 import { resolveAgentDir } from "../agent-scope.js";
 import { loadAgentDefinitions, loadAgentDefinitionsFromDir } from "./loader.js";
 import type { AgentDefinition } from "./types.js";
@@ -32,7 +33,9 @@ export function resolveAgentDefinitions(cfg: OpenClawConfig, agentId: string): A
 
   if (result.errors.length > 0) {
     for (const err of result.errors) {
-      console.warn(`Agent definition error in ${err.filePath}: ${err.error}`);
+      getChildLogger({ module: "agent-definitions" }).warn(
+        `Agent definition error in ${err.filePath}: ${err.error}`,
+      );
     }
   }
 

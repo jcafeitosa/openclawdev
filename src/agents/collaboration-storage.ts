@@ -8,6 +8,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { loadConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
+
+const log = getChildLogger({ module: "collaboration-storage" });
 
 export type CollaborationRecord = {
   sessionKey: string;
@@ -68,7 +71,7 @@ export async function saveCollaborationSession(record: CollaborationRecord): Pro
     const content = JSON.stringify(record, null, 2);
     await fs.writeFile(sessionPath, content, "utf-8");
   } catch (err) {
-    console.error("Failed to save collaboration session:", err);
+    log.error(`Failed to save collaboration session: ${String(err)}`);
     // Don't throw - allow in-memory operation to continue
   }
 }
@@ -85,7 +88,7 @@ export async function loadCollaborationSession(
     return JSON.parse(content) as CollaborationRecord;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-      console.error("Failed to load collaboration session:", err);
+      log.error(`Failed to load collaboration session: ${String(err)}`);
     }
     return null;
   }
@@ -118,7 +121,7 @@ export async function archiveCollaborationSession(sessionKey: string): Promise<v
     record.updatedAt = Date.now();
     await saveCollaborationSession(record);
   } catch (err) {
-    console.error("Failed to archive collaboration session:", err);
+    log.error(`Failed to archive collaboration session: ${String(err)}`);
   }
 }
 

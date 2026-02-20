@@ -25,6 +25,7 @@ import {
   resolveAssistantAvatarUrl,
 } from "../control-ui-shared.js";
 import { getNodeRequest, getRequestIp } from "../elysia-node-compat.js";
+import { safeParseUrl } from "../net.js";
 
 // ============================================================================
 // Helpers
@@ -145,7 +146,7 @@ export function controlUiRoutes(params: { basePath: string; root?: ControlUiRoot
   const rootState = params.root;
 
   return new Elysia({ name: "control-ui-routes" }).all("/*", async ({ request }: Context) => {
-    const url = new URL(request.url);
+    const url = safeParseUrl(request.url) ?? new URL("http://localhost");
     const pathname = url.pathname;
 
     // Only handle GET / HEAD
@@ -357,7 +358,10 @@ function maybeRedirectToTokenizedUi(
     return null;
   }
 
-  const redirected = new URL(url.toString());
+  const redirected = safeParseUrl(url.toString());
+  if (!redirected) {
+    return null;
+  }
   redirected.searchParams.set("token", token);
   if (basePath && redirected.pathname === basePath) {
     redirected.pathname = `${basePath}/`;

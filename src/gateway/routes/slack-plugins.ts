@@ -14,6 +14,7 @@ import type { createSubsystemLogger } from "../../logging/subsystem.js";
 import type { PluginRegistry } from "../../plugins/registry.js";
 import { handleSlackHttpRequest } from "../../slack/http/index.js";
 import { getNodeRequest, getNodeResponse } from "../elysia-node-compat.js";
+import { safeParseUrl } from "../net.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -46,7 +47,7 @@ export function slackPluginFallback(params: {
       return;
     }
 
-    const url = new URL(request.url);
+    const url = safeParseUrl(request.url) ?? new URL("http://localhost");
 
     // Exact path match routes
     if (routes.length > 0) {

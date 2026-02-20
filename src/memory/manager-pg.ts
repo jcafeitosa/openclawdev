@@ -548,7 +548,7 @@ export class MemoryIndexManagerPg extends MemoryIndexManager {
     await pgDeleteChunksByPath(sql, this.agentId, entry.path, options.source);
 
     // ── Insert new chunks ─────────────────────────────────────────────────────
-    const now = Date.now();
+    const now = Math.floor(Date.now());
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const embedding = embeddings[i] ?? [];
@@ -577,7 +577,7 @@ export class MemoryIndexManagerPg extends MemoryIndexManager {
       path: entry.path,
       source: options.source,
       hash: entry.hash,
-      mtime: entry.mtimeMs,
+      mtime: Math.floor(entry.mtimeMs),
       size: entry.size,
     });
   }

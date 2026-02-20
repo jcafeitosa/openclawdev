@@ -176,21 +176,33 @@ describe("rankModelsForRole", () => {
     }
   });
 
-  it("should rank newest first, then cheapest as tiebreaker", () => {
+  it("should sort by cost first, then provider priority, then version", () => {
     const ranked = rankModelsForRole(catalog, ROLE_REQUIREMENTS.specialist);
     expect(ranked.length).toBeGreaterThanOrEqual(2);
-    // First model should be the most recent (highest version score)
-    expect(ranked[0].versionScore).toBeGreaterThanOrEqual(ranked[1].versionScore);
+    // Cost must be non-decreasing across the ranked list
+    for (let i = 1; i < ranked.length; i++) {
+      expect(ranked[i].costScore).toBeGreaterThanOrEqual(ranked[i - 1].costScore);
+    }
+    // Within the same cost tier, provider score must be non-decreasing
+    for (let i = 1; i < ranked.length; i++) {
+      if (ranked[i].costScore === ranked[i - 1].costScore) {
+        expect(ranked[i].providerScore).toBeGreaterThanOrEqual(ranked[i - 1].providerScore);
+      }
+    }
   });
 
-  it("should rank newest first among same cost tier", () => {
+  it("should rank newest first among same cost AND same provider tier", () => {
     const ranked = rankModelsForRole(catalog, ROLE_REQUIREMENTS.orchestrator);
-    // Among expensive models, claude-opus-4-6 (score 46) should come before 4-5 (score 45)
+    // Among expensive models from the same provider, newer versions should come first
     const expensiveModels = ranked.filter((m) => m.capabilities.costTier === "expensive");
     if (expensiveModels.length >= 2) {
-      expect(expensiveModels[0].versionScore).toBeGreaterThanOrEqual(
-        expensiveModels[1].versionScore,
-      );
+      for (let i = 1; i < expensiveModels.length; i++) {
+        const prev = expensiveModels[i - 1];
+        const curr = expensiveModels[i];
+        if (curr.providerScore === prev.providerScore) {
+          expect(curr.versionScore).toBeLessThanOrEqual(prev.versionScore);
+        }
+      }
     }
   });
 

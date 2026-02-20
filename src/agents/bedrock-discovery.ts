@@ -4,6 +4,7 @@ import {
   type ListFoundationModelsCommandOutput,
 } from "@aws-sdk/client-bedrock";
 import type { BedrockDiscoveryConfig, ModelDefinitionConfig } from "../config/types.js";
+import { getChildLogger } from "../logging.js";
 
 const DEFAULT_REFRESH_INTERVAL_SECONDS = 3600;
 const DEFAULT_CONTEXT_WINDOW = 32000;
@@ -216,7 +217,9 @@ export async function discoverBedrockModels(params: {
     }
     if (!hasLoggedBedrockError) {
       hasLoggedBedrockError = true;
-      console.warn(`[bedrock-discovery] Failed to list models: ${String(error)}`);
+      getChildLogger({ module: "bedrock-discovery" }).warn(
+        `Failed to list models: ${String(error)}`,
+      );
     }
     return [];
   }

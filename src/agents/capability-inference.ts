@@ -69,7 +69,6 @@ const BALANCED_PATTERNS = [
   "72b",
   "32b",
   "qwen2.5-coder",
-  "gemini-3-flash",
   "glm-4",
   "mistral-large",
   "mistral-medium",
@@ -132,7 +131,18 @@ function inferPerformanceTier(id: string): PerformanceTier {
   return "balanced";
 }
 
-function inferCostTier(id: string, provider?: string): CostTier {
+function inferCostTier(
+  id: string,
+  provider?: string,
+  catalogEntry?: Pick<ModelCatalogEntry, "isFree" | "tags">,
+): CostTier {
+  if (
+    catalogEntry?.isFree ||
+    catalogEntry?.tags?.includes("free-tier") ||
+    catalogEntry?.tags?.includes("emergency-free")
+  ) {
+    return "free";
+  }
   const p = provider?.toLowerCase() ?? "";
   if (FREE_PROVIDERS.has(p)) {
     return "free";
@@ -198,14 +208,14 @@ function checkDynamicPatterns(modelId: string): Partial<ModelCapabilities> | nul
  */
 export function inferModelCapabilities(
   modelId: string,
-  catalogEntry?: Pick<ModelCatalogEntry, "provider" | "reasoning" | "input">,
+  catalogEntry?: Pick<ModelCatalogEntry, "provider" | "reasoning" | "input" | "isFree" | "tags">,
 ): ModelCapabilities {
   // Check dynamic patterns first (highest priority)
   const dynamicCaps = checkDynamicPatterns(modelId);
 
   // Infer baseline capabilities from hardcoded patterns
   const performanceTier = inferPerformanceTier(modelId);
-  const costTier = inferCostTier(modelId, catalogEntry?.provider);
+  const costTier = inferCostTier(modelId, catalogEntry?.provider, catalogEntry);
   const coding = inferCoding(modelId, performanceTier);
   const reasoning =
     catalogEntry?.reasoning ?? matchesAnyPattern(modelId, ["deepseek-r1", "o1", "o3", "o4"]);

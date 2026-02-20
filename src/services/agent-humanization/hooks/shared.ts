@@ -9,6 +9,7 @@
  * if the system is disabled or unavailable.
  */
 
+import { getChildLogger } from "../../../logging.js";
 import type { AgentHumanizationProfile, EnergyState } from "../models/types.js";
 
 // ---------------------------------------------------------------------------
@@ -148,9 +149,8 @@ export function getHumanizationService(): HumanizationServiceLike | null {
 export function fireAndForget(label: string, fn: () => Promise<void>): void {
   const run = () => {
     fn().catch((err) => {
-      console.error(
-        `[humanization:${label}] Background task error:`,
-        err instanceof Error ? err.message : String(err),
+      getChildLogger({ module: `humanization-${label}` }).error(
+        `Background task error: ${err instanceof Error ? err.message : String(err)}`,
       );
     });
   };

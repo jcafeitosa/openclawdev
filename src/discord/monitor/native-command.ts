@@ -34,6 +34,7 @@ import type { ReplyPayload } from "../../auto-reply/types.js";
 import { resolveCommandAuthorizedFromAuthorizers } from "../../channels/command-gating.js";
 import { createReplyPrefixOptions } from "../../channels/reply-prefix.js";
 import type { OpenClawConfig, loadConfig } from "../../config/config.js";
+import { getChildLogger } from "../../logging.js";
 import { getAgentScopedMediaLocalRoots } from "../../media/local-roots.js";
 import { buildPairingReply } from "../../pairing/pairing-messages.js";
 import {
@@ -196,7 +197,7 @@ async function safeDiscordInteractionCall<T>(
     return await fn();
   } catch (error) {
     if (isDiscordUnknownInteraction(error)) {
-      console.warn(`discord: ${label} skipped (interaction expired)`);
+      getChildLogger({ module: "discord" }).warn(`${label} skipped (interaction expired)`);
       return null;
     }
     throw error;
@@ -822,7 +823,9 @@ async function dispatchDiscordCommandInteraction(params: {
           });
         } catch (error) {
           if (isDiscordUnknownInteraction(error)) {
-            console.warn("discord: interaction reply skipped (interaction expired)");
+            getChildLogger({ module: "discord" }).warn(
+              "interaction reply skipped (interaction expired)",
+            );
             return;
           }
           throw error;
@@ -830,7 +833,9 @@ async function dispatchDiscordCommandInteraction(params: {
         didReply = true;
       },
       onError: (err, info) => {
-        console.error(`discord slash ${info.kind} reply failed`, err);
+        getChildLogger({ module: "discord" }).error(
+          `slash ${info.kind} reply failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       },
     },
     replyOptions: {

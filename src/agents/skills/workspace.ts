@@ -7,7 +7,10 @@ import {
   type Skill,
 } from "@mariozechner/pi-coding-agent";
 import type { OpenClawConfig } from "../../config/config.js";
+import { getChildLogger } from "../../logging.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+
+const skillsLog = getChildLogger({ module: "skills" });
 import { CONFIG_DIR, resolveUserPath } from "../../utils.js";
 import { resolveSandboxPath } from "../sandbox-paths.js";
 import { resolveBundledSkillsDir } from "./bundled-dir.js";
@@ -616,14 +619,12 @@ export async function syncSkillsToWorkspace(params: {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : JSON.stringify(error);
-        console.warn(
-          `[skills] Failed to resolve safe destination for ${entry.skill.name}: ${message}`,
-        );
+        skillsLog.warn(`Failed to resolve safe destination for ${entry.skill.name}: ${message}`);
         continue;
       }
       if (!dest) {
-        console.warn(
-          `[skills] Failed to resolve safe destination for ${entry.skill.name}: invalid source directory name`,
+        skillsLog.warn(
+          `Failed to resolve safe destination for ${entry.skill.name}: invalid source directory name`,
         );
         continue;
       }
@@ -634,7 +635,7 @@ export async function syncSkillsToWorkspace(params: {
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : JSON.stringify(error);
-        console.warn(`[skills] Failed to copy ${entry.skill.name} to sandbox: ${message}`);
+        skillsLog.warn(`Failed to copy ${entry.skill.name} to sandbox: ${message}`);
       }
     }
   });

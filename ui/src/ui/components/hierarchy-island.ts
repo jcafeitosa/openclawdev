@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { gateway } from "../../services/gateway.ts";
+import { gateway, $gatewayEvent } from "../../services/gateway.ts";
 import type { AgentHierarchyResult } from "../types.ts";
 import { renderAgentsHierarchy, type AgentsHierarchyProps } from "../views/agents-hierarchy.ts";
 
@@ -11,6 +11,8 @@ export class HierarchyIsland extends LitElement {
   @state() private data: AgentHierarchyResult | null = null;
   @state() private focusAgentId: string | undefined = undefined;
 
+  private eventUnsub: (() => void) | null = null;
+
   protected createRenderRoot() {
     return this;
   }
@@ -18,6 +20,23 @@ export class HierarchyIsland extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     void this.loadData();
+
+    // Subscribe to real-time hierarchy events from the gateway WebSocket
+    this.eventUnsub = $gatewayEvent.subscribe((evt) => {
+      if (!evt || evt.event !== "hierarchy") {
+        return;
+      }
+      const payload = evt.payload as { snapshot?: AgentHierarchyResult } | undefined;
+      if (payload?.snapshot) {
+        this.data = payload.snapshot;
+      }
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.eventUnsub?.();
+    this.eventUnsub = null;
   }
 
   private async loadData() {

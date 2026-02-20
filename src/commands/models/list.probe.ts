@@ -26,7 +26,7 @@ import {
 import { redactSecrets } from "../status-all/format.js";
 import { DEFAULT_PROVIDER, formatMs } from "./shared.js";
 
-const PROBE_PROMPT = "Reply with OK. Do not use tools.";
+const PROBE_PROMPT = "Ping, if you are working, respond with PONG only";
 
 export type AuthProbeStatus =
   | "ok"
@@ -35,6 +35,7 @@ export type AuthProbeStatus =
   | "billing"
   | "timeout"
   | "format"
+  | "unexpected_response"
   | "unknown"
   | "no_model";
 
@@ -306,6 +307,7 @@ async function probeTarget(params: {
   await fs.mkdir(sessionDir, { recursive: true });
 
   const start = Date.now();
+  let collectedText = "";
   try {
     await runEmbeddedPiAgent({
       sessionId,
@@ -326,7 +328,26 @@ async function probeTarget(params: {
       reasoningLevel: "off",
       verboseLevel: "off",
       streamParams: { maxTokens },
+      onText: (text) => {
+        collectedText += text;
+      },
     });
+
+    const isPong = collectedText.toUpperCase().includes("PONG");
+    if (!isPong) {
+      return {
+        provider: target.provider,
+        model: `${target.model.provider}/${target.model.model}`,
+        profileId: target.profileId,
+        label: target.label,
+        source: target.source,
+        mode: target.mode,
+        status: "unexpected_response",
+        error: `Model responded but did not say PONG (received: "${collectedText.trim().slice(0, 100)}")`,
+        latencyMs: Date.now() - start,
+      };
+    }
+
     return {
       provider: target.provider,
       model: `${target.model.provider}/${target.model.model}`,

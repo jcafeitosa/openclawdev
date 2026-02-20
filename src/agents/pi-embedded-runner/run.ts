@@ -284,7 +284,7 @@ export async function runEmbeddedPiAgent(
         );
       }
       if (ctxGuard.shouldBlock) {
-        log.error(
+        log.warn(
           `blocked model (context window too small): ${provider}/${modelId} ctx=${ctxGuard.tokens} (min=${CONTEXT_WINDOW_HARD_MIN_TOKENS}) source=${ctxGuard.source}`,
         );
         throw new FailoverError(

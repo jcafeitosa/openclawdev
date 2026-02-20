@@ -13,7 +13,7 @@ import {
 import type { OpenClawConfig } from "../../config/config.js";
 import { loadConfig } from "../../config/config.js";
 import { PROVIDER_REGISTRY, getProviderById } from "./registry.js";
-import type { ProviderStatus, TokenValidity } from "./types.js";
+import type { ProfileEntry, ProviderStatus, TokenValidity } from "./types.js";
 
 /**
  * Get token validity information from a credential.
@@ -148,10 +148,26 @@ export function detectProvider(
   }
 
   // Check auth profiles first (most explicit)
-  const profileIds = listProfilesForProvider(store, providerId);
+  const allProfileIds = listProfilesForProvider(store, providerId);
+  // Filter to only profiles that actually exist in the store.profiles object
+  const profileIds = allProfileIds.filter((id) => !!store.profiles?.[id]);
+
   if (profileIds.length > 0) {
     const profileIdsStr = profileIds.join(", ");
-    const firstProfileId = profileIds[0];
+    // Prefer lastGood profile, then pick the first non-expired profile, then fallback to first
+    const lastGoodId = store.lastGood?.[providerId];
+    const bestProfileId =
+      (lastGoodId && profileIds.includes(lastGoodId) ? lastGoodId : null) ??
+      profileIds.find((id) => {
+        const cred = store.profiles?.[id];
+        if (!cred || cred.type !== "oauth") {
+          return true;
+        } // non-OAuth always ok
+        const exp = (cred as { expires?: number }).expires;
+        return !exp || exp > Date.now();
+      }) ??
+      profileIds[0];
+    const firstProfileId = bestProfileId;
     const credential = store.profiles?.[firstProfileId];
     const usageStats = store.usageStats?.[firstProfileId];
 
@@ -178,6 +194,20 @@ export function detectProvider(
     // Last used
     const lastUsed = usageStats?.lastUsed ? new Date(usageStats.lastUsed).toISOString() : undefined;
 
+    // Build per-profile entries when multiple profiles exist
+    const profiles: ProfileEntry[] = profileIds.map((pid) => {
+      const cred = store.profiles?.[pid];
+      const { validity: pValidity, expiresAt: pExpiresAt } = getTokenValidity(cred);
+      const pIsActive = store.lastGood?.[providerId] === pid;
+      return {
+        profileId: pid,
+        type: cred?.type ?? "unknown",
+        tokenValidity: pValidity,
+        tokenExpiresAt: pExpiresAt,
+        isActive: pIsActive,
+      };
+    });
+
     return {
       id: definition.id,
       name: definition.name,
@@ -191,6 +221,7 @@ export function detectProvider(
       lastUsed,
       inCooldown,
       cooldownEndsAt: inCooldown ? cooldownEndsAt : undefined,
+      profiles: profiles.length > 1 ? profiles : undefined,
     };
   }
 

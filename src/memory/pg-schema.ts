@@ -387,7 +387,7 @@ export async function pgUpsertEmbeddingCache(
     entries: Array<{ hash: string; embedding: number[] }>;
   },
 ): Promise<void> {
-  const now = Date.now();
+  const now = Math.floor(Date.now());
   const pk = params.providerKey ?? "";
   for (const entry of params.entries) {
     if (entry.embedding.length === 0) {

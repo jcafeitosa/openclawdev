@@ -8,6 +8,9 @@
 import os from "node:os";
 import type { WorkspaceBootstrapFile } from "../agents/workspace.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
+
+const hookLog = getChildLogger({ module: "internal-hooks" });
 import { resolveStateDir } from "../config/paths.js";
 import type { JsonHookEntry } from "./json-loader.js";
 import { loadAllJsonHooks } from "./json-loader.js";
@@ -153,9 +156,8 @@ export async function triggerInternalHook(event: InternalHookEvent): Promise<voi
     try {
       await handler(event);
     } catch (err) {
-      console.error(
-        `Hook error [${event.type}:${event.action}]:`,
-        err instanceof Error ? err.message : String(err),
+      hookLog.error(
+        `Hook error [${event.type}:${event.action}]: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -169,18 +171,16 @@ export async function triggerInternalHook(event: InternalHookEvent): Promise<voi
     try {
       const result = await runShellHook(entry, event);
       if (!result.ok) {
-        console.error(
-          `Shell hook error [${event.type}:${event.action}] "${entry.command}":`,
-          result.stderr || `exit code ${result.exitCode}`,
+        hookLog.error(
+          `Shell hook error [${event.type}:${event.action}] "${entry.command}": ${result.stderr || `exit code ${result.exitCode}`}`,
         );
       }
       if (result.stdout.trim()) {
         event.messages.push(result.stdout.trim());
       }
     } catch (err) {
-      console.error(
-        `Shell hook error [${event.type}:${event.action}] "${entry.command}":`,
-        err instanceof Error ? err.message : String(err),
+      hookLog.error(
+        `Shell hook error [${event.type}:${event.action}] "${entry.command}": ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

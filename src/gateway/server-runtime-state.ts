@@ -16,7 +16,7 @@ import {
   type HookDispatchers,
 } from "./elysia-gateway.js";
 import type { HooksConfigResolved } from "./hooks.js";
-import { resolveGatewayListenHosts } from "./net.js";
+import { resolveGatewayListenHosts, formatUrlHost } from "./net.js";
 import {
   createGatewayBroadcaster,
   type GatewayBroadcastFn,
@@ -143,7 +143,7 @@ export async function createGatewayRuntimeState(params: {
         throw err;
       }
       params.log.warn(
-        `gateway: failed to bind loopback alias ${host.includes(":") ? `[${host}]` : host}:${params.port} (${String(err)})`,
+        `gateway: failed to bind loopback alias ${formatUrlHost(host)}:${params.port} (${String(err)})`,
       );
     }
   }

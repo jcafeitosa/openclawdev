@@ -240,20 +240,18 @@ export const buildTelegramMessageContext = async ({
   const sendTyping = async () => {
     await withTelegramApiErrorLogging({
       operation: "sendChatAction",
+      suppress: true,
       fn: () => bot.api.sendChatAction(chatId, "typing", buildTypingThreadParams(replyThreadId)),
     });
   };
 
   const sendRecordVoice = async () => {
-    try {
-      await withTelegramApiErrorLogging({
-        operation: "sendChatAction",
-        fn: () =>
-          bot.api.sendChatAction(chatId, "record_voice", buildTypingThreadParams(replyThreadId)),
-      });
-    } catch (err) {
-      logVerbose(`telegram record_voice cue failed for chat ${chatId}: ${String(err)}`);
-    }
+    await withTelegramApiErrorLogging({
+      operation: "sendChatAction",
+      suppress: true,
+      fn: () =>
+        bot.api.sendChatAction(chatId, "record_voice", buildTypingThreadParams(replyThreadId)),
+    });
   };
 
   // DM access control (secure defaults): "pairing" (default) / "allowlist" / "open" / "disabled"
@@ -525,13 +523,11 @@ export const buildTelegramMessageContext = async ({
     shouldAckReaction() && msg.message_id && reactionApi
       ? withTelegramApiErrorLogging({
           operation: "setMessageReaction",
+          suppress: true,
           fn: () => reactionApi(chatId, msg.message_id, [{ type: "emoji", emoji: ackReaction }]),
         }).then(
-          () => true,
-          (err) => {
-            logVerbose(`telegram react failed for chat ${chatId}: ${String(err)}`);
-            return false;
-          },
+          (res) => Boolean(res),
+          () => false,
         )
       : null;
 

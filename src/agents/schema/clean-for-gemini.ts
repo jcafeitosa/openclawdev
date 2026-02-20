@@ -334,6 +334,17 @@ function cleanSchemaForGeminiWithDefs(
       cleaned[key] = value.map((variant) =>
         cleanSchemaForGeminiWithDefs(variant, nextDefs, refStack),
       );
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      const recursivelyCleaned = cleanSchemaForGeminiWithDefs(value, nextDefs, refStack);
+      if (
+        recursivelyCleaned &&
+        typeof recursivelyCleaned === "object" &&
+        !Array.isArray(recursivelyCleaned)
+      ) {
+        cleaned[key] = recursivelyCleaned;
+      } else {
+        cleaned[key] = value;
+      }
     } else {
       cleaned[key] = value;
     }

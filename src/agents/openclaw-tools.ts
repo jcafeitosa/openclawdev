@@ -6,18 +6,30 @@ import type { SandboxFsBridge } from "./sandbox/fs-bridge.js";
 import { createAgentsListTool } from "./tools/agents-list-tool.js";
 import { createBrowserTool } from "./tools/browser-tool.js";
 import { createCanvasTool } from "./tools/canvas-tool.js";
+import { createCollaborationTool } from "./tools/collaboration-tool.js";
 import type { AnyAgentTool } from "./tools/common.js";
+import { createContextShardTool } from "./tools/context-shard-tool.js";
 import { createCronTool } from "./tools/cron-tool.js";
+import { createDelegationTool } from "./tools/delegation-tool.js";
 import { createGatewayTool } from "./tools/gateway-tool.js";
 import { createImageTool } from "./tools/image-tool.js";
 import { createMessageTool } from "./tools/message-tool.js";
 import { createNodesTool } from "./tools/nodes-tool.js";
+import { createPlanTool } from "./tools/plan-tool.js";
 import { createSessionStatusTool } from "./tools/session-status-tool.js";
+import { createSessionsBatchSpawnTool } from "./tools/sessions-batch-spawn-tool.js";
 import { createSessionsHistoryTool } from "./tools/sessions-history-tool.js";
+import { createSessionsInboxTool } from "./tools/sessions-inbox-tool.js";
 import { createSessionsListTool } from "./tools/sessions-list-tool.js";
+import {
+  createSessionsAbortTool,
+  createSessionsProgressTool,
+} from "./tools/sessions-progress-tool.js";
 import { createSessionsSendTool } from "./tools/sessions-send-tool.js";
 import { createSessionsSpawnTool } from "./tools/sessions-spawn-tool.js";
 import { createSubagentsTool } from "./tools/subagents-tool.js";
+import { createTaskDecomposeTool } from "./tools/task-decompose-tool.js";
+import { createTeamWorkspaceTool } from "./tools/team-workspace-tool.js";
 import { createTtsTool } from "./tools/tts-tool.js";
 import { createWebFetchTool, createWebSearchTool } from "./tools/web-tools.js";
 import { resolveWorkspaceRoot } from "./workspace-dir.js";
@@ -151,10 +163,43 @@ export function createOpenClawTools(options?: {
     createSubagentsTool({
       agentSessionKey: options?.agentSessionKey,
     }),
+    createSessionsBatchSpawnTool({
+      agentSessionKey: options?.agentSessionKey,
+      agentChannel: options?.agentChannel,
+      agentAccountId: options?.agentAccountId,
+      agentTo: options?.agentTo,
+      agentThreadId: options?.agentThreadId,
+      agentGroupId: options?.agentGroupId,
+      agentGroupChannel: options?.agentGroupChannel,
+      agentGroupSpace: options?.agentGroupSpace,
+      sandboxed: options?.sandboxed,
+      requesterAgentIdOverride: options?.requesterAgentIdOverride,
+    }),
     createSessionStatusTool({
       agentSessionKey: options?.agentSessionKey,
       config: options?.config,
     }),
+    createSessionsProgressTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
+    createSessionsAbortTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
+    createSessionsInboxTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
+    createDelegationTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
+    createCollaborationTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
+    createTaskDecomposeTool(),
+    createTeamWorkspaceTool({
+      agentSessionKey: options?.agentSessionKey,
+    }),
+    createContextShardTool(),
+    createPlanTool(),
     ...(webSearchTool ? [webSearchTool] : []),
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),

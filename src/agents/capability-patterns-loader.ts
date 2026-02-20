@@ -3,8 +3,11 @@
  */
 
 import type { OpenClawConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
 import { registerModelPattern } from "./capability-inference.js";
 import type { ModelCapabilities } from "./model-capabilities.js";
+
+const log = getChildLogger({ module: "capability-patterns-loader" });
 
 /**
  * Load and register model patterns from config.
@@ -23,7 +26,7 @@ export function loadModelPatternsFromConfig(config: OpenClawConfig): void {
 
   for (const [pattern, capabilities] of Object.entries(patterns)) {
     if (!pattern || !capabilities || typeof capabilities !== "object") {
-      console.warn(`[capability-patterns-loader] Invalid pattern entry: ${pattern}`);
+      log.warn(`Invalid pattern entry: ${pattern}`);
       continue;
     }
 
@@ -31,14 +34,14 @@ export function loadModelPatternsFromConfig(config: OpenClawConfig): void {
       registerModelPattern(pattern, capabilities as Partial<ModelCapabilities>);
       registeredCount++;
     } catch (error) {
-      console.error(`[capability-patterns-loader] Failed to register pattern "${pattern}":`, error);
+      log.error(
+        `Failed to register pattern "${pattern}": ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   if (registeredCount > 0) {
-    console.info(
-      `[capability-patterns-loader] Registered ${registeredCount} custom model pattern(s)`,
-    );
+    log.info(`Registered ${registeredCount} custom model pattern(s)`);
   }
 }
 

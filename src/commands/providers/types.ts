@@ -49,6 +49,24 @@ export type ProviderStatus = {
   inCooldown?: boolean;
   /** Cooldown ends at (ISO 8601) */
   cooldownEndsAt?: string;
+  /** Individual auth profiles for this provider (when multiple exist) */
+  profiles?: ProfileEntry[];
+};
+
+/**
+ * Individual auth profile entry within a provider.
+ */
+export type ProfileEntry = {
+  /** Profile identifier (e.g., "google:sendtelecom@gmail.com") */
+  profileId: string;
+  /** Credential type: api_key, token, oauth */
+  type: string;
+  /** Token validity status */
+  tokenValidity: TokenValidity;
+  /** Token expiration timestamp (ISO 8601) */
+  tokenExpiresAt?: string;
+  /** Whether this profile is the lastGood (active) one */
+  isActive: boolean;
 };
 
 /**

@@ -5,6 +5,7 @@
 import { cacheGet, cacheSet, CACHE_KEYS, CACHE_TTL } from "../../infra/cache/index.js";
 import { isRedisConnected } from "../../infra/cache/redis.js";
 import { isDatabaseConnected } from "../../infra/database/index.js";
+import { getChildLogger } from "../../logging.js";
 import { calculateCost, getProviderById } from "./registry.js";
 import type { ProviderUsage, UsageEntry, UsagePeriod, UsageTotals } from "./types.js";
 import { queryUsage, recordUsage } from "./usage-store.js";
@@ -49,7 +50,9 @@ export async function trackUsage(params: {
 
   // Record to database (fire and forget, don't block)
   recordUsage(entry).catch((err) => {
-    console.error("Failed to record usage:", err);
+    getChildLogger({ module: "usage" }).error(
+      `Failed to record usage: ${err instanceof Error ? err.message : String(err)}`,
+    );
   });
 
   // Invalidate cache for affected periods

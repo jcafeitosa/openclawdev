@@ -5,6 +5,7 @@ import {
   type OAuthProvider,
 } from "@mariozechner/pi-ai";
 import type { OpenClawConfig } from "../../config/config.js";
+import { loadConfig } from "../../config/config.js";
 import { withFileLock } from "../../infra/file-lock.js";
 import { refreshQwenPortalCredentials } from "../../providers/qwen-portal-oauth.js";
 import { refreshChutesTokens } from "../chutes-oauth.js";
@@ -14,6 +15,7 @@ import { ensureAuthStoreFile, resolveAuthStorePath } from "./paths.js";
 import { suggestOAuthProfileIdForLegacyDefault } from "./repair.js";
 import { ensureAuthProfileStore, saveAuthProfileStore } from "./store.js";
 import type { AuthProfileStore } from "./types.js";
+import { markAuthProfileFailure } from "./usage.js";
 
 const OAUTH_PROVIDER_IDS = new Set<string>(getOAuthProviders().map((provider) => provider.id));
 
@@ -193,6 +195,14 @@ export async function resolveApiKeyForProfile(params: {
       agentDir: params.agentDir,
     });
     if (!result) {
+      // Mark as failure if refresh returned null (provider not found or unusable)
+      await markAuthProfileFailure({
+        store,
+        profileId,
+        reason: "auth",
+        cfg: params.cfg ?? loadConfig(),
+        agentDir: params.agentDir,
+      });
       return null;
     }
     return {
@@ -201,6 +211,15 @@ export async function resolveApiKeyForProfile(params: {
       email: cred.email,
     };
   } catch (error) {
+    // Record failure to trigger cooldown and stop refresh loops
+    await markAuthProfileFailure({
+      store,
+      profileId,
+      reason: "auth",
+      cfg: params.cfg ?? loadConfig(),
+      agentDir: params.agentDir,
+    });
+
     const refreshedStore = ensureAuthProfileStore(params.agentDir);
     const refreshed = refreshedStore.profiles[profileId];
     if (refreshed?.type === "oauth" && Date.now() < refreshed.expires) {

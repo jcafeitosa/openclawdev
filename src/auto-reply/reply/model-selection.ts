@@ -7,6 +7,7 @@ import {
   type ModelAliasIndex,
   modelKey,
   normalizeProviderId,
+  resolveBestAvailableModel,
   resolveModelRefFromString,
   resolveThinkingDefault,
 } from "../../agents/model-selection.js";
@@ -261,6 +262,7 @@ function scoreFuzzyMatch(params: {
 export async function createModelSelectionState(params: {
   cfg: OpenClawConfig;
   agentCfg: NonNullable<NonNullable<OpenClawConfig["agents"]>["defaults"]> | undefined;
+  agentDir?: string;
   sessionEntry?: SessionEntry;
   sessionStore?: Record<string, SessionEntry>;
   sessionKey?: string;
@@ -278,6 +280,7 @@ export async function createModelSelectionState(params: {
   const {
     cfg,
     agentCfg,
+    agentDir,
     sessionEntry,
     sessionStore,
     sessionKey,
@@ -287,8 +290,19 @@ export async function createModelSelectionState(params: {
     defaultModel,
   } = params;
 
-  let provider = params.provider;
-  let model = params.model;
+  // INITIAL RESOLUTION: If the primary provider is in cooldown, pick the best fallback
+  // before we even start evaluating overrides.
+  const initialBest = resolveBestAvailableModel({
+    cfg,
+    primary: params.hasModelDirective
+      ? `${params.provider}/${params.model}`
+      : `${defaultProvider}/${defaultModel}`,
+    fallbacks: cfg.agents?.defaults?.model?.fallbacks,
+    agentDir,
+  });
+
+  let provider = initialBest.provider;
+  let model = initialBest.model;
 
   const hasAllowlist = agentCfg?.models && Object.keys(agentCfg.models).length > 0;
   const initialStoredOverride = resolveStoredModelOverride({

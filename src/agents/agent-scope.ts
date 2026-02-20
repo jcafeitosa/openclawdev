@@ -2,6 +2,7 @@ import path from "node:path";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import type { AgentRole } from "../config/types.agents.js";
+import { getChildLogger } from "../logging.js";
 import {
   DEFAULT_AGENT_ID,
   normalizeAgentId,
@@ -71,7 +72,9 @@ export function resolveDefaultAgentId(cfg: OpenClawConfig): string {
   const defaults = agents.filter((agent) => agent?.default);
   if (defaults.length > 1 && !defaultAgentWarned) {
     defaultAgentWarned = true;
-    console.warn("Multiple agents marked default=true; using the first entry as default.");
+    getChildLogger({ module: "agent-scope" }).warn(
+      "Multiple agents marked default=true; using the first entry as default.",
+    );
   }
   const chosen = (defaults[0] ?? agents[0])?.id?.trim();
   return normalizeAgentId(chosen || DEFAULT_AGENT_ID);

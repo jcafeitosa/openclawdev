@@ -46,6 +46,7 @@ export class ChatIsland extends LitElement {
 
   @state() private focusMode = false;
   @state() private showThinking = false;
+  @state() private agentIdentity: { name?: string; avatar?: string } | null = null;
 
   private gatewayEventUnsub: (() => void) | null = null;
   /** Guard to discard stale refreshChat() responses after session switch. */
@@ -60,26 +61,39 @@ export class ChatIsland extends LitElement {
     // Listen for chat events from gateway — filter by active session to prevent
     // cross-session message leakage (Issue #5).
     this.gatewayEventUnsub = $gatewayEvent.subscribe((evt) => {
-      if (!evt) {
+      if (!evt || evt.event !== "chat") {
         return;
       }
+      const payload = evt.payload as
+        | {
+            runId?: string;
+            sessionKey?: string;
+            seq?: number;
+            state?: "delta" | "final" | "error";
+            message?: {
+              role?: string;
+              content?: Array<{ type?: string; text?: string }>;
+              timestamp?: number;
+            };
+            errorMessage?: string;
+          }
+        | undefined;
       // Only process events for the currently active session
-      const evtSession = (evt.payload as { sessionKey?: string } | undefined)?.sessionKey;
+      const evtSession = payload?.sessionKey;
       const currentSession = this.activeSession.value || "main";
       if (evtSession && evtSession !== currentSession) {
         return;
       }
 
-      if (evt.event === "chat.stream") {
-        const payload = evt.payload as { text?: string; startedAt?: number } | undefined;
-        if (payload?.text !== undefined) {
-          $chatStream.set(payload.text);
+      if (payload?.state === "delta") {
+        const text = payload.message?.content?.[0]?.text;
+        if (text !== undefined) {
+          $chatStream.set(text);
         }
-        if (payload?.startedAt) {
-          $chatStreamStartedAt.set(payload.startedAt);
+        if ($chatStreamStartedAt.get() === null && payload.message?.timestamp) {
+          $chatStreamStartedAt.set(payload.message.timestamp);
         }
-      }
-      if (evt.event === "chat.done") {
+      } else if (payload?.state === "final" || payload?.state === "error") {
         $chatStream.set(null);
         $chatStreamStartedAt.set(null);
         $chatSending.set(false);
@@ -87,6 +101,7 @@ export class ChatIsland extends LitElement {
       }
     });
     void this.refreshChat();
+    void this.loadAgentIdentity(this.activeSession.value || "main");
   }
 
   disconnectedCallback() {
@@ -104,12 +119,13 @@ export class ChatIsland extends LitElement {
         $chatStream.set(null);
         $chatStreamStartedAt.set(null);
         void this.refreshChat();
+        void this.loadAgentIdentity(next);
       },
       thinkingLevel: null,
       showThinking: this.showThinking,
       loading: this.chatLoading.value,
       sending: this.chatSending.value,
-      canAbort: false,
+      canAbort: this.chatSending.value,
       compactionStatus: null,
       messages: [...this.chatMessages.value],
       toolMessages: [...this.chatToolMessages.value],
@@ -128,8 +144,8 @@ export class ChatIsland extends LitElement {
       sidebarContent: this.sidebarContent.value,
       sidebarError: this.sidebarError.value,
       splitRatio: this.splitRatio.value,
-      assistantName: "OpenClaw",
-      assistantAvatar: null,
+      assistantName: this.agentIdentity?.name ?? "OpenClaw",
+      assistantAvatar: this.agentIdentity?.avatar ?? null,
       attachments: [...this.chatAttachments.value],
       onAttachmentsChange: (attachments) => {
         $chatAttachments.set(attachments);
@@ -142,6 +158,7 @@ export class ChatIsland extends LitElement {
         $chatMessage.set(next);
       },
       onSend: () => void this.sendMessage(),
+      onAbort: () => void this.abortChat(),
       onQueueRemove: (id: string) => {
         $chatQueue.set(this.chatQueue.value.filter((item) => item.id !== id));
       },
@@ -170,6 +187,26 @@ export class ChatIsland extends LitElement {
     };
 
     return html`${renderChat(props)}`;
+  }
+
+  private async abortChat() {
+    const sessionKey = this.activeSession.value || "main";
+    try {
+      await gateway.call("chat.abort", { sessionKey });
+    } catch (err) {
+      console.error("Failed to abort chat:", err);
+    }
+  }
+
+  private async loadAgentIdentity(sessionKey: string) {
+    try {
+      const result = await gateway.call<{ name?: string; avatar?: string }>("agent.identity.get", {
+        sessionKey,
+      });
+      this.agentIdentity = result;
+    } catch {
+      // Identity unavailable — fallback to defaults
+    }
   }
 
   private async refreshChat() {

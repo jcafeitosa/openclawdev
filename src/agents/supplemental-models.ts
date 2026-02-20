@@ -10,7 +10,10 @@
  * the model catalog in loadModelCatalog.
  */
 
+import { getChildLogger } from "../logging.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
+
+const log = getChildLogger({ module: "model-discovery" });
 
 const DISCOVERY_TIMEOUT_MS = 8000;
 
@@ -347,7 +350,7 @@ export async function discoverSupplementalModels(
   if (anthropicToken) {
     tasks.push(
       discoverAnthropicModels(anthropicToken).catch((err) => {
-        console.warn(`[model-discovery] Anthropic discovery failed: ${String(err)}`);
+        log.warn(`Anthropic discovery failed: ${String(err)}`);
         return [] as ModelCatalogEntry[];
       }),
     );
@@ -357,7 +360,7 @@ export async function discoverSupplementalModels(
   if (openaiToken) {
     tasks.push(
       discoverOpenAIModels(openaiToken).catch((err) => {
-        console.warn(`[model-discovery] OpenAI discovery failed: ${String(err)}`);
+        log.warn(`OpenAI discovery failed: ${String(err)}`);
         return [] as ModelCatalogEntry[];
       }),
     );
@@ -367,7 +370,7 @@ export async function discoverSupplementalModels(
   if (codexToken) {
     tasks.push(
       discoverOpenAICodexModels(codexToken).catch((err) => {
-        console.warn(`[model-discovery] OpenAI Codex discovery failed: ${String(err)}`);
+        log.warn(`OpenAI Codex discovery failed: ${String(err)}`);
         return [] as ModelCatalogEntry[];
       }),
     );

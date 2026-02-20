@@ -5,6 +5,7 @@ import { type ChannelId, listChannelPlugins } from "../channels/plugins/index.js
 import { stopGmailWatcher } from "../hooks/gmail-watcher.js";
 import type { HeartbeatRunner } from "../infra/heartbeat-runner.js";
 import type { PluginServicesHandle } from "../plugins/services.js";
+import { stopHierarchyEventBroadcaster } from "./server-hierarchy-events.js";
 
 export function createGatewayCloseHandler(params: {
   bonjourStop: (() => Promise<void>) | null;
@@ -85,6 +86,7 @@ export function createGatewayCloseHandler(params: {
     if (params.modelCatalogRefresh) {
       clearInterval(params.modelCatalogRefresh);
     }
+    stopHierarchyEventBroadcaster();
     if (params.agentUnsub) {
       try {
         params.agentUnsub();
@@ -118,6 +120,9 @@ export function createGatewayCloseHandler(params: {
         ? params.httpServers
         : [params.httpServer];
     for (const server of servers) {
+      if (!server.listening) {
+        continue;
+      }
       const httpServer = server as HttpServer & {
         closeIdleConnections?: () => void;
       };

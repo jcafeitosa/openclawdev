@@ -565,6 +565,9 @@ async function sendTelegramText(
           ...baseParams,
         }),
     });
+    if (!res) {
+      throw new Error("sendMessage returned no result");
+    }
     return res.message_id;
   } catch (err) {
     const errText = formatErrorMessage(err);
@@ -581,6 +584,9 @@ async function sendTelegramText(
             ...baseParams,
           }),
       });
+      if (!res) {
+        throw new Error("sendMessage returned no result", { cause: err });
+      }
       return res.message_id;
     }
     throw err;

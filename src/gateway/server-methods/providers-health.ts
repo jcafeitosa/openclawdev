@@ -5,6 +5,7 @@
  * registry metadata and runtime health metrics so the UI gets a unified view.
  */
 
+import { getOAuthProviders } from "@mariozechner/pi-ai";
 import { normalizeProviderId } from "../../agents/model-selection.js";
 import { detectProviders } from "../../commands/providers/index.js";
 import { getProviderById } from "../../commands/providers/registry.js";
@@ -17,6 +18,7 @@ import {
   isProviderHealthy,
 } from "../../providers/core/health.js";
 import type { ProviderHealthMetrics } from "../../providers/core/types.js";
+import { getProviderSubscriptions } from "../free-model-health.js";
 import { ErrorCodes, errorShape } from "../protocol/index.js";
 import type { GatewayRequestHandlers } from "./types.js";
 
@@ -112,8 +114,12 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
       // Get runtime health metrics (populated by actual API calls)
       const runtimeHealth = getAllProviderHealth();
 
-      // Build set of provider IDs that have an OAuth plugin actually loaded
-      // (plugin must be enabled + registered, not just declared in the registry)
+      // Get subscription tier data (inferred from probes)
+      const providerSubs = await getProviderSubscriptions();
+
+      // Build set of provider IDs that support OAuth:
+      // 1. Plugins with oauth/device_code auth methods (externally loaded)
+      // 2. pi-ai native OAuth providers (built-in, no plugin required)
       const oauthPluginProviders = new Set<string>();
       try {
         const cfg = loadConfig();
@@ -129,6 +135,14 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
         }
       } catch {
         // Non-fatal: fall back to registry-only check
+      }
+      // Also include pi-ai native OAuth providers (anthropic, github-copilot, etc.)
+      try {
+        for (const p of getOAuthProviders()) {
+          oauthPluginProviders.add(normalizeProviderId(p.id));
+        }
+      } catch {
+        // Non-fatal
       }
 
       const providers = detected.map((det) => {
@@ -160,6 +174,21 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
         const oauthAvailable =
           registrySupportsOAuth && oauthPluginProviders.has(normalizeProviderId(det.id));
 
+        // Convert per-profile token expiry to epoch ms for UI countdown
+        const profiles = det.profiles?.map((p) => ({
+          profileId: p.profileId,
+          type: p.type,
+          tokenValidity: p.tokenValidity,
+          tokenExpiresAt: isoToMs(p.tokenExpiresAt),
+          tokenRemainingMs: p.tokenExpiresAt
+            ? Math.max(0, new Date(p.tokenExpiresAt).getTime() - now)
+            : null,
+          isActive: p.isActive,
+        }));
+
+        // Subscription tier (inferred from probes)
+        const sub = providerSubs[normalizeProviderId(det.id)];
+
         return {
           id: det.id,
           name: det.name,
@@ -188,6 +217,13 @@ export const providersHealthHandlers: GatewayRequestHandlers = {
           envVars: registry?.envVars ?? [],
           configured: det.detected,
           oauthAvailable,
+          // Individual auth profiles (only when multiple exist)
+          profiles,
+          // Subscription tier (inferred from probes)
+          subscriptionTier: sub?.tier,
+          subscriptionConfidence: sub?.confidence,
+          subscriptionDetectedAt: sub?.detectedAt,
+          subscriptionMethod: sub?.method,
         };
       });
 

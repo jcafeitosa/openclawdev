@@ -20,6 +20,8 @@ import {
   modelsImageFallbacksListCommand,
   modelsImageFallbacksRemoveCommand,
   modelsListCommand,
+  modelsDiscoverCommand,
+  modelsCooldownsCommand,
   modelsScanCommand,
   modelsSetCommand,
   modelsSetImageCommand,
@@ -251,6 +253,27 @@ export function registerModelsCli(program: Command) {
     .action(async () => {
       await runModelsCommand(async () => {
         await modelsImageFallbacksClearCommand(defaultRuntime);
+      });
+    });
+
+  models
+    .command("discover")
+    .description("Discover models from configured providers (OpenAI, Anthropic, Google)")
+    .option("--json", "Output JSON", false)
+    .action(async (opts) => {
+      await runModelsCommand(async () => {
+        await modelsDiscoverCommand(opts, defaultRuntime);
+      });
+    });
+
+  models
+    .command("cooldowns")
+    .description("List all provider profiles currently in cooldown")
+    .option("--json", "Output JSON", false)
+    .option("--clear <id>", "Clear cooldown for a specific profile ID")
+    .action(async (opts) => {
+      await runModelsCommand(async () => {
+        await modelsCooldownsCommand(opts, defaultRuntime);
       });
     });
 

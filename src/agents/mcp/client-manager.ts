@@ -13,7 +13,10 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js";
+import { getChildLogger } from "../../logging.js";
 import type { AnyAgentTool } from "../tools/common.js";
+
+const log = getChildLogger({ module: "mcp-client-manager" });
 import { mcpToolsToAgentTools } from "./tool-bridge.js";
 import type { McpServerConfig, McpConfig, McpToolDefinition } from "./types.js";
 
@@ -52,7 +55,7 @@ export class McpClientManager {
       const result = results[i];
       if (result.status === "rejected") {
         const name = entries[i][0];
-        console.warn(`MCP server "${name}" connection failed: ${result.reason}`);
+        log.warn(`MCP server "${name}" connection failed: ${result.reason}`);
       }
     }
   }

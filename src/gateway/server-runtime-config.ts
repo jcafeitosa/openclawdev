@@ -6,6 +6,7 @@ import {
   type loadConfig,
   writeConfigFile,
 } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
 import {
   assertGatewayAuthConfigured,
   type ResolvedGatewayAuth,
@@ -113,7 +114,9 @@ export async function resolveGatewayRuntimeConfig(params: {
     } catch (err) {
       // If writing fails, we still proceed with the in-memory generated token.
       // The user might see a warning later or just have to re-generate next time.
-      console.warn(`[gateway] failed to persist auto-generated token: ${String(err)}`);
+      getChildLogger({ module: "gateway" }).warn(
+        `failed to persist auto-generated token: ${String(err)}`,
+      );
     }
   }
 

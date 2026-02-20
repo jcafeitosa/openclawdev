@@ -246,7 +246,7 @@ export function subtitleForTab(tab: Tab) {
     case "sessions":
       return "Inspect active sessions and adjust per-session defaults.";
     case "usage":
-      return "";
+      return "Token and cost analytics";
     case "health":
       return "Provider health checks and connectivity status.";
     case "cron":

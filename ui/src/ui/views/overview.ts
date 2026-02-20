@@ -24,6 +24,9 @@ export type OverviewProps = {
   securityStatus: string | null;
   totalTokens: number | null;
   totalCost: number | null;
+  freeModelsCount: number;
+  freeModelsVerified: number;
+  freeModelsDiscovered: number;
   onSettingsChange: (next: UiSettings) => void;
   onPasswordChange: (next: string) => void;
   onSessionKeyChange: (next: string) => void;
@@ -445,7 +448,7 @@ export function renderOverview(props: OverviewProps) {
     ${
       props.connected
         ? html`
-            <section class="grid grid-cols-4" style="margin-top: 18px;">
+            <section class="grid grid-cols-5" style="margin-top: 18px;">
               <div class="card stat-card" style="border-left: 3px solid #22c55e;">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
                   <svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" style="width: 20px; height: 20px; color: #22c55e; flex-shrink: 0;">
@@ -467,6 +470,25 @@ export function renderOverview(props: OverviewProps) {
                   ${props.healthyProviders}/${props.totalProviders}
                 </div>
                 <div class="muted" style="font-size: 0.85em;">Healthy / total AI providers.</div>
+              </div>
+              <div class="card stat-card" style="border-left: 3px solid #06b6d4;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px; color: #06b6d4; flex-shrink: 0;">
+                    <path d="M12 2L15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2z" />
+                  </svg>
+                  <div class="stat-label">Free Models</div>
+                </div>
+                <div class="stat-value" style="color: #06b6d4;">
+                  ${
+                    props.freeModelsVerified > 0
+                      ? html`${props.freeModelsVerified}<span class="muted" style="font-size: 0.6em; font-weight: 400;">/${props.freeModelsCount}</span>`
+                      : props.freeModelsCount
+                  }
+                </div>
+                <div class="muted" style="font-size: 0.85em;">
+                  ${props.freeModelsVerified > 0 ? "Verified / total free models." : "Available across all providers."}
+                  ${props.freeModelsDiscovered > 0 ? html` <span style="color: #a855f7;">(${props.freeModelsDiscovered} discovered)</span>` : nothing}
+                </div>
               </div>
               <div class="card stat-card" style="border-left: 3px solid ${props.securityStatus === "critical" ? "var(--danger)" : props.securityStatus === "warning" ? "#f59e0b" : "#22c55e"};">
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">

@@ -1,6 +1,6 @@
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { gateway } from "../../services/gateway.ts";
+import { gateway, $gatewayEvent } from "../../services/gateway.ts";
 import type { CronJob, CronRunLogEntry, CronStatus } from "../types.ts";
 import type { CronFormState } from "../ui-types.ts";
 import { renderCron, type CronProps } from "../views/cron.ts";
@@ -36,6 +36,8 @@ export class CronIsland extends LitElement {
     timeoutSeconds: "120",
   };
 
+  private eventUnsub: (() => void) | null = null;
+
   createRenderRoot() {
     return this;
   }
@@ -43,6 +45,18 @@ export class CronIsland extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     void this.loadData();
+    this.eventUnsub = $gatewayEvent.subscribe((evt) => {
+      if (!evt || evt.event !== "cron") {
+        return;
+      }
+      void this.loadData();
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.eventUnsub?.();
+    this.eventUnsub = null;
   }
 
   private async loadData() {

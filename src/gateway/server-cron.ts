@@ -18,6 +18,7 @@ import { enqueueSystemEvent } from "../infra/system-events.js";
 import { getChildLogger } from "../logging.js";
 import { normalizeAgentId, toAgentStoreSessionKey } from "../routing/session-key.js";
 import { defaultRuntime } from "../runtime.js";
+import { safeParseUrl } from "./net.js";
 
 export type GatewayCronState = {
   cron: CronService;
@@ -29,7 +30,10 @@ const CRON_WEBHOOK_TIMEOUT_MS = 10_000;
 
 function redactWebhookUrl(url: string): string {
   try {
-    const parsed = new URL(url);
+    const parsed = safeParseUrl(url);
+    if (!parsed) {
+      throw new Error(`Invalid webhook URL: ${url}`);
+    }
     return `${parsed.origin}${parsed.pathname}`;
   } catch {
     return "<invalid-webhook-url>";

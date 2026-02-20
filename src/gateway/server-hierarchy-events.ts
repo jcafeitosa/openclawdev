@@ -17,6 +17,7 @@ import {
 import { loadConfig } from "../config/config.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { onAgentEvent } from "../infra/agent-events.js";
+import { getChildLogger } from "../logging.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import { getAllCollaborativeSessions } from "./server-methods/collaboration.js";
 
@@ -456,11 +457,27 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     rootSessionKeysUsed.add(sessionKey);
   }
 
-  // Extract collaboration edges from active sessions
+  // Extract collaboration edges from active sessions.
+  // Only include sessions that are actively debating — decided/archived/planning
+  // sessions with no recent activity should not inject idle agents into the graph.
   const collaborationEdges: CollaborationEdge[] = [];
   try {
     const sessions = getAllCollaborativeSessions();
     for (const session of sessions) {
+      // Skip archived sessions entirely — they are stale
+      if (session.status === "archived") {
+        continue;
+      }
+      // For non-debating sessions (decided, planning), apply TTL based on last activity
+      if (session.status !== "debating") {
+        const lastActivity =
+          session.messages.length > 0
+            ? Math.max(...session.messages.map((m) => m.timestamp))
+            : session.createdAt;
+        if (snapshotNow - lastActivity > COMPLETED_TTL_MS) {
+          continue; // session is stale — don't generate edges
+        }
+      }
       const members = session.members
         .map((member) => resolveKnownAgentId(cfg, member))
         .filter((member): member is string => Boolean(member));
@@ -527,7 +544,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
   } catch (err) {
     // Collaboration data is optional — log for observability but don't break hierarchy
-    console.warn("[hierarchy] Failed to build collaboration edges:", String(err));
+    getChildLogger({ module: "hierarchy" }).warn(
+      `Failed to build collaboration edges: ${String(err)}`,
+    );
   }
 
   // Extract delegation edges from active delegations and build the active-agents set
@@ -598,7 +617,9 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
   } catch (err) {
     // Delegation data is optional — log for observability
-    console.warn("[hierarchy] Failed to build delegation edges:", String(err));
+    getChildLogger({ module: "hierarchy" }).warn(
+      `Failed to build delegation edges: ${String(err)}`,
+    );
   }
 
   // Ensure agents referenced in collaboration/delegation edges have nodes.
@@ -663,12 +684,26 @@ function buildHierarchySnapshot(): HierarchySnapshot {
   }
 
   // Remove completed/error agents that have been idle longer than the TTL.
-  // Agents without endedAt are kept (they have no known completion time).
+  // Also remove "running" nodes that have been running unreasonably long (safety net
+  // for orphaned runs whose outcome was never set).
+  const STALE_RUNNING_TTL_MS = 10 * 60_000; // 10 minutes — matches default agent timeout
   const filterByTTL = (node: HierarchyNode): boolean => {
     if (node.status === "completed" || node.status === "error" || node.status === "idle") {
       if (typeof node.endedAt === "number" && node.endedAt > 0) {
         if (snapshotNow - node.endedAt > COMPLETED_TTL_MS) {
           return false; // expired — remove from graph
+        }
+      }
+    }
+    // Safety net: "running" nodes without endedAt that have been running for too long
+    // are likely orphaned (process died without reporting outcome).
+    if (node.status === "running" && typeof node.startedAt === "number") {
+      if (snapshotNow - node.startedAt > STALE_RUNNING_TTL_MS) {
+        node.status = "error";
+        node.endedAt = node.startedAt + STALE_RUNNING_TTL_MS;
+        // After re-labeling as error, apply the normal TTL check
+        if (snapshotNow - node.endedAt > COMPLETED_TTL_MS) {
+          return false;
         }
       }
     }

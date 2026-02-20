@@ -13,6 +13,7 @@
  * - Support (varies): research, git, release, etc.
  */
 
+import { getChildLogger } from "../../../logging.js";
 import type { HookHandler } from "../../hooks.js";
 
 type AgentSuggestion = {
@@ -295,7 +296,7 @@ const teamRoutingHandler: HookHandler = async (event) => {
   // Add to event messages for the agent to see
   event.messages.push(contextMessage);
 
-  console.log(`[team-routing] ${contextMessage}`);
+  getChildLogger({ module: "team-routing" }).info(contextMessage);
 };
 
 export default teamRoutingHandler;

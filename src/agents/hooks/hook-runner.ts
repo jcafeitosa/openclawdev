@@ -3,7 +3,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { getChildLogger } from "../../logging.js";
 import { HooksFileSchema, type HookConfig, type HookAction } from "./types.js";
+
+const log = getChildLogger({ module: "hook-runner" });
 
 const execAsync = promisify(exec);
 
@@ -26,7 +29,9 @@ export class HookRunner {
           const parsed = HooksFileSchema.parse(json);
           this.hooks.push(...parsed.hooks);
         } catch (error) {
-          console.warn(`Failed to lead hooks from ${p}:`, error);
+          log.warn(
+            `Failed to load hooks from ${p}: ${error instanceof Error ? error.message : String(error)}`,
+          );
         }
       }
     }
@@ -47,7 +52,9 @@ export class HookRunner {
           try {
             await execAsync(hook.command);
           } catch (e) {
-            console.error(`Hook command failed: ${hook.command}`, e);
+            log.error(
+              `Hook command failed: ${hook.command} ${e instanceof Error ? e.message : String(e)}`,
+            );
           }
         }
 

@@ -4,7 +4,10 @@
  */
 
 import { Elysia } from "elysia";
+import { getChildLogger } from "../logging.js";
 import { getProviderMetrics, type ProviderMetricsSnapshot } from "./provider-metrics.js";
+
+const log = getChildLogger({ module: "metrics-routes" });
 
 export const metricsRoutes = new Elysia({ prefix: "/metrics" })
   /**
@@ -85,7 +88,9 @@ export const metricsRoutes = new Elysia({ prefix: "/metrics" })
       // Default: JSON
       return filteredSnapshot;
     } catch (error) {
-      console.error("[metrics-routes] Error fetching metrics:", error);
+      log.error(
+        `Error fetching metrics: ${error instanceof Error ? error.message : String(error)}`,
+      );
       set.status = 500;
       return {
         error: "Failed to fetch metrics",
@@ -130,7 +135,9 @@ export const metricsRoutes = new Elysia({ prefix: "/metrics" })
       metrics.reset();
       return { message: "All metrics reset" };
     } catch (error) {
-      console.error("[metrics-routes] Error resetting metrics:", error);
+      log.error(
+        `Error resetting metrics: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return {
         error: "Failed to reset metrics",
         message: error instanceof Error ? error.message : String(error),
@@ -189,7 +196,9 @@ export const metricsRoutes = new Elysia({ prefix: "/metrics" })
 
       return summary;
     } catch (error) {
-      console.error("[metrics-routes] Error fetching summary:", error);
+      log.error(
+        `Error fetching summary: ${error instanceof Error ? error.message : String(error)}`,
+      );
       set.status = 500;
       return {
         error: "Failed to fetch summary",

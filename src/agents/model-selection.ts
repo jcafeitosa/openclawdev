@@ -1,6 +1,14 @@
+import { getDetectedProviderIds } from "../commands/providers/detection.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
 import { resolveAgentModelPrimary } from "./agent-scope.js";
+import {
+  ensureAuthProfileStore,
+  isProfileInCooldown,
+  resolveAuthProfileOrder,
+} from "./auth-profiles.js";
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from "./defaults.js";
+import { loadDiscoveredCatalog } from "./discovery/dynamic-catalog.js";
 import type { ModelCatalogEntry } from "./model-catalog.js";
 import { normalizeGoogleModelId } from "./models-config.providers.js";
 import type { TaskComplexity, TaskType } from "./task-classifier.js";
@@ -10,6 +18,39 @@ export type ModelRef = {
   model: string;
   accountTag?: string;
 };
+
+/**
+ * Resolve "emergency-free" models from the discovered catalog.
+ * These are used as ultimate fallbacks when all other models fail.
+ */
+export async function resolveEmergencyFreeModels(params: {
+  cfg: OpenClawConfig;
+}): Promise<ModelRef[]> {
+  try {
+    const catalog = await loadDiscoveredCatalog();
+    if (!catalog?.models) {
+      return [];
+    }
+
+    const detectedProviders = new Set(
+      getDetectedProviderIds(params.cfg).map((id) => id.toLowerCase()),
+    );
+
+    // Filter for models tagged as emergency-free or explicitly marked as free,
+    // and ensure the provider is currently active/detected.
+    return catalog.models
+      .filter((m) => {
+        const isFree = m.isFree || m.tags?.includes("emergency-free");
+        return isFree && detectedProviders.has(m.provider.toLowerCase());
+      })
+      .map((m) => ({
+        provider: m.provider,
+        model: m.id,
+      }));
+  } catch {
+    return [];
+  }
+}
 
 export type ThinkLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
@@ -268,8 +309,8 @@ export function resolveConfiguredModelRef(params: {
       }
 
       // Default to anthropic if no provider is specified, but warn as this is deprecated.
-      console.warn(
-        `[openclaw] Model "${trimmed}" specified without provider. Falling back to "anthropic/${trimmed}". Please use "anthropic/${trimmed}" in your config.`,
+      getChildLogger({ module: "model-selection" }).warn(
+        `Model "${trimmed}" specified without provider. Falling back to "anthropic/${trimmed}". Please use "anthropic/${trimmed}" in your config.`,
       );
       return { provider: "anthropic", model: trimmed };
     }
@@ -567,6 +608,64 @@ function resolveModelPrimaryOrDefault(raw: string | undefined, cfg: OpenClawConf
     defaultProvider: DEFAULT_PROVIDER,
     defaultModel: DEFAULT_MODEL,
   });
+}
+
+/**
+ * Resolve the best available model from a list of candidates, skipping those in cooldown.
+ */
+export function resolveBestAvailableModel(params: {
+  cfg: OpenClawConfig;
+  primary?: string;
+  fallbacks?: string[];
+  agentDir?: string;
+}): ModelRef {
+  const { cfg, primary, fallbacks = [], agentDir } = params;
+  const candidates = [primary, ...fallbacks].filter((c): c is string => Boolean(c?.trim()));
+
+  if (candidates.length === 0) {
+    return resolveConfiguredModelRef({
+      cfg,
+      defaultProvider: DEFAULT_PROVIDER,
+      defaultModel: DEFAULT_MODEL,
+    });
+  }
+
+  const authStore = ensureAuthProfileStore(agentDir, { allowKeychainPrompt: false });
+  const aliasIndex = buildModelAliasIndex({ cfg, defaultProvider: DEFAULT_PROVIDER });
+
+  for (const raw of candidates) {
+    const resolved = resolveModelRefFromString({
+      raw,
+      defaultProvider: DEFAULT_PROVIDER,
+      aliasIndex,
+    });
+    if (!resolved) {
+      continue;
+    }
+
+    const profileIds = resolveAuthProfileOrder({
+      cfg,
+      store: authStore,
+      provider: resolved.ref.provider,
+    });
+    const isAnyProfileAvailable =
+      profileIds.length === 0 || profileIds.some((id) => !isProfileInCooldown(authStore, id));
+
+    if (isAnyProfileAvailable) {
+      return resolved.ref;
+    }
+  }
+
+  // If ALL models are in cooldown, just return the primary and let the runner handle it (probes, etc)
+  const first = parseModelRef(candidates[0], DEFAULT_PROVIDER);
+  return (
+    first ??
+    resolveConfiguredModelRef({
+      cfg,
+      defaultProvider: DEFAULT_PROVIDER,
+      defaultModel: DEFAULT_MODEL,
+    })
+  );
 }
 
 /**

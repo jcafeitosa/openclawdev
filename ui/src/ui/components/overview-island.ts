@@ -1,7 +1,7 @@
 import { StoreController } from "@nanostores/lit";
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { gateway } from "../../services/gateway.ts";
+import { gateway, $gatewayEvent } from "../../services/gateway.ts";
 import { $connected } from "../../stores/app.ts";
 import { $hello } from "../../stores/gateway.ts";
 import type { SystemInfoResult } from "../controllers/system-info.ts";
@@ -30,6 +30,11 @@ export class OverviewIsland extends LitElement {
   @state() private securityStatus: string | null = null;
   @state() private totalTokens: number | null = null;
   @state() private totalCost: number | null = null;
+  @state() private freeModelsCount = 0;
+  @state() private freeModelsVerified = 0;
+  @state() private freeModelsDiscovered = 0;
+
+  private eventUnsub: (() => void) | null = null;
 
   protected createRenderRoot() {
     return this;
@@ -38,6 +43,18 @@ export class OverviewIsland extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     void this.loadData();
+    this.eventUnsub = $gatewayEvent.subscribe((evt) => {
+      if (!evt || evt.event !== "health") {
+        return;
+      }
+      void this.loadData();
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.eventUnsub?.();
+    this.eventUnsub = null;
   }
 
   private async loadData() {
@@ -51,6 +68,7 @@ export class OverviewIsland extends LitElement {
         providersResult,
         securityResult,
         usageResult,
+        modelsResult,
       ] = await Promise.all([
         gateway.call<PresenceEntry[]>("system-presence", {}).catch(() => [] as PresenceEntry[]),
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
@@ -70,6 +88,12 @@ export class OverviewIsland extends LitElement {
         gateway
           .call<{ totals?: { totalTokens?: number; totalCost?: number } }>("usage.status")
           .catch(() => ({ totals: null })),
+        gateway
+          .call<{
+            freeModels?: Array<{ id: string; discoveredFree?: boolean }>;
+            freeModelsSummary?: { verifiedCount?: number; discoveredFreeCount?: number };
+          }>("models.list", {})
+          .catch(() => ({ freeModels: [], freeModelsSummary: null })),
       ]);
 
       this.presenceCount = Array.isArray(presenceResult) ? presenceResult.length : 0;
@@ -90,6 +114,11 @@ export class OverviewIsland extends LitElement {
       this.securityStatus = securityResult.status ?? null;
       this.totalTokens = usageResult.totals?.totalTokens ?? null;
       this.totalCost = usageResult.totals?.totalCost ?? null;
+      this.freeModelsCount = modelsResult.freeModels?.length ?? 0;
+      this.freeModelsVerified = modelsResult.freeModelsSummary?.verifiedCount ?? 0;
+      this.freeModelsDiscovered = (modelsResult.freeModels ?? []).filter(
+        (m: Record<string, unknown>) => m.discoveredFree === true,
+      ).length;
 
       this.lastError = null;
     } catch (err) {
@@ -149,6 +178,9 @@ export class OverviewIsland extends LitElement {
       securityStatus: this.securityStatus,
       totalTokens: this.totalTokens,
       totalCost: this.totalCost,
+      freeModelsCount: this.freeModelsCount,
+      freeModelsVerified: this.freeModelsVerified,
+      freeModelsDiscovered: this.freeModelsDiscovered,
       onSettingsChange: (next) => this.handleSettingsChange(next),
       onPasswordChange: (next) => this.handlePasswordChange(next),
       onSessionKeyChange: (next) => this.handleSessionKeyChange(next),

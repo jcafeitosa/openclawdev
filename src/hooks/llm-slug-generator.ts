@@ -12,6 +12,7 @@ import {
 } from "../agents/agent-scope.js";
 import { runEmbeddedPiAgent } from "../agents/pi-embedded.js";
 import type { OpenClawConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
 
 /**
  * Generate a short 1-2 word filename slug from session content using LLM
@@ -70,7 +71,9 @@ Reply with ONLY the slug, nothing else. Examples: "vendor-pitch", "api-design", 
 
     return null;
   } catch (err) {
-    console.error("[llm-slug-generator] Failed to generate slug:", err);
+    getChildLogger({ module: "llm-slug-generator" }).error(
+      `Failed to generate slug: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   } finally {
     // Clean up temporary session file

@@ -16,6 +16,7 @@ import {
 } from "../canvas-host/a2ui.js";
 import type { CanvasHostHandler } from "../canvas-host/server.js";
 import { loadConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
 import type { createSubsystemLogger } from "../logging/subsystem.js";
 import { safeEqualSecret } from "../security/secret-equal.js";
 import { handleSlackHttpRequest } from "../slack/http/index.js";
@@ -50,7 +51,7 @@ import {
 } from "./hooks.js";
 import { sendGatewayAuthFailure } from "./http-common.js";
 import { getBearerToken, getHeader } from "./http-utils.js";
-import { isPrivateOrLoopbackAddress, resolveGatewayClientIp } from "./net.js";
+import { isPrivateOrLoopbackAddress, resolveGatewayClientIp, formatUrlHost } from "./net.js";
 import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import type { GatewayWsClient } from "./server/ws-types.js";
@@ -255,7 +256,7 @@ export function createHooksRequestHandler(
     if (!hooksConfig) {
       return false;
     }
-    const url = new URL(req.url ?? "/", `http://${bindHost}:${port}`);
+    const url = new URL(req.url ?? "/", `http://${formatUrlHost(bindHost)}:${port}`);
     const basePath = hooksConfig.basePath;
     if (url.pathname !== basePath && !url.pathname.startsWith(`${basePath}/`)) {
       return false;
@@ -632,7 +633,9 @@ export function attachGatewayUpgradeHandler(opts: {
             socket.destroy();
           }
         } catch (err) {
-          console.error("[gateway] Canvas WS upgrade error:", err);
+          getChildLogger({ module: "gateway" }).error(
+            `Canvas WS upgrade error: ${err instanceof Error ? err.message : String(err)}`,
+          );
           socket.destroy();
         }
       })();

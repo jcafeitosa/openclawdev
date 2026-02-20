@@ -1,7 +1,7 @@
 import { StoreController } from "@nanostores/lit";
 import { LitElement, html } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { gateway } from "../../services/gateway.ts";
+import { gateway, $gatewayEvent } from "../../services/gateway.ts";
 import { $connected } from "../../stores/app.ts";
 import type { HealthChannelEntry, HealthAgentEntry, HealthData } from "../controllers/health.ts";
 import { renderHealth, type HealthProps } from "../views/health.ts";
@@ -79,6 +79,8 @@ export class HealthIsland extends LitElement {
   @state() private channels: Array<{ id: string; status: string }> = [];
   @state() private debugHealth: unknown = null;
 
+  private eventUnsub: (() => void) | null = null;
+
   protected createRenderRoot() {
     return this;
   }
@@ -86,6 +88,18 @@ export class HealthIsland extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     void this.loadData();
+    this.eventUnsub = $gatewayEvent.subscribe((evt) => {
+      if (!evt || evt.event !== "health") {
+        return;
+      }
+      void this.loadData();
+    });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.eventUnsub?.();
+    this.eventUnsub = null;
   }
 
   private async loadData() {

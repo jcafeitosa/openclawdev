@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
+import { logVerbose } from "../globals.js";
 import {
   ensureAuthProfileStore,
   getSoonestCooldownExpiry,
@@ -12,6 +13,7 @@ import {
   isFailoverError,
   isTimeoutError,
 } from "./failover-error.js";
+import { getCustomProviderApiKey, resolveEnvApiKey } from "./model-auth.js";
 import {
   buildConfiguredAllowlistKeys,
   buildModelAliasIndex,
@@ -20,8 +22,8 @@ import {
   resolveConfiguredModelRef,
   resolveModelRefFromString,
 } from "./model-selection.js";
-import type { FailoverReason } from "./pi-embedded-helpers.js";
 import { isLikelyContextOverflowError } from "./pi-embedded-helpers.js";
+import type { FailoverReason } from "./pi-embedded-helpers.js";
 
 /* ---------------------------------------------------------------------------
  * Per-model cooldown tracking (fork-only).
@@ -188,6 +190,7 @@ function resolveImageFallbackCandidates(params: {
   cfg: OpenClawConfig | undefined;
   defaultProvider: string;
   modelOverride?: string;
+  agentDir?: string;
 }): ModelCandidate[] {
   const aliasIndex = buildModelAliasIndex({
     cfg: params.cfg ?? {},
@@ -199,6 +202,10 @@ function resolveImageFallbackCandidates(params: {
   });
   const { candidates, addCandidate } = createModelCandidateCollector(allowlist);
 
+  const authStore = params.cfg
+    ? ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false })
+    : null;
+
   const addRaw = (raw: string, enforceAllowlist: boolean) => {
     const resolved = resolveModelRefFromString({
       raw: String(raw ?? ""),
@@ -208,6 +215,21 @@ function resolveImageFallbackCandidates(params: {
     if (!resolved) {
       return;
     }
+
+    // Optimization: if ALL profiles for this fallback provider are in cooldown,
+    // skip adding it to the candidates list entirely.
+    if (authStore && params.cfg) {
+      const profileIds = resolveAuthProfileOrder({
+        cfg: params.cfg,
+        store: authStore,
+        provider: resolved.ref.provider,
+      });
+      const isAnyProfileAvailable = profileIds.some((id) => !isProfileInCooldown(authStore, id));
+      if (profileIds.length > 0 && !isAnyProfileAvailable) {
+        return;
+      }
+    }
+
     addCandidate(resolved.ref, enforceAllowlist);
   };
 
@@ -242,13 +264,16 @@ function resolveImageFallbackCandidates(params: {
   return candidates;
 }
 
-function resolveFallbackCandidates(params: {
+async function resolveFallbackCandidates(params: {
   cfg: OpenClawConfig | undefined;
   provider: string;
   model: string;
   /** Optional explicit fallbacks list; when provided (even empty), replaces agents.defaults.model.fallbacks. */
   fallbacksOverride?: string[];
-}): ModelCandidate[] {
+  agentDir?: string;
+  /** Whether to append discovered "emergency-free" models as ultimate fallbacks. */
+  emergencyFree?: boolean;
+}): Promise<ModelCandidate[]> {
   const primary = params.cfg
     ? resolveConfiguredModelRef({
         cfg: params.cfg,
@@ -271,6 +296,8 @@ function resolveFallbackCandidates(params: {
   });
   const { candidates, addCandidate } = createModelCandidateCollector(allowlist);
 
+  // We always add the primary model, even if in cooldown, because the runner
+  // might want to probe it.
   addCandidate(normalizedPrimary, false);
 
   const modelFallbacks = (() => {
@@ -287,6 +314,10 @@ function resolveFallbackCandidates(params: {
     return [];
   })();
 
+  const authStore = params.cfg
+    ? ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false })
+    : null;
+
   for (const raw of modelFallbacks) {
     const resolved = resolveModelRefFromString({
       raw: String(raw ?? ""),
@@ -296,11 +327,58 @@ function resolveFallbackCandidates(params: {
     if (!resolved) {
       continue;
     }
+
+    // Optimization: if ALL profiles for this fallback provider are in cooldown,
+    // skip adding it to the candidates list entirely. This avoids the cost
+    // of attempting a known-down provider.
+    if (authStore && params.cfg) {
+      const profileIds = resolveAuthProfileOrder({
+        cfg: params.cfg,
+        store: authStore,
+        provider: resolved.ref.provider,
+      });
+
+      const hasEnvKey = !!resolveEnvApiKey(resolved.ref.provider);
+      const hasCustomKey = !!getCustomProviderApiKey(params.cfg, resolved.ref.provider);
+
+      // If no profiles and no static keys, the provider is unusable.
+      if (profileIds.length === 0 && !hasEnvKey && !hasCustomKey) {
+        continue;
+      }
+
+      const isAnyProfileAvailable = profileIds.some((id) => !isProfileInCooldown(authStore, id));
+      if (profileIds.length > 0 && !isAnyProfileAvailable) {
+        continue;
+      }
+    }
+
     addCandidate(resolved.ref, true);
   }
 
   if (params.fallbacksOverride === undefined && primary?.provider && primary.model) {
     addCandidate({ provider: primary.provider, model: primary.model }, false);
+  }
+
+  if (params.emergencyFree && params.cfg) {
+    const { resolveEmergencyFreeModels } = await import("./model-selection.js");
+    const emergencyModels = await resolveEmergencyFreeModels({ cfg: params.cfg });
+    for (const m of emergencyModels) {
+      // Apply the same credential check to emergency models
+      if (authStore) {
+        const profileIds = resolveAuthProfileOrder({
+          cfg: params.cfg,
+          store: authStore,
+          provider: m.provider,
+        });
+        const hasEnvKey = !!resolveEnvApiKey(m.provider);
+        const hasCustomKey = !!getCustomProviderApiKey(params.cfg, m.provider);
+
+        if (profileIds.length === 0 && !hasEnvKey && !hasCustomKey) {
+          continue;
+        }
+      }
+      addCandidate(m, false);
+    }
   }
 
   return candidates;
@@ -357,25 +435,32 @@ export async function runWithModelFallback<T>(params: {
   agentDir?: string;
   /** Optional explicit fallbacks list; when provided (even empty), replaces agents.defaults.model.fallbacks. */
   fallbacksOverride?: string[];
+  /** Whether to append discovered "emergency-free" models as ultimate fallbacks. */
+  emergencyFree?: boolean;
   run: (provider: string, model: string) => Promise<T>;
   onError?: ModelFallbackErrorHandler;
 }): Promise<ModelFallbackRunResult<T>> {
-  const candidates = resolveFallbackCandidates({
+  const candidates = await resolveFallbackCandidates({
     cfg: params.cfg,
     provider: params.provider,
     model: params.model,
     fallbacksOverride: params.fallbacksOverride,
+    agentDir: params.agentDir,
+    emergencyFree: params.emergencyFree,
   });
+
+  // Limit candidates to 10 to avoid massive retry loops when dozens of models are down.
+  const allCandidates = candidates.slice(0, 10);
   const authStore = params.cfg
     ? ensureAuthProfileStore(params.agentDir, { allowKeychainPrompt: false })
     : null;
   const attempts: FallbackAttempt[] = [];
   let lastError: unknown;
 
-  const hasFallbackCandidates = candidates.length > 1;
+  const hasFallbackCandidates = allCandidates.length > 1;
 
-  for (let i = 0; i < candidates.length; i += 1) {
-    const candidate = candidates[i];
+  for (let i = 0; i < allCandidates.length; i += 1) {
+    const candidate = allCandidates[i];
     if (authStore) {
       const profileIds = resolveAuthProfileOrder({
         cfg: params.cfg,
@@ -401,6 +486,9 @@ export async function runWithModelFallback<T>(params: {
         });
         if (!shouldProbe) {
           // Skip without attempting
+          logVerbose(
+            `[fallback] skipping cooling down provider: ${candidate.provider} (model: ${candidate.model})`,
+          );
           attempts.push({
             provider: candidate.provider,
             model: candidate.model,
@@ -412,10 +500,16 @@ export async function runWithModelFallback<T>(params: {
         // Primary model probe: attempt it despite cooldown to detect recovery.
         // If it fails, the error is caught below and we fall through to the
         // next candidate as usual.
+        logVerbose(
+          `[fallback] probing cooling down primary provider: ${candidate.provider} (model: ${candidate.model})`,
+        );
         lastProbeAttempt.set(probeThrottleKey, now);
       }
     }
     try {
+      logVerbose(
+        `[fallback] attempting model: ${candidate.provider}/${candidate.model} (attempt ${i + 1}/${allCandidates.length})`,
+      );
       const result = await params.run(candidate.provider, candidate.model);
       return {
         result,
@@ -459,7 +553,7 @@ export async function runWithModelFallback<T>(params: {
         model: candidate.model,
         error: normalized,
         attempt: i + 1,
-        total: candidates.length,
+        total: allCandidates.length,
       });
     }
   }
@@ -478,7 +572,7 @@ export async function runWithModelFallback<T>(params: {
           )
           .join(" | ")
       : "unknown";
-  throw new Error(`All models failed (${attempts.length || candidates.length}): ${summary}`, {
+  throw new Error(`All models failed (${attempts.length || allCandidates.length}): ${summary}`, {
     cause: lastError instanceof Error ? lastError : undefined,
   });
 }
@@ -486,6 +580,7 @@ export async function runWithModelFallback<T>(params: {
 export async function runWithImageModelFallback<T>(params: {
   cfg: OpenClawConfig | undefined;
   modelOverride?: string;
+  agentDir?: string;
   run: (provider: string, model: string) => Promise<T>;
   onError?: ModelFallbackErrorHandler;
 }): Promise<ModelFallbackRunResult<T>> {
@@ -493,6 +588,7 @@ export async function runWithImageModelFallback<T>(params: {
     cfg: params.cfg,
     defaultProvider: DEFAULT_PROVIDER,
     modelOverride: params.modelOverride,
+    agentDir: params.agentDir,
   });
   if (candidates.length === 0) {
     throw new Error(

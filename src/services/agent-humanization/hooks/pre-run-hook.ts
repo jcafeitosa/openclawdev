@@ -9,6 +9,7 @@
  * If humanization is disabled/unavailable, returns empty enrichment (no-op).
  */
 
+import { getChildLogger } from "../../../logging.js";
 import type { AgentMemory, AgentRelationship, IntuitionRule, MemoryType } from "../models/types.js";
 import {
   isHumanizationEnabled,
@@ -78,9 +79,8 @@ export async function preRunHook(params: PreRunHookParams): Promise<PreRunEnrich
     return await buildEnrichment(service, params);
   } catch (err) {
     // Never block the pipeline — log and return no-op.
-    console.error(
-      `[humanization:pre-run] Error building enrichment for ${params.agentId}:`,
-      err instanceof Error ? err.message : String(err),
+    getChildLogger({ module: "humanization-pre-run" }).error(
+      `Error building enrichment for ${params.agentId}: ${err instanceof Error ? err.message : String(err)}`,
     );
     return EMPTY_ENRICHMENT;
   }

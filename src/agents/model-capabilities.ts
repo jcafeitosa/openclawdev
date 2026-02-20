@@ -51,6 +51,15 @@ export const MODEL_CAPABILITIES_REGISTRY: Record<string, Partial<ModelCapabiliti
     performanceTier: "powerful",
     costTier: "expensive",
   },
+  "claude-sonnet-4-6": {
+    coding: true,
+    reasoning: true,
+    vision: true,
+    general: true,
+    performanceTier: "balanced",
+    costTier: "moderate",
+    primary: "coding",
+  },
   "claude-sonnet-4-5": {
     coding: true,
     reasoning: true,
@@ -73,6 +82,13 @@ export const MODEL_CAPABILITIES_REGISTRY: Record<string, Partial<ModelCapabiliti
     general: true,
     performanceTier: "balanced",
     costTier: "moderate",
+  },
+  "claude-haiku-4-5": {
+    coding: true,
+    fast: true,
+    general: true,
+    performanceTier: "fast",
+    costTier: "cheap",
   },
   "claude-3-5-haiku": {
     coding: true,
@@ -356,6 +372,29 @@ export const MODEL_CAPABILITIES_REGISTRY: Record<string, Partial<ModelCapabiliti
   },
 
   // Google
+  "gemini-2.5-pro": {
+    coding: true,
+    vision: true,
+    general: true,
+    reasoning: true,
+    performanceTier: "powerful",
+    costTier: "expensive",
+  },
+  "gemini-2.5-flash": {
+    coding: true,
+    vision: true,
+    general: true,
+    fast: true,
+    performanceTier: "fast",
+    costTier: "cheap",
+  },
+  "gemini-2.5-flash-lite": {
+    coding: true,
+    fast: true,
+    general: true,
+    performanceTier: "fast",
+    costTier: "cheap",
+  },
   "gemini-3-pro": {
     coding: true,
     vision: true,
@@ -680,6 +719,10 @@ export function getModelCapabilitiesFromCatalog(entry: ModelCatalogEntry): Model
       ...base,
       reasoning: entry.reasoning ?? base.reasoning,
       vision: entry.input?.includes("image") ?? base.vision,
+      costTier:
+        entry.isFree || entry.tags?.includes("free-tier") || entry.tags?.includes("emergency-free")
+          ? "free"
+          : base.costTier,
     };
   }
 

@@ -1,4 +1,5 @@
 import { setCliSessionId } from "../../agents/cli-session.js";
+import { recordProviderUsage } from "../../agents/model-budget-manager.js";
 import {
   deriveSessionTotalTokens,
   hasNonzeroUsage,
@@ -54,6 +55,15 @@ export async function persistSessionUsageUpdate(params: {
   const { storePath, sessionKey } = params;
   if (!storePath || !sessionKey) {
     return;
+  }
+
+  // Record usage in the budget manager for dynamic provider priority scoring
+  if (params.providerUsed && hasNonzeroUsage(params.usage)) {
+    recordProviderUsage({
+      provider: params.providerUsed,
+      inputTokens: params.usage?.input ?? 0,
+      outputTokens: params.usage?.output ?? 0,
+    });
   }
 
   const label = params.logLabel ? `${params.logLabel} ` : "";

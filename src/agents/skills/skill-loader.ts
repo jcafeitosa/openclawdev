@@ -1,7 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import yaml from "yaml";
+import { getChildLogger } from "../../logging.js";
 import { type Skill, SkillMetadataSchema, type SkillResource } from "./skill-system-types.js";
+
+const log = getChildLogger({ module: "skill-loader" });
 
 export class SkillLoader {
   private skillsDir: string;
@@ -41,7 +44,9 @@ export class SkillLoader {
         dirPath: skillPath,
       };
     } catch (error) {
-      console.error(`Failed to load skill ${name}:`, error);
+      log.error(
+        `Failed to load skill ${name}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return null;
     }
   }

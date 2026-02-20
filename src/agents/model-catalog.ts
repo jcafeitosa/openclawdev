@@ -1,17 +1,25 @@
 import { getDetectedProviderIds } from "../commands/providers/detection.js";
 import { type OpenClawConfig, loadConfig } from "../config/config.js";
+import { getChildLogger } from "../logging.js";
 import { normalizeProviderId } from "../providers/core/normalization.js";
 import { resolveOpenClawAgentDir } from "./agent-paths.js";
+import { loadDiscoveredCatalog } from "./discovery/dynamic-catalog.js";
 import { ensureOpenClawModelsJson } from "./models-config.js";
 import { discoverSupplementalModels } from "./supplemental-models.js";
+
+const log = getChildLogger({ module: "model-catalog" });
 
 export type ModelCatalogEntry = {
   id: string;
   name: string;
+  displayName?: string;
   provider: string;
   contextWindow?: number;
   reasoning?: boolean;
+  isFree?: boolean;
+  tags?: string[];
   input?: Array<"text" | "image">;
+  releaseDate?: string; // New field for smart sorting
 };
 
 type DiscoveredModel = {
@@ -167,6 +175,43 @@ export async function loadModelCatalog(params?: {
         // Discovery failed — continue with existing models only.
       }
 
+      // INTEGRATION: Load discovered models from dynamic catalog (CLI discovery)
+      try {
+        const discovered = await loadDiscoveredCatalog();
+        if (discovered?.models) {
+          for (const m of discovered.models) {
+            const canonicalKey = `${m.provider}/${m.id}`;
+            // If already exists, we might want to update it, but for now let's just add new ones
+            // or overwrite if we trust the dynamic discovery more.
+            // Let's overwrite existing entries with dynamic ones as they are likely fresher.
+            const index = models.findIndex(
+              (existing) => `${existing.provider}/${existing.id}` === canonicalKey,
+            );
+
+            const entry: ModelCatalogEntry = {
+              id: m.id,
+              name: m.name ?? m.id,
+              displayName: m.displayName,
+              provider: m.provider,
+              contextWindow: m.contextWindow,
+              reasoning: m.capabilities?.reasoning,
+              isFree: m.isFree,
+              tags: m.tags,
+              input: m.capabilities?.vision ? ["text", "image"] : ["text"],
+              releaseDate: m.releaseDate,
+            };
+
+            if (index >= 0) {
+              models[index] = { ...models[index], ...entry }; // Merge to keep existing props if needed
+            } else {
+              models.push(entry);
+            }
+          }
+        }
+      } catch {
+        // Ignore discovery load failures
+      }
+
       if (models.length === 0) {
         // If we found nothing, don't cache this result so we can try again.
         modelCatalogPromise = null;
@@ -176,7 +221,7 @@ export async function loadModelCatalog(params?: {
     } catch (error) {
       if (!hasLoggedModelCatalogError) {
         hasLoggedModelCatalogError = true;
-        console.warn(`[model-catalog] Failed to load model catalog: ${String(error)}`);
+        log.warn(`Failed to load model catalog: ${String(error)}`);
       }
       // Don't poison the cache on transient dependency/filesystem issues.
       modelCatalogPromise = null;
@@ -198,8 +243,33 @@ export function modelSupportsVision(entry: ModelCatalogEntry | undefined): boole
 }
 
 /**
+ * Provider priority for deduplication. Lower index = higher priority.
+ */
+const PROVIDER_PRIORITY = [
+  "anthropic",
+  "openai",
+  "google",
+  "google-antigravity",
+  "google-vertex",
+  "amazon-bedrock",
+  "azure-openai",
+  "github-copilot",
+  "openrouter",
+  "together",
+  "deepseek",
+];
+
+function getProviderPriority(provider: string): number {
+  const index = PROVIDER_PRIORITY.indexOf(provider.toLowerCase());
+  return index === -1 ? 999 : index;
+}
+
+/**
  * Load models from the catalog, filtered to only include models from detected providers.
  * This ensures users only see models they can actually use.
+ *
+ * INTEGRATION: Also deduplicates models available across multiple providers,
+ * preferring the highest priority transport (e.g. Direct > Cloud > Aggregator).
  */
 export async function loadAvailableModels(params?: {
   config?: OpenClawConfig;
@@ -211,14 +281,37 @@ export async function loadAvailableModels(params?: {
   // Get detected provider IDs
   const detectedProviders = new Set(getDetectedProviderIds(cfg).map((id) => id.toLowerCase()));
 
-  // If no providers are detected/configured, do not expose the full catalog.
-  // Showing all models here leaks unavailable options into selectors.
   if (detectedProviders.size === 0) {
     return [];
   }
 
-  // Filter to only include models from detected providers
-  return catalog.filter((entry) => detectedProviders.has(entry.provider.toLowerCase()));
+  // Filter to detected providers first
+  const available = catalog.filter((entry) => detectedProviders.has(entry.provider.toLowerCase()));
+
+  // SMART DEDUPLICATION:
+  // Map models by their ID (canonical name) and pick the best provider
+  const bestModels = new Map<string, ModelCatalogEntry>();
+
+  for (const entry of available) {
+    // We use the 'id' as the key for comparison.
+    // In OpenClaw, 'id' is often the model name like 'claude-3-5-sonnet'.
+    const existing = bestModels.get(entry.id);
+
+    if (!existing) {
+      bestModels.set(entry.id, entry);
+      continue;
+    }
+
+    // Compare priorities
+    const existingPriority = getProviderPriority(existing.provider);
+    const incomingPriority = getProviderPriority(entry.provider);
+
+    if (incomingPriority < existingPriority) {
+      bestModels.set(entry.id, entry);
+    }
+  }
+
+  return Array.from(bestModels.values());
 }
 
 /**

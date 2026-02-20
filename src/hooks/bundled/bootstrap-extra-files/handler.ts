@@ -2,6 +2,7 @@ import {
   filterBootstrapFilesForSession,
   loadExtraBootstrapFiles,
 } from "../../../agents/workspace.js";
+import { getChildLogger } from "../../../logging.js";
 import { resolveHookConfig } from "../../config.js";
 import { isAgentBootstrapEvent, type HookHandler } from "../../hooks.js";
 
@@ -52,7 +53,7 @@ const bootstrapExtraFilesHook: HookHandler = async (event) => {
       context.sessionKey,
     );
   } catch (err) {
-    console.warn(`[bootstrap-extra-files] failed: ${String(err)}`);
+    getChildLogger({ module: "bootstrap-extra-files" }).warn(`failed: ${String(err)}`);
   }
 };
 

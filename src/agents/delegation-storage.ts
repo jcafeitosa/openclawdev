@@ -9,7 +9,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { resolveStateDir } from "../config/paths.js";
+import { getChildLogger } from "../logging.js";
 import type { DelegationRecord } from "./delegation-types.js";
+
+const log = getChildLogger({ module: "delegation-storage" });
 
 function shouldSilenceStoreIoError(err: unknown): boolean {
   const code = (err as NodeJS.ErrnoException | undefined)?.code;
@@ -42,7 +45,7 @@ export async function saveDelegationRecord(record: DelegationRecord): Promise<vo
     if (shouldSilenceStoreIoError(err)) {
       return;
     }
-    console.error("Failed to save delegation record:", err);
+    log.error(`Failed to save delegation record: ${String(err)}`);
   }
 }
 
@@ -58,7 +61,7 @@ export async function loadDelegationRecord(id: string): Promise<DelegationRecord
     return JSON.parse(content) as DelegationRecord;
   } catch (err) {
     if (!shouldSilenceStoreIoError(err)) {
-      console.error("Failed to load delegation record:", err);
+      log.error(`Failed to load delegation record: ${String(err)}`);
     }
     return null;
   }
@@ -96,7 +99,7 @@ export async function deleteDelegationRecord(id: string): Promise<void> {
     await fs.unlink(filePath);
   } catch (err) {
     if (!shouldSilenceStoreIoError(err)) {
-      console.error("Failed to delete delegation record:", err);
+      log.error(`Failed to delete delegation record: ${String(err)}`);
     }
   }
 }

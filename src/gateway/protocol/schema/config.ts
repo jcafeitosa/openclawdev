@@ -27,6 +27,7 @@ export const ConfigPatchParamsSchema = z
     sessionKey: z.string().optional(),
     note: z.string().optional(),
     restartDelayMs: z.number().int().min(0).optional(),
+    skipRestart: z.boolean().optional(),
   })
   .strict();
 

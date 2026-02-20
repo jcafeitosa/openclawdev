@@ -185,6 +185,31 @@ function restoreSubagentRunsOnce() {
       }
     }
 
+    // After a gateway restart, agent processes are dead. Mark any restored
+    // "running" runs (no outcome) as error so the hierarchy transitions them
+    // through the TTL fade-out instead of showing stale "running" nodes.
+    const now = Date.now();
+    const cfg = loadConfig();
+    const archiveAfterMs = resolveArchiveAfterMs(cfg);
+    let needsPersist = false;
+    for (const entry of subagentRuns.values()) {
+      // Mark orphaned running runs as error
+      if (entry.startedAt && !entry.outcome && !entry.endedAt) {
+        entry.endedAt = now;
+        entry.outcome = { status: "error", error: "gateway-restart" };
+        needsPersist = true;
+      }
+      // Ensure terminal runs without archiveAtMs get one so the sweeper
+      // can eventually clean them up (prevents forever-stuck records).
+      if (entry.outcome && !entry.archiveAtMs && archiveAfterMs) {
+        entry.archiveAtMs = now + archiveAfterMs;
+        needsPersist = true;
+      }
+    }
+    if (needsPersist) {
+      persistSubagentRuns();
+    }
+
     // Resume pending work.
     ensureListener();
     if ([...subagentRuns.values()].some((entry) => entry.archiveAtMs)) {
@@ -259,6 +284,48 @@ async function sweepSubagentRuns() {
   }
 }
 
+/**
+ * Auto-complete delegations assigned to the agent whose subagent run just finished.
+ * Uses dynamic import to avoid circular dependency with delegation-registry.
+ */
+async function autoCompleteDelegationsForRun(entry: SubagentRunRecord) {
+  try {
+    // Extract agentId from childSessionKey (format: "agent:<agentId>:subagent:<uuid>")
+    const parts = entry.childSessionKey.split(":");
+    const agentId = parts.length >= 2 ? parts[1] : undefined;
+    if (!agentId) {
+      return;
+    }
+
+    const { listDelegationsForAgent, completeDelegation } =
+      await import("./delegation-registry.js");
+
+    const activeDelegations = listDelegationsForAgent(agentId, {}).filter(
+      (d: { state: string; toAgentId: string }) =>
+        (d.state === "assigned" || d.state === "in_progress") && d.toAgentId === agentId,
+    );
+
+    if (activeDelegations.length === 0) {
+      return;
+    }
+
+    const isSuccess = entry.outcome?.status === "ok";
+    const resultStatus = isSuccess ? "success" : "failure";
+    const resultSummary = isSuccess
+      ? `Task completed successfully: ${entry.task}`
+      : `Task failed: ${entry.outcome?.status === "error" ? ((entry.outcome as { error?: string }).error ?? "unknown error") : "timeout"}`;
+
+    for (const deleg of activeDelegations) {
+      completeDelegation(deleg.id, {
+        status: resultStatus,
+        artifact: resultSummary,
+      });
+    }
+  } catch {
+    // Non-critical — delegation auto-completion is best-effort
+  }
+}
+
 function ensureListener() {
   if (listenerStarted) {
     return;
@@ -295,6 +362,9 @@ function ensureListener() {
       entry.outcome = { status: "ok" };
     }
     persistSubagentRuns();
+
+    // Auto-complete delegations assigned to this agent
+    void autoCompleteDelegationsForRun(entry);
 
     if (suppressAnnounceForSteerRestart(entry)) {
       return;
