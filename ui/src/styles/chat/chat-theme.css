@@ -1,0 +1,391 @@
+/**
+ * 🎨 Chat Pro Max Theme Variables
+ * Deep Dark Mode + Light Mode Support
+ * 
+ * Design Reference: Letícia's Deep Dark Mode (uupm.cc)
+ * Compatibility: Dark/Light mode via CSS variables
+ * 
+ * Token Mapping:
+ * - Glass backgrounds adapt to theme
+ * - Glassmorphism maintains premium feel in both modes
+ * - Smooth transitions between themes
+ */
+
+:root {
+  /* ============ Chat Glass Backgrounds - Light Mode ============ */
+  --chat-glass-light: rgba(255, 255, 255, 0.7);
+  --chat-glass-light-sm: rgba(255, 255, 255, 0.5);
+  --chat-glass-light-md: rgba(255, 255, 255, 0.8);
+  --chat-glass-light-lg: rgba(255, 255, 255, 0.9);
+
+  /* Message bubbles - Light Mode */
+  --chat-message-assistant-light: rgba(248, 250, 252, 0.9);
+  --chat-message-user-light: rgba(59, 130, 246, 0.95);
+
+  /* Input glass - Light Mode */
+  --chat-input-light: rgba(255, 255, 255, 0.8);
+  --chat-input-border-light: rgba(0, 0, 0, 0.08);
+
+  /* Borders - Light Mode */
+  --chat-border-light: rgba(0, 0, 0, 0.1);
+  --chat-border-light-subtle: rgba(0, 0, 0, 0.05);
+
+  /* Text on glass - Light Mode */
+  --chat-text-primary-light: #1e293b;
+  --chat-text-secondary-light: #475569;
+
+  /* Scrollbar - Light Mode */
+  --chat-scrollbar-light: rgba(0, 0, 0, 0.1);
+  --chat-scrollbar-thumb-light: rgba(0, 0, 0, 0.2);
+
+  /* Code block - Light Mode */
+  --chat-code-bg-light: rgba(241, 245, 249, 0.95);
+  --chat-code-border-light: rgba(0, 0, 0, 0.08);
+
+  /* Gradients - Light Mode */
+  --chat-gradient-subtle-light: linear-gradient(
+    135deg,
+    rgba(248, 250, 252, 0.9) 0%,
+    rgba(241, 245, 249, 0.85) 100%
+  );
+
+  --chat-gradient-accent-light: linear-gradient(
+    135deg,
+    rgba(219, 234, 254, 0.8) 0%,
+    rgba(248, 250, 252, 0.9) 100%
+  );
+
+  /* ============ Chat V2 Elite Tokens ============ */
+  --pro-bg: #050505;
+  --pro-surface: rgba(255, 255, 255, 0.03);
+  --pro-border: rgba(255, 255, 255, 0.08);
+  --pro-accent: #3b82f6;
+  --pro-accent-gradient: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+  --pro-text-main: #f8fafc;
+  --pro-text-muted: #94a3b8;
+  --pro-glass-blur: 40px;
+}
+
+.dark {
+  /* ============ Chat Glass Backgrounds - Dark Mode ============ */
+  /* Deep Dark Mode palette from Letícia's design */
+  --chat-glass-dark: rgba(15, 23, 42, 0.7);         /* slate-900 */
+  --chat-glass-dark-sm: rgba(15, 23, 42, 0.5);
+  --chat-glass-dark-md: rgba(15, 23, 42, 0.75);
+  --chat-glass-dark-lg: rgba(15, 23, 42, 0.9);
+
+  /* Message bubbles - Dark Mode */
+  --chat-message-assistant-dark: rgba(30, 41, 59, 0.7);   /* slate-800 */
+  --chat-message-user-dark: rgba(59, 130, 246, 0.9);      /* blue-500 */
+
+  /* Input glass - Dark Mode */
+  --chat-input-dark: rgba(15, 23, 42, 0.6);
+  --chat-input-border-dark: rgba(255, 255, 255, 0.08);
+
+  /* Borders - Dark Mode */
+  --chat-border-dark: rgba(255, 255, 255, 0.1);
+  --chat-border-dark-subtle: rgba(255, 255, 255, 0.05);
+
+  /* Text on glass - Dark Mode */
+  --chat-text-primary-dark: #f1f5f9;        /* slate-100 */
+  --chat-text-secondary-dark: #94a3b8;      /* slate-400 */
+
+  /* Scrollbar - Dark Mode */
+  --chat-scrollbar-dark: rgba(255, 255, 255, 0.08);
+  --chat-scrollbar-thumb-dark: rgba(255, 255, 255, 0.15);
+
+  /* Code block - Dark Mode */
+  --chat-code-bg-dark: rgba(15, 23, 42, 0.8);
+  --chat-code-border-dark: rgba(255, 255, 255, 0.1);
+
+  /* Gradients - Dark Mode */
+  --chat-gradient-subtle-dark: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.8) 0%,
+    rgba(15, 23, 42, 0.9) 100%
+  );
+
+  --chat-gradient-accent-dark: linear-gradient(
+    135deg,
+    rgba(30, 58, 138, 0.8) 0%,
+    rgba(15, 23, 42, 0.9) 100%
+  );
+
+  /* Shadows - Dark Mode */
+  --chat-shadow-sm-dark: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --chat-shadow-md-dark: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --chat-shadow-lg-dark: 0 8px 32px rgba(31, 38, 135, 0.25);
+}
+
+/* ============ Theme-Adaptive Utilities ============ */
+
+/* Glass effect - responsive to theme */
+.glass-message {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  background-color: var(--chat-glass-light);
+  border: 1px solid var(--chat-border-light);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.dark .glass-message {
+  background-color: var(--chat-glass-dark);
+  border-color: var(--chat-border-dark);
+}
+
+/* Message bubble assistant */
+.chat-bubble-assistant {
+  background-color: var(--chat-message-assistant-light);
+  color: var(--chat-text-primary-light);
+  border: 1px solid var(--chat-border-light);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.dark .chat-bubble-assistant {
+  background-color: var(--chat-message-assistant-dark);
+  color: var(--chat-text-primary-dark);
+  border-color: var(--chat-border-dark);
+}
+
+/* Message bubble user */
+.chat-bubble-user {
+  background-color: var(--chat-message-user-light);
+  color: white;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.dark .chat-bubble-user {
+  background-color: var(--chat-message-user-dark);
+  border-color: rgba(59, 130, 246, 0.4);
+}
+
+/* Input container */
+.chat-input-container {
+  background-color: var(--chat-input-light);
+  border: 1px solid var(--chat-input-border-light);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.3s ease;
+}
+
+.dark .chat-input-container {
+  background-color: var(--chat-input-dark);
+  border-color: var(--chat-input-border-dark);
+}
+
+.chat-input-container:focus-within {
+  border-color: hsl(217 91% 60% / 0.5);
+  box-shadow: 0 0 0 3px hsl(217 91% 60% / 0.1);
+}
+
+.dark .chat-input-container:focus-within {
+  border-color: hsl(217 91% 60% / 0.6);
+  box-shadow: 0 0 0 3px hsl(217 91% 60% / 0.15);
+}
+
+/* Textarea styling */
+.chat-input-textarea {
+  background-color: transparent;
+  color: var(--chat-text-primary-light);
+  caret-color: hsl(217 91% 60%);
+}
+
+.chat-input-textarea::placeholder {
+  color: var(--chat-text-secondary-light);
+}
+
+.dark .chat-input-textarea {
+  color: var(--chat-text-primary-dark);
+}
+
+.dark .chat-input-textarea::placeholder {
+  color: var(--chat-text-secondary-dark);
+}
+
+/* Code block styling */
+.chat-code-block {
+  background-color: var(--chat-code-bg-light);
+  border: 1px solid var(--chat-code-border-light);
+  color: var(--chat-text-primary-light);
+}
+
+.dark .chat-code-block {
+  background-color: var(--chat-code-bg-dark);
+  border-color: var(--chat-code-border-dark);
+  color: var(--chat-text-primary-dark);
+}
+
+.chat-code-block code {
+  color: inherit;
+}
+
+/* Typing indicator */
+.typing-dot {
+  background-color: var(--chat-text-secondary-light);
+}
+
+.dark .typing-dot {
+  background-color: var(--chat-text-secondary-dark);
+}
+
+/* Scrollbar for chat container */
+.chat-scrollable {
+  scrollbar-color: var(--chat-scrollbar-thumb-light) var(--chat-scrollbar-light);
+}
+
+.chat-scrollable::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-scrollable::-webkit-scrollbar-track {
+  background: var(--chat-scrollbar-light);
+}
+
+.chat-scrollable::-webkit-scrollbar-thumb {
+  background: var(--chat-scrollbar-thumb-light);
+  border-radius: 4px;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.chat-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.3);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.dark .chat-scrollable {
+  scrollbar-color: var(--chat-scrollbar-thumb-dark) var(--chat-scrollbar-dark);
+}
+
+.dark .chat-scrollable::-webkit-scrollbar-track {
+  background: var(--chat-scrollbar-dark);
+}
+
+.dark .chat-scrollable::-webkit-scrollbar-thumb {
+  background: var(--chat-scrollbar-thumb-dark);
+  border-radius: 4px;
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+.dark .chat-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.3);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+
+/* ============ Shadows - Theme Aware ============ */
+.chat-shadow-sm {
+  box-shadow: var(--chat-shadow-sm-light);
+}
+
+.dark .chat-shadow-sm {
+  box-shadow: var(--chat-shadow-sm-dark);
+}
+
+.chat-shadow-md {
+  box-shadow: var(--chat-shadow-md-light);
+}
+
+.dark .chat-shadow-md {
+  box-shadow: var(--chat-shadow-md-dark);
+}
+
+.chat-shadow-lg {
+  box-shadow: var(--chat-shadow-lg-light);
+}
+
+.dark .chat-shadow-lg {
+  box-shadow: var(--chat-shadow-lg-dark);
+}
+
+/* ============ Glassmorphism Effects ============ */
+
+/* Premium glass with no background color bleed */
+.glass-premium {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background-color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass-premium {
+  background-color: rgba(15, 23, 42, 0.6);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Glass input - thinner blur for readability */
+.glass-input {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background-color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.dark .glass-input {
+  background-color: rgba(15, 23, 42, 0.65);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ============ Smooth Theme Transitions ============ */
+
+html {
+  transition: color-scheme 0.3s ease;
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* All elements with color/background get smooth transitions */
+body,
+.glass-message,
+.chat-bubble-assistant,
+.chat-bubble-user,
+.chat-input-container,
+.chat-code-block,
+.glass-premium,
+.glass-input {
+  transition: 
+    background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============ Accessibility ============ */
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  .dark {
+    color-scheme: dark;
+  }
+}
+
+/* ============ Selection Colors ============ */
+
+::selection {
+  background-color: hsl(217 91% 60% / 0.3);
+  color: var(--chat-text-primary-light);
+}
+
+.dark ::selection {
+  background-color: hsl(217 91% 60% / 0.4);
+  color: var(--chat-text-primary-dark);
+}
