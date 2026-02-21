@@ -1,18 +1,8 @@
 ---
 import AppLayout from '../layouts/AppLayout.astro';
-import { ChatIsland } from '../ui/chat/ChatIsland';
+import { ChatIsland } from '../ui/components/chat-island.ts';
 ---
 
 <AppLayout title="Chat" tab="chat">
-  <div class="w-full h-screen flex flex-col bg-white overflow-hidden">
-    <ChatIsland client:only="react" />
-  </div>
+  <ChatIsland client:only="lit" />
 </AppLayout>
-
-<style is:global>
-  #main-content.content {
-    padding: 0 !important;
-    overflow: hidden !important;
-    height: 100vh !important;
-  }
-</style>
