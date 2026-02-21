@@ -53,6 +53,20 @@ const PROBE_PROVIDER_DELAY_OVERRIDES: Record<string, number> = {
   "github-copilot": 3_000,
   huggingface: 3_000,
 };
+/**
+ * After the first billing error, skip subsequent probes for this provider for
+ * 1 hour (avoids ERROR spam in lane diagnostics).  Resets on gateway restart.
+ */
+const billingCooldownUntil = new Map<string, number>();
+const BILLING_COOLDOWN_MS = 60 * 60 * 1000; // 1 h
+/**
+ * After TIMEOUT_FAILURE_THRESHOLD consecutive timeouts/rate-limits, skip probes
+ * for this provider for 30 minutes.  Resets on any successful probe.
+ */
+const consecutiveTimeoutFailures = new Map<string, number>();
+const timeoutCooldownUntil = new Map<string, number>();
+const TIMEOUT_FAILURE_THRESHOLD = 3;
+const TIMEOUT_COOLDOWN_MS = 30 * 60 * 1000; // 30 min
 /** Entries older than this are considered stale. */
 const HEALTH_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 h
 /** Delay before the first automatic probe after gateway startup. */
@@ -529,6 +543,34 @@ async function runProbeInternal(
         continue;
       }
 
+      // Skip providers in billing cooldown — avoids ERROR spam from lane diagnostics.
+      // The first billing error sets a 1-hour cooldown; all subsequent probes for that
+      // provider are skipped silently until the cooldown expires.
+      const billingExpiry = billingCooldownUntil.get(item.model.provider) ?? 0;
+      if (Date.now() < billingExpiry) {
+        entries[key] = {
+          ...meta,
+          status: "billing",
+          lastProbed: Date.now(),
+          errorReason: "Billing error (probe suppressed for 1h)",
+        };
+        completed += 1;
+        continue;
+      }
+
+      // Skip providers in timeout/rate-limit cooldown — avoids repeated ERROR spam.
+      const toCooldownExpiry = timeoutCooldownUntil.get(item.model.provider) ?? 0;
+      if (Date.now() < toCooldownExpiry) {
+        entries[key] = {
+          ...meta,
+          status: "rate_limit",
+          lastProbed: Date.now(),
+          errorReason: "Repeated timeouts (probe suppressed for 30min)",
+        };
+        completed += 1;
+        continue;
+      }
+
       // Per-provider delay to avoid rate-limiting
       const providerDelay =
         PROBE_PROVIDER_DELAY_OVERRIDES[item.model.provider] ?? PROBE_PROVIDER_DELAY_MS;
@@ -564,12 +606,40 @@ async function runProbeInternal(
 
       completed += 1;
 
-      const statusIcon = result.status === "ok" ? "OK" : result.status;
-      const discoveryTag = isDiscoveredFree ? " [DISCOVERED FREE]" : "";
-      log.info(
-        `[${completed}/${total}] ${item.model.provider}/${item.model.id}: ${statusIcon}${discoveryTag}` +
-          (result.latencyMs ? ` (${result.latencyMs}ms)` : ""),
-      );
+      if (result.status === "billing") {
+        // First billing error for this provider this hour: log once at INFO, then suppress.
+        if (Date.now() >= (billingCooldownUntil.get(item.model.provider) ?? 0)) {
+          log.info(
+            `${item.model.provider}: billing error — API key credits exhausted. Suppressing probe for 1h.`,
+          );
+          billingCooldownUntil.set(item.model.provider, Date.now() + BILLING_COOLDOWN_MS);
+        }
+        consecutiveTimeoutFailures.set(item.model.provider, 0);
+      } else if (result.status === "timeout" || result.status === "rate_limit") {
+        const count = (consecutiveTimeoutFailures.get(item.model.provider) ?? 0) + 1;
+        consecutiveTimeoutFailures.set(item.model.provider, count);
+        if (count >= TIMEOUT_FAILURE_THRESHOLD) {
+          log.warn(
+            `${item.model.provider}: ${count} consecutive timeouts/rate-limits. Suppressing probe for 30min.`,
+          );
+          timeoutCooldownUntil.set(item.model.provider, Date.now() + TIMEOUT_COOLDOWN_MS);
+          consecutiveTimeoutFailures.set(item.model.provider, 0);
+        } else {
+          const statusIcon = result.status;
+          log.info(
+            `[${completed}/${total}] ${item.model.provider}/${item.model.id}: ${statusIcon}` +
+              (result.latencyMs ? ` (${result.latencyMs}ms)` : ""),
+          );
+        }
+      } else {
+        consecutiveTimeoutFailures.set(item.model.provider, 0);
+        const statusIcon = result.status === "ok" ? "OK" : result.status;
+        const discoveryTag = isDiscoveredFree ? " [DISCOVERED FREE]" : "";
+        log.info(
+          `[${completed}/${total}] ${item.model.provider}/${item.model.id}: ${statusIcon}${discoveryTag}` +
+            (result.latencyMs ? ` (${result.latencyMs}ms)` : ""),
+        );
+      }
     }
   };
 
