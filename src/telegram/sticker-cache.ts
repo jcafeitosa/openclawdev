@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveApiKeyForProvider } from "../agents/model-auth.js";
 import type { ModelCatalogEntry } from "../agents/model-catalog.js";
@@ -240,7 +241,7 @@ export async function describeStickerImage(params: DescribeStickerParams): Promi
   logVerbose(`telegram: describing sticker with ${provider}/${model}`);
 
   try {
-    const buffer = Buffer.from(await Bun.file(imagePath).arrayBuffer());
+    const buffer = await readFile(imagePath);
     // Dynamic import to avoid circular dependency
     const { describeImageWithModel } = await import("../media-understanding/providers/image.js");
     const result = await describeImageWithModel({

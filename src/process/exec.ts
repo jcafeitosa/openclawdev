@@ -47,17 +47,30 @@ export async function runExec(
 ): Promise<{ stdout: string; stderr: string }> {
   const timeoutMs = typeof opts === "number" ? opts : (opts.timeoutMs ?? 10_000);
   let timedOut = false;
-  const proc = Bun.spawn([resolveCommand(command), ...args], { stdout: "pipe", stderr: "pipe" });
-  const stdoutP = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve("");
-  const stderrP = proc.stderr ? new Response(proc.stderr).text() : Promise.resolve("");
+  const proc = spawn(resolveCommand(command), args, { stdio: ["ignore", "pipe", "pipe"] });
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
+
+  if (proc.stdout) {
+    proc.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+  }
+  if (proc.stderr) {
+    proc.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+  }
+
   const timer = setTimeout(() => {
     timedOut = true;
     proc.kill("SIGKILL");
   }, timeoutMs);
+
   try {
-    const exitCode = await proc.exited;
+    const exitCode = await new Promise<number | null>((resolve) => {
+      proc.on("close", resolve);
+    });
     clearTimeout(timer);
-    const [stdout, stderr] = await Promise.all([stdoutP, stderrP]);
+
+    const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
+    const stderr = Buffer.concat(stderrChunks).toString("utf-8");
     if (timedOut) {
       const err = Object.assign(new Error(`Command timed out after ${timeoutMs}ms`), {
         killed: true,

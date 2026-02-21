@@ -4,20 +4,27 @@
  * Updated to use xfetch-cli (wrapper 'x')
  */
 
+import { spawn } from "node:child_process";
+
 // Use the 'x' wrapper which has credentials embedded
 async function execX(command: string, timeout = 10000): Promise<Record<string, unknown>> {
   try {
     const fullCommand = `x ${command} --format json`;
     let timedOut = false;
-    const proc = Bun.spawn(["sh", "-c", fullCommand], { stdout: "pipe", stderr: "pipe" });
-    const stdoutP = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve("");
+    const proc = spawn("sh", ["-c", fullCommand], { stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+
+    if (proc.stdout) {
+      proc.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf-8")));
+    }
+
     const timer = setTimeout(() => {
       timedOut = true;
       proc.kill("SIGTERM");
     }, timeout);
-    await proc.exited;
+
+    await new Promise<void>((resolve) => proc.on("close", resolve));
     clearTimeout(timer);
-    const stdout = await stdoutP;
     if (timedOut) {
       throw Object.assign(new Error("x CLI killed"), { killed: true });
     }
