@@ -2,16 +2,9 @@
 import { spawn } from "node:child_process";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
-import { runNodeWatchedPaths } from "./run-node.mjs";
-
 const WATCH_NODE_RUNNER = "scripts/run-node.mjs";
 
-const buildWatchArgs = (args) => [
-  ...runNodeWatchedPaths.flatMap((watchPath) => ["--watch-path", watchPath]),
-  "--watch-preserve-output",
-  WATCH_NODE_RUNNER,
-  ...args,
-];
+const buildWatchArgs = (args) => ["--watch", WATCH_NODE_RUNNER, ...args];
 
 export async function runWatchMain(params = {}) {
   const deps = {

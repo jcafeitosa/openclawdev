@@ -10,7 +10,15 @@ import type { WorkspaceBootstrapFile } from "../agents/workspace.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { getChildLogger } from "../logging.js";
 
-const hookLog = getChildLogger({ module: "internal-hooks" });
+let _hookLog: ReturnType<typeof getChildLogger> | undefined;
+const hookLog = {
+  error: (...args: Parameters<ReturnType<typeof getChildLogger>["error"]>) => {
+    if (!_hookLog) {
+      _hookLog = getChildLogger({ module: "internal-hooks" });
+    }
+    return _hookLog.error(...args);
+  },
+};
 import { resolveStateDir } from "../config/paths.js";
 import type { JsonHookEntry } from "./json-loader.js";
 import { loadAllJsonHooks } from "./json-loader.js";
