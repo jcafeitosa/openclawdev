@@ -26,7 +26,7 @@ const MIN_SAFE = -Number.MAX_SAFE_INTEGER;
 const STRIP_ROOT_KEYS = new Set(["$schema", "$id"]);
 
 // Keys we strip from every sub-schema for broad provider compat.
-const STRIP_PROPERTY_KEYS = new Set(["additionalProperties", "propertyNames"]);
+const STRIP_PROPERTY_KEYS = new Set(["additionalProperties", "propertyNames", "patternProperties"]);
 
 function flattenForLlm(node: unknown): unknown {
   if (node === null || node === undefined) {

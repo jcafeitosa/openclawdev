@@ -48,6 +48,10 @@ const PROBE_MAX_TOKENS = 10;
 const PROBE_CONCURRENCY = 4;
 /** Delay between probes to the same provider (avoid rate-limiting). */
 const PROBE_PROVIDER_DELAY_MS = 600;
+/** Per-provider delay overrides for stricter rate limits. */
+const PROBE_PROVIDER_DELAY_OVERRIDES: Record<string, number> = {
+  "github-copilot": 3_000,
+};
 /** Entries older than this are considered stale. */
 const HEALTH_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 h
 /** Delay before the first automatic probe after gateway startup. */
@@ -525,10 +529,12 @@ async function runProbeInternal(
       }
 
       // Per-provider delay to avoid rate-limiting
+      const providerDelay =
+        PROBE_PROVIDER_DELAY_OVERRIDES[item.model.provider] ?? PROBE_PROVIDER_DELAY_MS;
       const lastProbe = lastProbeByProvider.get(item.model.provider) ?? 0;
       const elapsed = Date.now() - lastProbe;
-      if (elapsed < PROBE_PROVIDER_DELAY_MS) {
-        await new Promise((resolve) => setTimeout(resolve, PROBE_PROVIDER_DELAY_MS - elapsed));
+      if (elapsed < providerDelay) {
+        await new Promise((resolve) => setTimeout(resolve, providerDelay - elapsed));
       }
 
       lastProbeByProvider.set(item.model.provider, Date.now());
