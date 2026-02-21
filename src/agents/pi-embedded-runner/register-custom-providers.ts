@@ -8,7 +8,11 @@
  * This module must be imported before any call to streamSimple / stream.
  * It is a side-effect-only import: `import "./register-custom-providers.js"`.
  */
-import { getApiProvider, registerApiProvider } from "@mariozechner/pi-ai";
+import {
+  registerApiProvider,
+  streamGoogleGeminiCli,
+  streamSimpleGoogleGeminiCli,
+} from "@mariozechner/pi-ai";
 import type { ApiProvider } from "@mariozechner/pi-ai";
 
 /**
@@ -18,20 +22,18 @@ import type { ApiProvider } from "@mariozechner/pi-ai";
  * it checks `model.provider === "google-antigravity"` internally to select the correct
  * endpoint, headers (antigravity vs gemini-cli), and request format.
  *
- * Only the api registry lookup fails because "google-antigravity" was never registered
- * as an api ID in pi-ai's built-in registry.
+ * IMPORTANT: we must pass the raw (unwrapped) stream functions directly from the pi-ai export,
+ * NOT the already-wrapped versions retrieved via getApiProvider(). The registry's
+ * registerApiProvider() wraps each function with an api-check guard, so passing an
+ * already-wrapped function would cause a double-wrap with conflicting api checks
+ * ("google-antigravity" expected vs "google-gemini-cli" expected), leading to:
+ *   Error: Mismatched api: google-antigravity expected google-gemini-cli
  */
-function registerGoogleAntigravityProvider(): void {
-  const geminiCliProvider = getApiProvider("google-gemini-cli");
-  if (!geminiCliProvider) {
-    return;
-  }
-  const provider: ApiProvider = {
-    api: "google-antigravity",
-    stream: geminiCliProvider.stream as ApiProvider["stream"],
-    streamSimple: geminiCliProvider.streamSimple as ApiProvider["streamSimple"],
-  };
-  registerApiProvider(provider);
-}
-
-registerGoogleAntigravityProvider();
+registerApiProvider({
+  api: "google-antigravity",
+  // Cast needed: streamGoogleGeminiCli is typed for "google-gemini-cli" but the underlying
+  // implementation routes by model.provider (not model.api), so it handles both correctly.
+  stream: streamGoogleGeminiCli as unknown as ApiProvider<"google-antigravity">["stream"],
+  streamSimple:
+    streamSimpleGoogleGeminiCli as unknown as ApiProvider<"google-antigravity">["streamSimple"],
+});
