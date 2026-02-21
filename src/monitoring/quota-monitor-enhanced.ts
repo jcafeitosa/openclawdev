@@ -131,7 +131,7 @@ class EnhancedQuotaMonitor {
 
   private startContinuousMonitoring() {
     this.monitoringInterval = setInterval(() => {
-      this.checkAllModels();
+      void this.checkAllModels();
     }, 30000); // Every 30 seconds (more frequent than 60s)
 
     console.log("[QuotaMonitorEnhanced] Continuous monitoring started (30s interval)");
@@ -317,8 +317,13 @@ class EnhancedQuotaMonitor {
 
     // Sort by status criticality
     const sorted = [...statuses].toSorted((a, b) => {
-      const statusOrder = { exhausted: 0, critical: 1, warning: 2, healthy: 3 };
-      return (statusOrder[a.quota.status as any] || 4) - (statusOrder[b.quota.status as any] || 4);
+      const statusOrder: Record<string, number> = {
+        exhausted: 0,
+        critical: 1,
+        warning: 2,
+        healthy: 3,
+      };
+      return (statusOrder[a.quota.status] ?? 4) - (statusOrder[b.quota.status] ?? 4);
     });
 
     for (const model of sorted) {

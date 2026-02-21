@@ -69,14 +69,14 @@
 .dark {
   /* ============ Chat Glass Backgrounds - Dark Mode ============ */
   /* Deep Dark Mode palette from Letícia's design */
-  --chat-glass-dark: rgba(15, 23, 42, 0.7);         /* slate-900 */
+  --chat-glass-dark: rgba(15, 23, 42, 0.7); /* slate-900 */
   --chat-glass-dark-sm: rgba(15, 23, 42, 0.5);
   --chat-glass-dark-md: rgba(15, 23, 42, 0.75);
   --chat-glass-dark-lg: rgba(15, 23, 42, 0.9);
 
   /* Message bubbles - Dark Mode */
-  --chat-message-assistant-dark: rgba(30, 41, 59, 0.7);   /* slate-800 */
-  --chat-message-user-dark: rgba(59, 130, 246, 0.9);      /* blue-500 */
+  --chat-message-assistant-dark: rgba(30, 41, 59, 0.7); /* slate-800 */
+  --chat-message-user-dark: rgba(59, 130, 246, 0.9); /* blue-500 */
 
   /* Input glass - Dark Mode */
   --chat-input-dark: rgba(15, 23, 42, 0.6);
@@ -87,8 +87,8 @@
   --chat-border-dark-subtle: rgba(255, 255, 255, 0.05);
 
   /* Text on glass - Dark Mode */
-  --chat-text-primary-dark: #f1f5f9;        /* slate-100 */
-  --chat-text-secondary-dark: #94a3b8;      /* slate-400 */
+  --chat-text-primary-dark: #f1f5f9; /* slate-100 */
+  --chat-text-secondary-dark: #94a3b8; /* slate-400 */
 
   /* Scrollbar - Dark Mode */
   --chat-scrollbar-dark: rgba(255, 255, 255, 0.08);
@@ -349,7 +349,7 @@ body,
 .chat-code-block,
 .glass-premium,
 .glass-input {
-  transition: 
+  transition:
     background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1),
     color 0.3s cubic-bezier(0.4, 0, 0.2, 1),

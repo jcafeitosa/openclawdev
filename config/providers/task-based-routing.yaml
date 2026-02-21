@@ -11,7 +11,7 @@ routing:
     token_budget: 50000
     priority: "high"
     cost_per_token: 0.003
-    
+
   data_analysis:
     description: "Financial analysis, metrics, JSON processing"
     primary_model: "anthropic/claude-haiku-4-5"
@@ -22,7 +22,7 @@ routing:
     token_budget: 40000
     priority: "medium"
     cost_per_token: 0.0005
-    
+
   implementation_spec:
     description: "Code specifications, architecture design"
     primary_model: "anthropic/claude-sonnet-4-5"
@@ -33,7 +33,7 @@ routing:
     token_budget: 60000
     priority: "high"
     cost_per_token: 0.002
-    
+
   operational_procedures:
     description: "Runbooks, operational documentation"
     primary_model: "anthropic/claude-haiku-4-5"
@@ -44,10 +44,10 @@ routing:
     token_budget: 35000
     priority: "medium"
     cost_per_token: 0.0005
-    
+
   risk_analysis:
     description: "Risk mitigation, contingency planning - Product Manager deep dive"
-    primary_model: "google-antigravity/gemini-pro"  # gemini-3-flash exhausted, use pro instead
+    primary_model: "google-antigravity/gemini-pro" # gemini-3-flash exhausted, use pro instead
     fallbacks:
       - "anthropic/claude-sonnet-4-5"
       - "anthropic/claude-opus-4-5"
@@ -56,7 +56,7 @@ routing:
     priority: "high"
     cost_per_token: 0.002
     note: "CRITICAL: avoid gemini-3-flash (quota at 9850/10000)"
-    
+
   documentation:
     description: "Guides, training materials, references"
     primary_model: "anthropic/claude-haiku-4-5"
@@ -72,18 +72,18 @@ provider_health_check:
   interval_seconds: 60
   alert_threshold_percentage: 20
   critical_threshold_percentage: 5
-  
+
 request_queuing:
   high_priority:
     delay_ms: 0
     batch_size: 1
     examples: ["audit", "security", "architecture"]
-    
+
   medium_priority:
     delay_ms: 2000
     batch_size: 3
     examples: ["data_analysis", "operational_procedures"]
-    
+
   low_priority:
     delay_ms: 5000
     batch_size: 5
@@ -94,22 +94,22 @@ cost_optimization:
     condition: "task_tokens < 20k AND complexity < medium"
     action: "use_haiku_instead_of_sonnet"
     savings_percent: 50
-    
+
   rule_2_batch_small_tasks:
     condition: "task_simple AND batch_size > 3"
     action: "send_as_single_request"
     savings_percent: 70
-    
+
   rule_3_free_model_preference:
     condition: "openrouter_free_available AND health > 80"
     action: "route_to_free_model"
     savings_percent: 100
-    
+
   rule_4_token_budget_enforcement:
     condition: "estimated_tokens > allocated_budget"
     action: "split_task_or_escalate"
     prevents: "runaway_token_usage"
-    
+
   rule_5_quota_exhaustion_avoidance:
     condition: "gemini-3-flash usage > 95%"
     action: "force_fallback_to_gemini-pro_or_claude"

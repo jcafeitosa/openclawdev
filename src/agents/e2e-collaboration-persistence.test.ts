@@ -717,7 +717,7 @@ describe("E2E: Collaboration Persistence & Auto-Completion", () => {
         agents: ["backend-architect", "database-engineer"],
         moderator: "main",
       });
-      const session3 = initializeCollaborativeSession({
+      const _session3 = initializeCollaborativeSession({
         topic: "Frontend",
         agents: ["frontend-architect", "ui-designer"],
         moderator: "main",

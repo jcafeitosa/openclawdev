@@ -150,10 +150,11 @@ function resolveConfigRestartRequest(params: unknown): {
   sessionKey: string | undefined;
   note: string | undefined;
   restartDelayMs: number | undefined;
+  skipRestart: boolean;
   deliveryContext: ReturnType<typeof extractDeliveryInfo>["deliveryContext"];
   threadId: ReturnType<typeof extractDeliveryInfo>["threadId"];
 } {
-  const { sessionKey, note, restartDelayMs } = parseRestartRequestParams(params);
+  const { sessionKey, note, restartDelayMs, skipRestart } = parseRestartRequestParams(params);
 
   // Extract deliveryContext + threadId for routing after restart
   // Supports both :thread: (most channels) and :topic: (Telegram)
@@ -163,6 +164,7 @@ function resolveConfigRestartRequest(params: unknown): {
     sessionKey,
     note,
     restartDelayMs,
+    skipRestart,
     deliveryContext,
     threadId,
   };

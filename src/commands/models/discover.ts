@@ -30,7 +30,12 @@ export async function modelsDiscoverCommand(_opts: { json?: boolean }, runtime: 
   }
 
   // Group by provider for nice output
-  const byProvider = Map.groupBy(models, (m) => m.provider);
+  const byProvider = new Map<string, typeof models>();
+  for (const m of models) {
+    const list = byProvider.get(m.provider) ?? [];
+    list.push(m);
+    byProvider.set(m.provider, list);
+  }
 
   for (const [provider, items] of byProvider) {
     runtime.log(`

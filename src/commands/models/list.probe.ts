@@ -327,8 +327,10 @@ async function probeTarget(params: {
       reasoningLevel: "off",
       verboseLevel: "off",
       streamParams: { maxTokens },
-      onText: (text) => {
-        collectedText += text;
+      onPartialReply: (payload) => {
+        if (payload.text) {
+          collectedText += payload.text;
+        }
       },
     });
 

@@ -26,19 +26,19 @@ type EChartsModule = {
   use: (components: unknown[]) => void;
 };
 
+type EChartsSubModule = Record<string, unknown>;
+
 async function loadECharts(): Promise<EChartsModule> {
-  const [
-    { BarChart, GaugeChart, PieChart },
-    { GridComponent, TooltipComponent, LegendComponent, TitleComponent },
-    { CanvasRenderer },
-    echarts,
-  ] = await Promise.all([
-    import("echarts/charts"),
-    import("echarts/components"),
-    import("echarts/renderers"),
+  const [charts, components, renderers, echarts] = await Promise.all([
+    import("echarts/charts") as Promise<EChartsSubModule>,
+    import("echarts/components") as Promise<EChartsSubModule>,
+    import("echarts/renderers") as Promise<EChartsSubModule>,
     import("echarts/core"),
   ]);
-  echarts.use([
+  const { BarChart, GaugeChart, PieChart } = charts;
+  const { GridComponent, TooltipComponent, LegendComponent, TitleComponent } = components;
+  const { CanvasRenderer } = renderers;
+  (echarts as unknown as EChartsModule).use([
     BarChart,
     GaugeChart,
     PieChart,

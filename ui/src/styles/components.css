@@ -3481,7 +3481,9 @@
 
 .kpi-card:hover {
   border-color: var(--border-strong);
-  box-shadow: var(--shadow-md), inset 0 1px 0 var(--card-highlight);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 var(--card-highlight);
 }
 
 .kpi-accent-bar {

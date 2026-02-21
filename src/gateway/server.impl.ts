@@ -659,7 +659,7 @@ export async function startGatewayServer(
         cfg: cfgAtStart,
         defaultProvider: DEFAULT_PROVIDER,
       });
-      initAutoModelSelection(gatewayCatalog, allowedKeys, cfgAtStart);
+      initAutoModelSelection(gatewayCatalog, allowedKeys ?? undefined, cfgAtStart);
     } catch (err) {
       log.warn(`auto-model-selection init failed: ${String(err)}`);
     }

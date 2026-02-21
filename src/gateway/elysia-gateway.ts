@@ -242,7 +242,7 @@ function createNodeFetchBridge(
       {
         method: nodeReq.method ?? "GET",
         headers,
-        body: hasBody ? (Readable.toWeb(nodeReq) as ReadableStream) : null,
+        body: hasBody ? (Readable.toWeb(nodeReq) as unknown as ReadableStream) : null,
         duplex: hasBody ? "half" : undefined,
       },
       nodeReq,
