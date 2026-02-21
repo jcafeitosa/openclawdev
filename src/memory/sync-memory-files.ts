@@ -1,4 +1,4 @@
-import type { DatabaseSync } from "node:sqlite";
+import type { Database } from "bun:sqlite";
 import { createSubsystemLogger } from "../logging/subsystem.js";
 import { buildFileEntry, listMemoryFiles, type MemoryFileEntry } from "./internal.js";
 import { indexFileEntryIfChanged } from "./sync-index.js";
@@ -11,7 +11,7 @@ const log = createSubsystemLogger("memory");
 export async function syncMemoryFiles(params: {
   workspaceDir: string;
   extraPaths?: string[];
-  db: DatabaseSync;
+  db: Database;
   needsFullReindex: boolean;
   progress?: SyncProgressState;
   batchEnabled: boolean;

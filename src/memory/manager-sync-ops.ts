@@ -1,7 +1,7 @@
+import { Database } from "bun:sqlite";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { DatabaseSync } from "node:sqlite";
 import chokidar, { FSWatcher } from "chokidar";
 import { resolveAgentDir } from "../agents/agent-scope.js";
 import { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
@@ -36,7 +36,6 @@ import {
   sessionPathForFile,
 } from "./session-files.js";
 import { loadSqliteVecExtension } from "./sqlite-vec.js";
-import { requireNodeSqlite } from "./sqlite.js";
 import type { MemorySource, MemorySyncProgressUpdate } from "./types.js";
 
 type MemoryIndexMeta = {
@@ -129,7 +128,7 @@ export abstract class MemoryManagerSyncOps {
   >();
 
   protected abstract readonly cache: { enabled: boolean; maxEntries?: number };
-  protected abstract db: DatabaseSync;
+  protected abstract db: Database;
   protected abstract computeProviderKey(): string;
   protected abstract sync(params?: {
     reason?: string;
@@ -239,19 +238,18 @@ export abstract class MemoryManagerSyncOps {
     return { sql: ` AND ${column} IN (${placeholders})`, params: sources };
   }
 
-  protected openDatabase(): DatabaseSync {
+  protected openDatabase(): Database {
     const dbPath = resolveUserPath(this.settings.store.path);
     return this.openDatabaseAtPath(dbPath);
   }
 
-  private openDatabaseAtPath(dbPath: string): DatabaseSync {
+  private openDatabaseAtPath(dbPath: string): Database {
     const dir = path.dirname(dbPath);
     ensureDir(dir);
-    const { DatabaseSync } = requireNodeSqlite();
-    return new DatabaseSync(dbPath, { allowExtension: this.settings.store.vector.enabled });
+    return new Database(dbPath);
   }
 
-  private seedEmbeddingCache(sourceDb: DatabaseSync): void {
+  private seedEmbeddingCache(sourceDb: Database): void {
     if (!this.cache.enabled) {
       return;
     }

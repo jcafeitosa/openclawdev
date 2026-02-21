@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,6 @@ import {
   buildSessionEntry,
   type SessionFileEntry,
 } from "./session-files.js";
-import { requireNodeSqlite } from "./sqlite.js";
 import type {
   MemoryEmbeddingProbeResult,
   MemoryProviderStatus,
@@ -22,7 +22,7 @@ import type {
   MemorySyncProgressUpdate,
 } from "./types.js";
 
-type SqliteDatabase = import("node:sqlite").DatabaseSync;
+type SqliteDatabase = Database;
 import type { ResolvedMemoryBackendConfig, ResolvedQmdConfig } from "./backend-config.js";
 import { parseQmdQueryJson, type QmdQueryResult } from "./qmd-query-parser.js";
 
@@ -792,8 +792,7 @@ export class QmdMemoryManager implements MemorySearchManager {
     if (this.db) {
       return this.db;
     }
-    const { DatabaseSync } = requireNodeSqlite();
-    this.db = new DatabaseSync(this.indexPath, { readOnly: true });
+    this.db = new Database(this.indexPath, { readonly: true });
     // Keep QMD recall responsive when the updater holds a write lock.
     this.db.exec("PRAGMA busy_timeout = 1");
     return this.db;
