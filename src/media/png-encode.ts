@@ -2,7 +2,8 @@
  * Minimal PNG encoder for generating simple RGBA images without native dependencies.
  * Used for QR codes, live probes, and other programmatic image generation.
  */
-import { deflateSync } from "node:zlib";
+// Bun provides deflateSync natively — no node:zlib import needed.
+// Bun.deflateSync returns Uint8Array (zlib-wrapped DEFLATE, same format as Node's deflateSync).
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -69,7 +70,7 @@ export function encodePngRgba(buffer: Buffer, width: number, height: number): Bu
     raw[rawOffset] = 0; // filter: none
     buffer.copy(raw, rawOffset + 1, row * stride, row * stride + stride);
   }
-  const compressed = deflateSync(raw);
+  const compressed = Buffer.from(Bun.deflateSync(raw));
 
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const ihdr = Buffer.alloc(13);

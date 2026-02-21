@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import { resolveDefaultAgentId } from "../../agents/agent-scope.js";
 import { abortEmbeddedPiRun, waitForEmbeddedPiRunEnd } from "../../agents/pi-embedded.js";
@@ -311,7 +310,7 @@ export const sessionsHandlers: GatewayRequestHandlers = {
       oldSessionFile = entry?.sessionFile;
       const now = Date.now();
       const nextEntry: SessionEntry = {
-        sessionId: randomUUID(),
+        sessionId: crypto.randomUUID(),
         updatedAt: now,
         systemSent: false,
         abortedLastRun: false,

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { GatewayWsClient } from "./server/ws-types.js";
 
 export type NodeSession = {
@@ -118,7 +117,7 @@ export class NodeRegistry {
         error: { code: "NOT_CONNECTED", message: "node not connected" },
       };
     }
-    const requestId = randomUUID();
+    const requestId = crypto.randomUUID();
     const payload = {
       id: requestId,
       nodeId: params.nodeId,

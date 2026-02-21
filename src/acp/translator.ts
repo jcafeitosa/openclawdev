@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type {
   Agent,
   AgentSideConnection,
@@ -125,7 +124,7 @@ export class AcpGatewayAgent implements Agent {
       this.log(`ignoring ${params.mcpServers.length} MCP servers`);
     }
 
-    const sessionId = randomUUID();
+    const sessionId = crypto.randomUUID();
     const meta = parseSessionMeta(params._meta);
     const sessionKey = await resolveSessionKey({
       meta,
@@ -234,7 +233,7 @@ export class AcpGatewayAgent implements Agent {
     }
 
     const abortController = new AbortController();
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     this.sessionStore.setActiveRun(params.sessionId, runId, abortController);
 
     const meta = parseSessionMeta(params._meta);

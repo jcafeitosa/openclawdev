@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { WizardCancelledError, type WizardProgress, type WizardPrompter } from "./prompts.js";
 
 export type WizardStepOption = {
@@ -155,7 +154,7 @@ class WizardSessionPrompter implements WizardPrompter {
   private async prompt(step: Omit<WizardStep, "id">): Promise<unknown> {
     return await this.session.awaitAnswer({
       ...step,
-      id: randomUUID(),
+      id: crypto.randomUUID(),
     });
   }
 }

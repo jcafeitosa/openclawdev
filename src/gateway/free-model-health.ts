@@ -9,7 +9,6 @@
  * every 24 hours.  Can also be triggered manually via `freeModels.probe`.
  */
 
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { resolveOpenClawAgentDir } from "../agents/agent-paths.js";

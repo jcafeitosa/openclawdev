@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { OpenClawConfig } from "../config/config.js";
 import {
   loadConfig,
@@ -262,7 +261,7 @@ export async function callGateway<T = Record<string, unknown>>(
       token,
       password,
       tlsFingerprint,
-      instanceId: opts.instanceId ?? randomUUID(),
+      instanceId: opts.instanceId ?? crypto.randomUUID(),
       clientName: opts.clientName ?? GATEWAY_CLIENT_NAMES.CLI,
       clientDisplayName: opts.clientDisplayName,
       clientVersion: opts.clientVersion ?? "dev",
@@ -308,5 +307,5 @@ export async function callGateway<T = Record<string, unknown>>(
 }
 
 export function randomIdempotencyKey() {
-  return randomUUID();
+  return crypto.randomUUID();
 }

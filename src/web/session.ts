@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import fsSync from "node:fs";
 import {
   DisconnectReason,
@@ -308,5 +307,5 @@ export function formatError(err: unknown): string {
 }
 
 export function newConnectionId() {
-  return randomUUID();
+  return crypto.randomUUID();
 }

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { resolveAgentRole } from "../../agents/agent-scope.js";
 import { listAgentIds, resolveAgentConfig } from "../../agents/agent-scope.js";
 import { persistMessage, loadMessages } from "../../agents/collaboration-messaging.js";

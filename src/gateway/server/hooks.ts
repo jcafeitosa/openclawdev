@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { CliDeps } from "../../cli/deps.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveMainSessionKeyFromConfig } from "../../config/sessions.js";
@@ -60,7 +59,7 @@ export function createHookDispatchers(params: {
   }) => {
     const sessionKey = value.sessionKey.trim();
     const mainSessionKey = resolveMainSessionKeyFromConfig();
-    const jobId = randomUUID();
+    const jobId = crypto.randomUUID();
     const now = Date.now();
     const job: CronJob = {
       id: jobId,
@@ -86,7 +85,7 @@ export function createHookDispatchers(params: {
       state: { nextRunAtMs: now },
     };
 
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     void (async () => {
       try {
         const cfg = loadConfig();

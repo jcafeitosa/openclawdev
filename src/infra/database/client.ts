@@ -57,7 +57,7 @@ export function getDatabaseConfig(): DatabaseConfig {
   if (urlConfig) {
     return {
       ...urlConfig,
-      maxConnections: Number(process.env.POSTGRES_MAX_CONNECTIONS ?? 10),
+      maxConnections: Number(process.env.POSTGRES_MAX_CONNECTIONS ?? 50),
       idleTimeout: Number(process.env.POSTGRES_IDLE_TIMEOUT ?? 30),
       connectTimeout: Number(process.env.POSTGRES_CONNECT_TIMEOUT ?? 10),
     };
@@ -69,7 +69,7 @@ export function getDatabaseConfig(): DatabaseConfig {
     database: process.env.POSTGRES_DB ?? "openclaw",
     username: process.env.POSTGRES_USER ?? "openclaw",
     password: process.env.POSTGRES_PASSWORD ?? "openclaw",
-    maxConnections: Number(process.env.POSTGRES_MAX_CONNECTIONS ?? 10),
+    maxConnections: Number(process.env.POSTGRES_MAX_CONNECTIONS ?? 50),
     idleTimeout: Number(process.env.POSTGRES_IDLE_TIMEOUT ?? 30),
     connectTimeout: Number(process.env.POSTGRES_CONNECT_TIMEOUT ?? 10),
     ssl: process.env.POSTGRES_SSL === "true",

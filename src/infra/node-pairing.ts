@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   createAsyncLock,
   pruneExpiredPending,
@@ -130,7 +129,7 @@ export async function requestNodePairing(
 
     const isRepair = Boolean(state.pairedByNodeId[nodeId]);
     const request: NodePairingPendingRequest = {
-      requestId: randomUUID(),
+      requestId: crypto.randomUUID(),
       nodeId,
       displayName: req.displayName,
       platform: req.platform,

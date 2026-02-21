@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 import { resolveCliName } from "./cli-name.js";
@@ -28,7 +27,7 @@ export function parseCanvasSnapshotPayload(value: unknown): CanvasSnapshotPayloa
 
 export function canvasSnapshotTempPath(opts: { ext: string; tmpDir?: string; id?: string }) {
   const tmpDir = opts.tmpDir ?? os.tmpdir();
-  const id = opts.id ?? randomUUID();
+  const id = opts.id ?? crypto.randomUUID();
   const ext = opts.ext.startsWith(".") ? opts.ext : `.${opts.ext}`;
   const cliName = resolveCliName();
   return path.join(tmpDir, `${cliName}-canvas-snapshot-${id}${ext}`);

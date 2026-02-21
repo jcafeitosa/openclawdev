@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
 import { writeBase64ToFile } from "./nodes-camera.js";
@@ -39,7 +38,7 @@ export function parseScreenRecordPayload(value: unknown): ScreenRecordPayload {
 
 export function screenRecordTempPath(opts: { ext: string; tmpDir?: string; id?: string }) {
   const tmpDir = opts.tmpDir ?? os.tmpdir();
-  const id = opts.id ?? randomUUID();
+  const id = opts.id ?? crypto.randomUUID();
   const ext = opts.ext.startsWith(".") ? opts.ext : `.${opts.ext}`;
   return path.join(tmpDir, `openclaw-screen-record-${id}${ext}`);
 }

@@ -1,10 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { listSystemPresence, updateSystemPresence, upsertPresence } from "./system-presence.js";
 
 describe("system-presence", () => {
   it("dedupes entries across sources by case-insensitive instanceId key", () => {
-    const instanceIdUpper = `AaBb-${randomUUID()}`.toUpperCase();
+    const instanceIdUpper = `AaBb-${crypto.randomUUID()}`.toUpperCase();
     const instanceIdLower = instanceIdUpper.toLowerCase();
 
     upsertPresence(instanceIdUpper, {
@@ -35,7 +34,7 @@ describe("system-presence", () => {
   });
 
   it("merges roles and scopes for the same device", () => {
-    const deviceId = randomUUID();
+    const deviceId = crypto.randomUUID();
 
     upsertPresence(deviceId, {
       deviceId,

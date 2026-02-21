@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { WebSocket, WebSocketServer } from "ws";
 import { resolveCanvasHostUrl } from "../../infra/canvas-host-url.js";
 import { removeRemoteNodeInfo } from "../../infra/skills-remote.js";
@@ -103,7 +102,7 @@ export function attachGatewayWsConnectionHandler(params: {
     let client: GatewayWsClient | null = null;
     let closed = false;
     const openedAt = Date.now();
-    const connId = randomUUID();
+    const connId = crypto.randomUUID();
     const remoteAddr = (socket as WebSocket & { _socket?: { remoteAddress?: string } })._socket
       ?.remoteAddress;
     const headerValue = (value: string | string[] | undefined) =>
@@ -158,7 +157,7 @@ export function attachGatewayWsConnectionHandler(params: {
       }
     };
 
-    const connectNonce = randomUUID();
+    const connectNonce = crypto.randomUUID();
     send({
       type: "event",
       event: "connect.challenge",

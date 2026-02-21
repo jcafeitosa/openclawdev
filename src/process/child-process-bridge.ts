@@ -1,5 +1,4 @@
 import type { ChildProcess } from "node:child_process";
-import process from "node:process";
 
 export type ChildProcessBridgeOptions = {
   signals?: NodeJS.Signals[];

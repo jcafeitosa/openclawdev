@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -303,7 +302,7 @@ export abstract class MemoryManagerSyncOps {
   }
 
   private async swapIndexFiles(targetPath: string, tempPath: string): Promise<void> {
-    const backupPath = `${targetPath}.backup-${randomUUID()}`;
+    const backupPath = `${targetPath}.backup-${crypto.randomUUID()}`;
     await this.moveIndexFiles(targetPath, backupPath);
     try {
       await this.moveIndexFiles(tempPath, targetPath);
@@ -981,7 +980,7 @@ export abstract class MemoryManagerSyncOps {
     progress?: MemorySyncProgressState;
   }): Promise<void> {
     const dbPath = resolveUserPath(this.settings.store.path);
-    const tempDbPath = `${dbPath}.tmp-${randomUUID()}`;
+    const tempDbPath = `${dbPath}.tmp-${crypto.randomUUID()}`;
     const tempDb = this.openDatabaseAtPath(tempDbPath);
 
     const originalDb = this.db;

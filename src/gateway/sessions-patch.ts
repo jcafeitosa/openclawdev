@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { resolveDefaultAgentId } from "../agents/agent-scope.js";
 import type { ModelCatalogEntry } from "../agents/model-catalog.js";
 import { resolveAllowedModelRef, resolveDefaultModelForAgent } from "../agents/model-selection.js";
@@ -77,7 +76,7 @@ export async function applySessionsPatchToStore(params: {
         ...existing,
         updatedAt: Math.max(existing.updatedAt ?? 0, now),
       }
-    : { sessionId: randomUUID(), updatedAt: now };
+    : { sessionId: crypto.randomUUID(), updatedAt: now };
 
   if ("spawnedBy" in patch) {
     const raw = patch.spawnedBy;

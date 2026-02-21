@@ -5,7 +5,6 @@
  * Uses ReadableStream for SSE streaming.
  */
 
-import { randomUUID } from "node:crypto";
 import { Elysia } from "elysia";
 import {
   buildHistoryContextFromEntries,
@@ -181,7 +180,7 @@ export function openAiRoutes(params: { auth: ResolvedGatewayAuth }) {
       const agentId = nodeReq ? resolveAgentIdForRequest({ req: nodeReq, model }) : "main";
       const sessionKey = nodeReq
         ? resolveSessionKey({ req: nodeReq, agentId, user, prefix: "openai" })
-        : `openai:${randomUUID()}`;
+        : `openai:${crypto.randomUUID()}`;
 
       const prompt = buildAgentPrompt(payload.messages);
       if (!prompt.message) {
@@ -194,7 +193,7 @@ export function openAiRoutes(params: { auth: ResolvedGatewayAuth }) {
         };
       }
 
-      const runId = `chatcmpl_${randomUUID()}`;
+      const runId = `chatcmpl_${crypto.randomUUID()}`;
       const deps = createDefaultDeps();
 
       // Non-streaming mode

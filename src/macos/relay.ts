@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import process from "node:process";
 
 declare const __OPENCLAW_VERSION__: string | undefined;
 

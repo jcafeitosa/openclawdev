@@ -1,4 +1,3 @@
-import { stdin as input, stdout as output } from "node:process";
 import readline from "node:readline/promises";
 import { isVerbose, isYes } from "../globals.js";
 
@@ -10,7 +9,7 @@ export async function promptYesNo(question: string, defaultYes = false): Promise
   if (isYes()) {
     return true;
   }
-  const rl = readline.createInterface({ input, output });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const suffix = defaultYes ? " [Y/n] " : " [y/N] ";
   const answer = (await rl.question(`${question}${suffix}`)).trim().toLowerCase();
   rl.close();

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { defaultRuntime } from "../../runtime.js";
 import { WizardSession } from "../../wizard/session.js";
 import {
@@ -43,7 +42,7 @@ export const wizardHandlers: GatewayRequestHandlers = {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, "wizard already running"));
       return;
     }
-    const sessionId = randomUUID();
+    const sessionId = crypto.randomUUID();
     const opts = {
       mode: params.mode,
       workspace: typeof params.workspace === "string" ? params.workspace : undefined,

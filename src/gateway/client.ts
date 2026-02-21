@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { WebSocket, type ClientOptions, type CertMeta } from "ws";
 import {
   clearDeviceAuthToken,
@@ -446,7 +445,7 @@ export class GatewayClient {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("gateway not connected");
     }
-    const id = randomUUID();
+    const id = crypto.randomUUID();
     const frame: RequestFrame = { type: "req", id, method, params };
     if (!validateRequestFrame(frame)) {
       throw new Error(

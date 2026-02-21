@@ -11,7 +11,6 @@
  * 4. Auto-cleaned after 24h (archived), 7d (deleted)
  */
 
-import crypto from "node:crypto";
 import {
   loadCheckpointIndex,
   saveCheckpointIndex,

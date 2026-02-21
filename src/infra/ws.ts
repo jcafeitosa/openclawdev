@@ -1,4 +1,3 @@
-import { Buffer } from "node:buffer";
 import type WebSocket from "ws";
 
 export function rawDataToString(

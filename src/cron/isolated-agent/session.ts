@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
   evaluateSessionFreshness,

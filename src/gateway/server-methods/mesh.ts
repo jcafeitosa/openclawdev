@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { agentCommand } from "../../commands/agent.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -166,7 +165,7 @@ function createPlanFromParams(params: { goal: string; steps?: MeshAutoStep[] }):
   });
 
   return {
-    planId: `mesh-plan-${randomUUID()}`,
+    planId: `mesh-plan-${crypto.randomUUID()}`,
     goal,
     createdAt: now,
     steps,
@@ -815,7 +814,7 @@ export const meshHandlers: GatewayRequestHandlers = {
       typeof p.defaultStepTimeoutMs === "number" && Number.isFinite(p.defaultStepTimeoutMs)
         ? Math.max(1_000, Math.floor(p.defaultStepTimeoutMs))
         : 120_000;
-    const runId = `mesh-run-${randomUUID()}`;
+    const runId = `mesh-run-${crypto.randomUUID()}`;
     const record = createRunRecord({
       runId,
       plan,

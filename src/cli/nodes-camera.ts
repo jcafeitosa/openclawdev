@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -74,7 +73,7 @@ export function cameraTempPath(opts: {
   id?: string;
 }) {
   const tmpDir = opts.tmpDir ?? os.tmpdir();
-  const id = opts.id ?? randomUUID();
+  const id = opts.id ?? crypto.randomUUID();
   const facingPart = opts.facing ? `-${opts.facing}` : "";
   const ext = opts.ext.startsWith(".") ? opts.ext : `.${opts.ext}`;
   const cliName = resolveCliName();

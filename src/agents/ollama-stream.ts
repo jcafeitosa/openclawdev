@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { StreamFn } from "@mariozechner/pi-agent-core";
 import type {
   AssistantMessage,
@@ -206,7 +205,7 @@ export function buildAssistantMessage(
     for (const tc of toolCalls) {
       content.push({
         type: "toolCall",
-        id: `ollama_call_${randomUUID()}`,
+        id: `ollama_call_${crypto.randomUUID()}`,
         name: tc.function.name,
         arguments: tc.function.arguments,
       });

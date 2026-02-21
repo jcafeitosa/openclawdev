@@ -1,4 +1,3 @@
-import process from "node:process";
 import type { TelegramNetworkConfig } from "../config/types.telegram.js";
 import { isTruthyEnvValue } from "../infra/env.js";
 

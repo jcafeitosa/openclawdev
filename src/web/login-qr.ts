@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { DisconnectReason } from "@whiskeysockets/baileys";
 import { loadConfig } from "../config/config.js";
 import { danger, info, success } from "../globals.js";
@@ -180,7 +179,7 @@ export async function startWebLoginWithQr(
     accountId: account.accountId,
     authDir: account.authDir,
     isLegacyAuthDir: account.isLegacyAuthDir,
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     sock,
     startedAt: Date.now(),
     connected: false,

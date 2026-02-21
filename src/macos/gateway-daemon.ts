@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import process from "node:process";
 import type { GatewayLockHandle } from "../infra/gateway-lock.js";
 import { restartGatewayProcessWithFreshPid } from "../infra/process-respawn.js";
 

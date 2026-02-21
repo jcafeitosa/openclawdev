@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { listAgentIds } from "../../agents/agent-scope.js";
 import type { MsgContext } from "../../auto-reply/templating.js";
 import {

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { formatErrorMessage } from "../infra/errors.js";
 import type { SystemPresence } from "../infra/system-presence.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../utils/message-channel.js";
@@ -33,7 +32,7 @@ export async function probeGateway(opts: {
   timeoutMs: number;
 }): Promise<GatewayProbeResult> {
   const startedAt = Date.now();
-  const instanceId = randomUUID();
+  const instanceId = crypto.randomUUID();
   let connectLatencyMs: number | null = null;
   let connectError: string | null = null;
   let close: GatewayProbeClose | null = null;

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { loadConfig } from "../config/config.js";
 import {
   buildGatewayConnectionDetails,
@@ -125,7 +124,7 @@ export class GatewayChatClient {
       platform: process.platform,
       mode: GATEWAY_CLIENT_MODES.UI,
       caps: [GATEWAY_CLIENT_CAPS.TOOL_EVENTS],
-      instanceId: randomUUID(),
+      instanceId: crypto.randomUUID(),
       minProtocol: PROTOCOL_VERSION,
       maxProtocol: PROTOCOL_VERSION,
       onHelloOk: (hello) => {
@@ -162,7 +161,7 @@ export class GatewayChatClient {
   }
 
   async sendChat(opts: ChatSendOptions): Promise<{ runId: string }> {
-    const runId = opts.runId ?? randomUUID();
+    const runId = opts.runId ?? crypto.randomUUID();
     await this.client.request("chat.send", {
       sessionKey: opts.sessionKey,
       message: opts.message,

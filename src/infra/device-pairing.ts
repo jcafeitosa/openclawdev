@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { normalizeDeviceAuthScopes } from "../shared/device-auth.js";
 import {
   createAsyncLock,
@@ -232,7 +231,7 @@ export async function requestDevicePairing(
     }
     const isRepair = Boolean(state.pairedByDeviceId[deviceId]);
     const request: DevicePairingPendingRequest = {
-      requestId: randomUUID(),
+      requestId: crypto.randomUUID(),
       deviceId,
       publicKey: req.publicKey,
       displayName: req.displayName,

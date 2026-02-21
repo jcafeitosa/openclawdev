@@ -1,11 +1,8 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
-import { promisify } from "node:util";
 import { danger, shouldLogVerbose } from "../globals.js";
 import { logDebug, logError } from "../logger.js";
 import { resolveCommandStdio } from "./spawn-utils.js";
-
-const execFileAsync = promisify(execFile);
 
 /**
  * Resolves a command for Windows compatibility.
@@ -42,22 +39,43 @@ export function shouldSpawnWithShell(params: {
   return false;
 }
 
-// Simple promise-wrapped execFile with optional verbosity logging.
+// Simple promise-wrapped command execution with optional verbosity logging.
 export async function runExec(
   command: string,
   args: string[],
   opts: number | { timeoutMs?: number; maxBuffer?: number } = 10_000,
 ): Promise<{ stdout: string; stderr: string }> {
-  const options =
-    typeof opts === "number"
-      ? { timeout: opts, encoding: "utf8" as const }
-      : {
-          timeout: opts.timeoutMs,
-          maxBuffer: opts.maxBuffer,
-          encoding: "utf8" as const,
-        };
+  const timeoutMs = typeof opts === "number" ? opts : (opts.timeoutMs ?? 10_000);
+  let timedOut = false;
+  const proc = Bun.spawn([resolveCommand(command), ...args], { stdout: "pipe", stderr: "pipe" });
+  const stdoutP = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve("");
+  const stderrP = proc.stderr ? new Response(proc.stderr).text() : Promise.resolve("");
+  const timer = setTimeout(() => {
+    timedOut = true;
+    proc.kill("SIGKILL");
+  }, timeoutMs);
   try {
-    const { stdout, stderr } = await execFileAsync(resolveCommand(command), args, options);
+    const exitCode = await proc.exited;
+    clearTimeout(timer);
+    const [stdout, stderr] = await Promise.all([stdoutP, stderrP]);
+    if (timedOut) {
+      const err = Object.assign(new Error(`Command timed out after ${timeoutMs}ms`), {
+        killed: true,
+        stdout,
+        stderr,
+        code: null,
+      });
+      throw err;
+    }
+    if (exitCode !== 0) {
+      const err = Object.assign(new Error(stderr.trim() || `exit code ${exitCode}`), {
+        killed: false,
+        stdout,
+        stderr,
+        code: exitCode,
+      });
+      throw err;
+    }
     if (shouldLogVerbose()) {
       if (stdout.trim()) {
         logDebug(stdout.trim());
@@ -68,6 +86,7 @@ export async function runExec(
     }
     return { stdout, stderr };
   } catch (err) {
+    clearTimeout(timer);
     if (shouldLogVerbose()) {
       logError(danger(`Command failed: ${command} ${args.join(" ")}`));
     }

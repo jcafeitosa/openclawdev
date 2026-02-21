@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { AcpSession } from "./types.js";
 
 export type AcpSessionStore = {
@@ -16,7 +15,7 @@ export function createInMemorySessionStore(): AcpSessionStore {
   const runIdToSessionId = new Map<string, string>();
 
   const createSession: AcpSessionStore["createSession"] = (params) => {
-    const sessionId = params.sessionId ?? randomUUID();
+    const sessionId = params.sessionId ?? crypto.randomUUID();
     const session: AcpSession = {
       sessionId,
       sessionKey: params.sessionKey,

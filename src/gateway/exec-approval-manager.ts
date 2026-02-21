@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { ExecApprovalDecision } from "../infra/exec-approvals.js";
 
 // Grace period to keep resolved entries for late awaitDecision calls
@@ -46,7 +45,7 @@ export class ExecApprovalManager {
     id?: string | null,
   ): ExecApprovalRecord {
     const now = Date.now();
-    const resolvedId = id && id.trim().length > 0 ? id.trim() : randomUUID();
+    const resolvedId = id && id.trim().length > 0 ? id.trim() : crypto.randomUUID();
     const record: ExecApprovalRecord = {
       id: resolvedId,
       request,

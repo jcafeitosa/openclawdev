@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { getShellConfig } from "../../agents/shell-utils.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { createChildAdapter } from "./adapters/child.js";
