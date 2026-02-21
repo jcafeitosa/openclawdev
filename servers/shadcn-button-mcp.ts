@@ -419,7 +419,7 @@ function execute_button_examples(pattern?: string): string {
     );
   }
 
-  const pat = (BUTTON_PATTERNS as any)[pattern];
+  const pat = (BUTTON_PATTERNS as Record<string, unknown>)[pattern];
   if (pat) {
     return JSON.stringify(pat, null, 2);
   }

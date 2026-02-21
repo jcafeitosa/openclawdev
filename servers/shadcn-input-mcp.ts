@@ -289,7 +289,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(VALIDATION_PATTERNS, null, 2);
       }
       return JSON.stringify(
-        (VALIDATION_PATTERNS as any)[ptype] || { error: "Pattern not found" },
+        (VALIDATION_PATTERNS as Record<string, unknown>)[ptype] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -299,7 +299,11 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
       if (mtype === "all") {
         return JSON.stringify(INPUT_MASKS, null, 2);
       }
-      return JSON.stringify((INPUT_MASKS as any)[mtype] || { error: "Mask not found" }, null, 2);
+      return JSON.stringify(
+        (INPUT_MASKS as Record<string, unknown>)[mtype] || { error: "Mask not found" },
+        null,
+        2,
+      );
 
     case "accessibility":
       return JSON.stringify(INPUT_A11Y, null, 2);

@@ -1,4 +1,5 @@
-import { execFile, type ExecFileOptionsWithStringEncoding } from "node:child_process";
+import { execFile } from "node:child_process";
+import type { ExecFileOptionsWithStringEncoding } from "node:child_process";
 
 export type ExecResult = { stdout: string; stderr: string; code: number };
 

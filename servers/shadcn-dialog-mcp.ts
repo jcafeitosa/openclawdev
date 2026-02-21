@@ -894,7 +894,11 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
       if (size === "all") {
         return JSON.stringify(DIALOG_SIZES, null, 2);
       }
-      return JSON.stringify((DIALOG_SIZES as any)[size] || { error: "Size not found" }, null, 2);
+      return JSON.stringify(
+        (DIALOG_SIZES as Record<string, unknown>)[size] || { error: "Size not found" },
+        null,
+        2,
+      );
 
     case "dialog_structure":
       const pattern = tool_input.pattern || "all";
@@ -902,7 +906,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DIALOG_STRUCTURE, null, 2);
       }
       return JSON.stringify(
-        (DIALOG_STRUCTURE as any)[pattern] || { error: "Pattern not found" },
+        (DIALOG_STRUCTURE as Record<string, unknown>)[pattern] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -913,7 +917,9 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DIALOG_EXAMPLES, null, 2);
       }
       return JSON.stringify(
-        (DIALOG_EXAMPLES as any)[example_type] || { error: "Example not found" },
+        (DIALOG_EXAMPLES as Record<string, unknown>)[example_type] || {
+          error: "Example not found",
+        },
         null,
         2,
       );
@@ -924,7 +930,9 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DIALOG_ACTIONS, null, 2);
       }
       return JSON.stringify(
-        (DIALOG_ACTIONS as any)[action_type] || { error: "Action type not found" },
+        (DIALOG_ACTIONS as Record<string, unknown>)[action_type] || {
+          error: "Action type not found",
+        },
         null,
         2,
       );
@@ -938,7 +946,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DIALOG_RECIPES, null, 2);
       }
       return JSON.stringify(
-        (DIALOG_RECIPES as any)[recipe] || { error: "Recipe not found" },
+        (DIALOG_RECIPES as Record<string, unknown>)[recipe] || { error: "Recipe not found" },
         null,
         2,
       );

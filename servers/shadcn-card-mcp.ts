@@ -261,7 +261,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         );
       }
       return JSON.stringify(
-        (CARD_EXAMPLES as any)[pattern] || { error: "Pattern not found" },
+        (CARD_EXAMPLES as Record<string, unknown>)[pattern] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -272,7 +272,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(RESPONSIVE_CONFIG, null, 2);
       }
       return JSON.stringify(
-        (RESPONSIVE_CONFIG as any)[config] || { error: "Config not found" },
+        (RESPONSIVE_CONFIG as Record<string, unknown>)[config] || { error: "Config not found" },
         null,
         2,
       );

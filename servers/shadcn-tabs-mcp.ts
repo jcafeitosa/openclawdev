@@ -843,7 +843,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(TABS_STRUCTURE, null, 2);
       }
       return JSON.stringify(
-        (TABS_STRUCTURE as any)[pattern] || { error: "Pattern not found" },
+        (TABS_STRUCTURE as Record<string, unknown>)[pattern] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -853,7 +853,11 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
       if (layout === "all") {
         return JSON.stringify(TABS_LAYOUT, null, 2);
       }
-      return JSON.stringify((TABS_LAYOUT as any)[layout] || { error: "Layout not found" }, null, 2);
+      return JSON.stringify(
+        (TABS_LAYOUT as Record<string, unknown>)[layout] || { error: "Layout not found" },
+        null,
+        2,
+      );
 
     case "tabs_examples":
       const example_type = tool_input.example_type || "all";
@@ -861,7 +865,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(TABS_EXAMPLES, null, 2);
       }
       return JSON.stringify(
-        (TABS_EXAMPLES as any)[example_type] || { error: "Example not found" },
+        (TABS_EXAMPLES as Record<string, unknown>)[example_type] || { error: "Example not found" },
         null,
         2,
       );
@@ -871,7 +875,11 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
       if (topic === "all") {
         return JSON.stringify(TABS_KEYBOARD, null, 2);
       }
-      return JSON.stringify((TABS_KEYBOARD as any)[topic] || { error: "Topic not found" }, null, 2);
+      return JSON.stringify(
+        (TABS_KEYBOARD as Record<string, unknown>)[topic] || { error: "Topic not found" },
+        null,
+        2,
+      );
 
     case "tabs_recipes":
       const recipe = tool_input.recipe || "all";
@@ -879,7 +887,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(TABS_RECIPES, null, 2);
       }
       return JSON.stringify(
-        (TABS_RECIPES as any)[recipe] || { error: "Recipe not found" },
+        (TABS_RECIPES as Record<string, unknown>)[recipe] || { error: "Recipe not found" },
         null,
         2,
       );

@@ -1072,7 +1072,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(FORM_STRUCTURES, null, 2);
       }
       return JSON.stringify(
-        (FORM_STRUCTURES as any)[pattern] || { error: "Pattern not found" },
+        (FORM_STRUCTURES as Record<string, unknown>)[pattern] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -1083,7 +1083,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(VALIDATION_SCHEMAS, null, 2);
       }
       return JSON.stringify(
-        (VALIDATION_SCHEMAS as any)[form_type] || { error: "Schema not found" },
+        (VALIDATION_SCHEMAS as Record<string, unknown>)[form_type] || { error: "Schema not found" },
         null,
         2,
       );
@@ -1094,7 +1094,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(ERROR_HANDLING, null, 2);
       }
       return JSON.stringify(
-        (ERROR_HANDLING as any)[err_pattern] || { error: "Pattern not found" },
+        (ERROR_HANDLING as Record<string, unknown>)[err_pattern] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -1105,7 +1105,9 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(SUBMIT_PATTERNS, null, 2);
       }
       return JSON.stringify(
-        (SUBMIT_PATTERNS as any)[submit_pattern] || { error: "Pattern not found" },
+        (SUBMIT_PATTERNS as Record<string, unknown>)[submit_pattern] || {
+          error: "Pattern not found",
+        },
         null,
         2,
       );
@@ -1116,7 +1118,9 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(FIELD_COMPONENTS, null, 2);
       }
       return JSON.stringify(
-        (FIELD_COMPONENTS as any)[field_type] || { error: "Field type not found" },
+        (FIELD_COMPONENTS as Record<string, unknown>)[field_type] || {
+          error: "Field type not found",
+        },
         null,
         2,
       );
@@ -1127,7 +1131,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(FORM_RECIPES, null, 2);
       }
       return JSON.stringify(
-        (FORM_RECIPES as any)[recipe] || { error: "Recipe not found" },
+        (FORM_RECIPES as Record<string, unknown>)[recipe] || { error: "Recipe not found" },
         null,
         2,
       );

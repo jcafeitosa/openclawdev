@@ -822,7 +822,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DROPDOWN_ITEMS, null, 2);
       }
       return JSON.stringify(
-        (DROPDOWN_ITEMS as any)[item_type] || { error: "Item type not found" },
+        (DROPDOWN_ITEMS as Record<string, unknown>)[item_type] || { error: "Item type not found" },
         null,
         2,
       );
@@ -833,7 +833,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DROPDOWN_STRUCTURE, null, 2);
       }
       return JSON.stringify(
-        (DROPDOWN_STRUCTURE as any)[pattern] || { error: "Pattern not found" },
+        (DROPDOWN_STRUCTURE as Record<string, unknown>)[pattern] || { error: "Pattern not found" },
         null,
         2,
       );
@@ -844,7 +844,9 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DROPDOWN_EXAMPLES, null, 2);
       }
       return JSON.stringify(
-        (DROPDOWN_EXAMPLES as any)[example_type] || { error: "Example not found" },
+        (DROPDOWN_EXAMPLES as Record<string, unknown>)[example_type] || {
+          error: "Example not found",
+        },
         null,
         2,
       );
@@ -855,7 +857,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DROPDOWN_KEYBOARD, null, 2);
       }
       return JSON.stringify(
-        (DROPDOWN_KEYBOARD as any)[topic] || { error: "Topic not found" },
+        (DROPDOWN_KEYBOARD as Record<string, unknown>)[topic] || { error: "Topic not found" },
         null,
         2,
       );
@@ -866,7 +868,7 @@ function process_tool_call(tool_name: string, tool_input: Record<string, string>
         return JSON.stringify(DROPDOWN_RECIPES, null, 2);
       }
       return JSON.stringify(
-        (DROPDOWN_RECIPES as any)[recipe] || { error: "Recipe not found" },
+        (DROPDOWN_RECIPES as Record<string, unknown>)[recipe] || { error: "Recipe not found" },
         null,
         2,
       );

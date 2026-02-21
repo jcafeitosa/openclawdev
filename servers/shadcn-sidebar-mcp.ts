@@ -461,7 +461,7 @@ const tools: Anthropic.Tool[] = [
 function execute_list_components(): string {
   const components = Object.keys(SIDEBAR_COMPONENTS).map((name) => ({
     name,
-    description: (SIDEBAR_COMPONENTS as any)[name].description,
+    description: (SIDEBAR_COMPONENTS as Record<string, unknown>)[name].description,
   }));
 
   return JSON.stringify(
@@ -476,7 +476,7 @@ function execute_list_components(): string {
 }
 
 function execute_component_props(component_name: string): string {
-  const component = (SIDEBAR_COMPONENTS as any)[component_name];
+  const component = (SIDEBAR_COMPONENTS as Record<string, unknown>)[component_name];
 
   if (!component) {
     return JSON.stringify(
@@ -504,7 +504,7 @@ function execute_component_props(component_name: string): string {
 }
 
 function execute_component_examples(component_name: string): string {
-  const component = (SIDEBAR_COMPONENTS as any)[component_name];
+  const component = (SIDEBAR_COMPONENTS as Record<string, unknown>)[component_name];
 
   if (!component) {
     return JSON.stringify(
@@ -537,7 +537,11 @@ function execute_sidebar_themes(mode: string): string {
     return JSON.stringify({ light: CSS_VARIABLES.light, dark: CSS_VARIABLES.dark }, null, 2);
   }
 
-  return JSON.stringify({ mode, variables: (CSS_VARIABLES as any)[mode] }, null, 2);
+  return JSON.stringify(
+    { mode, variables: (CSS_VARIABLES as Record<string, unknown>)[mode] },
+    null,
+    2,
+  );
 }
 
 function execute_sidebar_rtl(): string {
@@ -545,7 +549,7 @@ function execute_sidebar_rtl(): string {
 }
 
 function execute_installation(package_manager: string): string {
-  const commands: any = {
+  const commands: Record<string, string> = {
     pnpm: "pnpm dlx shadcn@latest add sidebar",
     npm: "npx shadcn-ui@latest add sidebar",
     yarn: "yarn dlx shadcn@latest add sidebar",
