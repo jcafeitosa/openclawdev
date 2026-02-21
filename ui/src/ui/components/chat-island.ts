@@ -47,9 +47,13 @@ export class ChatIsland extends LitElement {
   @state() private focusMode = false;
   @state() private showThinking = false;
 
+  @state() private showNewMessages = false;
+  private isAtBottom = true;
+
   private gatewayEventUnsub: (() => void) | null = null;
   /** Guard to discard stale refreshChat() responses after session switch. */
   private refreshGeneration = 0;
+  private keyboardHandler: ((e: KeyboardEvent) => void) | null = null;
 
   protected createRenderRoot() {
     return this;
@@ -78,21 +82,76 @@ export class ChatIsland extends LitElement {
         if (payload?.startedAt) {
           $chatStreamStartedAt.set(payload.startedAt);
         }
+        // Auto-scroll while streaming if we were at the bottom
+        if (this.isAtBottom) {
+          this.scrollToBottom();
+        }
       }
       if (evt.event === "chat.done") {
         $chatStream.set(null);
         $chatStreamStartedAt.set(null);
         $chatSending.set(false);
-        void this.refreshChat();
+        void this.refreshChat().then(() => {
+          if (this.isAtBottom) {
+            this.scrollToBottom();
+          }
+        });
       }
     });
-    void this.refreshChat();
+    void this.refreshChat().then(() => {
+      this.scrollToBottom();
+    });
+
+    // Keyboard shortcuts
+    this.keyboardHandler = (e: KeyboardEvent) => {
+      // Cmd+N or Ctrl+N: new session
+      if ((e.metaKey || e.ctrlKey) && e.key === "n") {
+        e.preventDefault();
+        void this.createNewSession();
+      }
+    };
+    document.addEventListener("keydown", this.keyboardHandler);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.gatewayEventUnsub?.();
     this.gatewayEventUnsub = null;
+    if (this.keyboardHandler) {
+      document.removeEventListener("keydown", this.keyboardHandler);
+      this.keyboardHandler = null;
+    }
+  }
+
+  protected updated() {
+    if (this.isAtBottom) {
+      this.scrollToBottom();
+    }
+  }
+
+  private scrollToBottom() {
+    const thread = this.querySelector(".chat-thread");
+    if (thread) {
+      thread.scrollTop = thread.scrollHeight;
+      this.showNewMessages = false;
+    }
+  }
+
+  private handleChatScroll(e: Event) {
+    const target = e.target as HTMLElement;
+    const threshold = 50;
+    const atBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+    this.isAtBottom = atBottom;
+    this.showNewMessages = !atBottom;
+  }
+
+  private async abortRun() {
+    try {
+      const sessionKey = this.activeSession.value || "main";
+      await gateway.call("chat.abort", { sessionKey });
+    } catch (err) {
+      console.error("Failed to abort:", err);
+    }
   }
 
   render(): TemplateResult {
@@ -109,7 +168,7 @@ export class ChatIsland extends LitElement {
       showThinking: this.showThinking,
       loading: this.chatLoading.value,
       sending: this.chatSending.value,
-      canAbort: false,
+      canAbort: true,
       compactionStatus: null,
       messages: [...this.chatMessages.value],
       toolMessages: [...this.chatToolMessages.value],
@@ -119,7 +178,10 @@ export class ChatIsland extends LitElement {
       draft: this.chatMessage.value,
       queue: [...this.chatQueue.value],
       connected: this.connectedCtrl.value,
-      canSend: this.connectedCtrl.value && !this.chatSending.value,
+      canSend:
+        this.connectedCtrl.value &&
+        !this.chatSending.value &&
+        (this.chatMessage.value.trim().length > 0 || this.chatAttachments.value.length > 0),
       disabledReason: this.connectedCtrl.value ? null : "Connect to gateway to chat",
       error: null,
       sessions: this.sessions.value as ChatProps["sessions"],
@@ -138,6 +200,9 @@ export class ChatIsland extends LitElement {
       onToggleFocusMode: () => {
         this.focusMode = !this.focusMode;
       },
+      onToggleThinking: () => {
+        this.showThinking = !this.showThinking;
+      },
       onDraftChange: (next: string) => {
         $chatMessage.set(next);
       },
@@ -146,6 +211,7 @@ export class ChatIsland extends LitElement {
         $chatQueue.set(this.chatQueue.value.filter((item) => item.id !== id));
       },
       onNewSession: () => void this.createNewSession(),
+      onResetSession: () => void this.resetSession(),
       onOpenSidebar: (content: string) => {
         $sidebarContent.set(content);
         $sidebarOpen.set(true);
@@ -156,6 +222,10 @@ export class ChatIsland extends LitElement {
       onSplitRatioChange: (ratio: number) => {
         $splitRatio.set(ratio);
       },
+      onChatScroll: (e: Event) => this.handleChatScroll(e),
+      onScrollToBottom: () => this.scrollToBottom(),
+      onAbort: () => void this.abortRun(),
+      showNewMessages: this.showNewMessages,
     };
 
     return html`${renderChat(props)}`;
@@ -178,6 +248,9 @@ export class ChatIsland extends LitElement {
       }
       $chatMessages.set(result.messages ?? []);
       $chatToolMessages.set(result.toolMessages ?? []);
+
+      // Auto-scroll on initial load or session switch
+      setTimeout(() => this.scrollToBottom(), 100);
     } catch (err) {
       if (gen !== this.refreshGeneration) {
         return;
@@ -200,6 +273,10 @@ export class ChatIsland extends LitElement {
     }
 
     $chatSending.set(true);
+    // Optimistic at-bottom during send
+    this.isAtBottom = true;
+    this.scrollToBottom();
+
     try {
       const sessionKey = this.activeSession.value || "main";
       await gateway.call("chat.send", {
@@ -226,9 +303,28 @@ export class ChatIsland extends LitElement {
         $activeSession.set(result.sessionKey);
         $chatMessages.set([]);
         $chatToolMessages.set([]);
+        this.isAtBottom = true;
+        this.scrollToBottom();
       }
     } catch (err) {
       console.error("Failed to create session:", err);
+    }
+  }
+
+  private async resetSession() {
+    try {
+      const sessionKey = this.activeSession.value || "main";
+      await gateway.call("sessions.reset", { key: sessionKey });
+      // Clear UI state
+      $chatMessages.set([]);
+      $chatToolMessages.set([]);
+      $chatStream.set(null);
+      $chatStreamStartedAt.set(null);
+      $chatSending.set(false);
+      this.isAtBottom = true;
+      this.scrollToBottom();
+    } catch (err) {
+      console.error("Failed to reset session:", err);
     }
   }
 }

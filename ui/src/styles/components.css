@@ -375,6 +375,7 @@
       0 0 8px rgba(34, 197, 94, 0.5),
       inset 0 0 4px rgba(34, 197, 94, 0.3);
   }
+
   50% {
     box-shadow:
       0 0 12px rgba(34, 197, 94, 0.6),
@@ -387,6 +388,7 @@
   100% {
     box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
   }
+
   50% {
     box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
   }
@@ -1555,6 +1557,7 @@
   100% {
     border-color: var(--border);
   }
+
   50% {
     border-color: var(--accent);
   }
@@ -1611,6 +1614,7 @@
     opacity: 0.4;
     transform: translateY(0);
   }
+
   40% {
     opacity: 1;
     transform: translateY(-3px);
@@ -1804,20 +1808,30 @@
   text-align: right;
 }
 
-/* Chat compose */
 .chat-compose {
-  margin-top: 12px;
+  position: sticky;
+  bottom: 24px;
+  align-self: center;
+  width: min(100%, 800px);
+  margin: 0 auto;
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .chat-compose__bar {
-  border: 1px solid var(--input);
-  background: var(--card);
-  border-radius: 14px;
-  box-shadow: inset 0 1px 0 var(--card-highlight);
-  padding: 10px 12px 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-elevated);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 22px;
+  box-shadow:
+    0 8px 32px -8px rgba(0, 0, 0, 0.35),
+    0 4px 12px -4px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 14px 18px 12px 18px;
+  transition: all 0.2s var(--ease-out);
 }
 
 .compose-framework {
@@ -1918,11 +1932,11 @@
 }
 
 .chat-compose__bar:focus-within {
-  /* Avoid the large red multi-ring highlight some themes end up producing. */
-  border-color: color-mix(in srgb, var(--text) 22%, var(--input));
+  border-color: rgba(255, 255, 255, 0.12);
   box-shadow:
-    inset 0 1px 0 var(--card-highlight),
-    0 0 0 1px color-mix(in srgb, var(--text) 12%, transparent);
+    0 8px 32px -8px rgba(0, 0, 0, 0.4),
+    0 4px 12px -4px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 /* Keep composer focus neutral even with global :focus-visible ring overrides. */
@@ -1942,8 +1956,10 @@
   overflow: auto;
   white-space: pre-wrap;
   font-family: var(--font-body);
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.55;
   color: var(--text);
+  padding: 0;
 }
 
 .chat-compose__input:focus,
@@ -1970,7 +1986,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .chat-compose__controls-left,
@@ -2045,20 +2061,28 @@
   display: none;
 }
 
+/* Pill buttons — borderless, subtle */
 .compose-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 34px;
+  gap: 5px;
+  height: 30px;
   padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
+  border-radius: 8px;
+  border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   cursor: pointer;
   user-select: none;
   font-size: 13px;
+  font-weight: 500;
   line-height: 1;
+  transition: all 150ms ease;
+}
+
+.compose-pill:hover {
+  background: var(--secondary);
+  color: var(--text);
 }
 
 .compose-pill:focus-visible,
@@ -2074,17 +2098,24 @@
   flex: 0 0 auto;
 }
 
+/* Circle + button */
 .compose-pill--icon {
-  width: 34px;
+  width: 30px;
+  height: 30px;
   justify-content: center;
   padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
   font-size: 18px;
 }
 
+.compose-pill--icon:hover {
+  border-color: var(--border-strong);
+}
+
 .compose-pill--model {
-  /* Let the selector grow when there's space, but keep it bounded. */
-  max-width: min(560px, 60vw);
-  min-width: 220px;
+  min-width: 0;
+  padding-right: 8px;
 }
 
 .compose-pill__label {
@@ -2220,18 +2251,19 @@
   padding: 10px;
 }
 
+/* Send button — coral/orange like Claude */
 .compose-send {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  width: 34px;
   height: 34px;
-  padding: 0 10px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
+  border-radius: 50%;
+  border: none;
   background: transparent;
-  color: var(--text);
+  color: var(--muted);
   cursor: pointer;
+  transition: all 150ms ease;
 }
 
 .compose-send svg {
@@ -2247,33 +2279,46 @@
 }
 
 .compose-send:disabled {
-  opacity: 0.6;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .compose-send--primary {
-  background: var(--primary, var(--accent));
-  border-color: var(--primary, var(--accent));
-  color: var(--primary-foreground, #fff);
+  background: #e07a50;
+  border: none;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(224, 122, 80, 0.3);
 }
 
 .compose-send--primary:hover:not(:disabled) {
-  filter: brightness(1.1);
+  background: #d06a40;
+  box-shadow: 0 4px 16px rgba(224, 122, 80, 0.4);
+  transform: scale(1.05);
+}
+
+.compose-send--primary:active:not(:disabled) {
+  transform: scale(0.95);
 }
 
 .compose-send--stop {
   background: transparent;
-  border-color: var(--border);
+  border: 1px solid var(--border);
   color: var(--text);
+}
+
+.compose-send--stop:hover:not(:disabled) {
+  background: var(--danger-subtle);
+  border-color: var(--danger);
+  color: var(--danger);
 }
 
 .shell--chat .chat-compose {
   position: sticky;
-  bottom: 0;
-  z-index: 5;
+  bottom: 20px;
+  z-index: 10;
   margin-top: 0;
-  padding-top: 12px;
-  background: linear-gradient(180deg, transparent 0%, var(--bg) 40%);
+  padding: 0;
+  background: transparent;
 }
 
 .shell--chat-focus .chat-compose {
@@ -2972,6 +3017,7 @@
     opacity: 0;
     transform: translateY(8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2983,6 +3029,7 @@
   100% {
     transform: translateY(0);
   }
+
   50% {
     transform: translateY(-4px);
   }
@@ -3058,6 +3105,7 @@
     opacity: 0;
     transform: translateX(100%);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -3368,6 +3416,7 @@
     transform: scale(1);
     opacity: 1;
   }
+
   50% {
     transform: scale(1.2);
     opacity: 0.8;
@@ -3379,6 +3428,7 @@
   100% {
     box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
   }
+
   50% {
     box-shadow: 0 0 8px 2px rgba(59, 130, 246, 0.4);
   }
@@ -3407,6 +3457,7 @@
   0% {
     background: var(--accent);
   }
+
   100% {
     background: var(--card);
   }
@@ -3549,6 +3600,7 @@
   .bento-grid-6 {
     grid-template-columns: repeat(2, 1fr);
   }
+
   .bento-grid-3 {
     grid-template-columns: repeat(2, 1fr);
   }

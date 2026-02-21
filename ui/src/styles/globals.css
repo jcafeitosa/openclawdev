@@ -22,7 +22,10 @@
 /* Typography */
 @layer base {
   body {
-    @apply bg-white text-slate-900;
+    background-color: var(--bg);
+    color: var(--text);
+    background-image: radial-gradient(var(--grid-line) 1px, transparent 1px);
+    background-size: 24px 24px;
   }
 
   h1 {
@@ -85,7 +88,11 @@
   }
 
   .card {
-    @apply bg-white border border-slate-200 rounded-lg shadow-sm hover:shadow-md transition-all;
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--duration-normal) var(--ease-out);
   }
 
   .input-base {

@@ -60,11 +60,13 @@ export type ChatProps = {
   // Event handlers
   onRefresh: () => void;
   onToggleFocusMode: () => void;
+  onToggleThinking?: () => void;
   onDraftChange: (next: string) => void;
   onSend: () => void;
   onAbort?: () => void;
   onQueueRemove: (id: string) => void;
   onNewSession: () => void;
+  onResetSession?: () => void;
   onOpenSidebar?: (content: string) => void;
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
@@ -202,8 +204,15 @@ export function renderChat(props: ChatProps) {
   const composePlaceholder = props.connected
     ? hasAttachments
       ? "Add a message or paste more images..."
-      : "Message (↩ to send, Shift+↩ for line breaks, paste images)"
+      : "Message (↩ send, Shift+↩ newline, ⌘N new session)"
     : "Connect to the gateway to start chatting…";
+
+  const messageCount = Array.isArray(props.messages) ? props.messages.length : 0;
+  const totalTokens = activeSession?.totalTokens ?? 0;
+  const contextTokens = activeSession?.contextTokens ?? 0;
+  const tokenPercent =
+    contextTokens > 0 ? Math.min(100, Math.round((totalTokens / contextTokens) * 100)) : 0;
+  const sessionLabel = activeSession?.label || activeSession?.displayName || props.sessionKey;
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
@@ -263,27 +272,136 @@ export function renderChat(props: ChatProps) {
     </div>
   `;
 
+  // Empty state when no messages
+  const hasMessages = messageCount > 0 || props.stream !== null;
+  const emptyState =
+    !hasMessages && !props.loading
+      ? html`
+      <div class="chat-empty-state">
+        <div class="chat-empty-state__icon">
+          ${icons.messageSquare}
+        </div>
+        <h2 class="chat-empty-state__title">Start a conversation</h2>
+        <p class="chat-empty-state__desc">
+          Send a message to begin collaborating with your AI assistant.
+          Use <kbd>⌘N</kbd> to create a new session or switch sessions from the header.
+        </p>
+        <div class="chat-empty-state__shortcuts">
+          <div class="chat-empty-state__shortcut">
+            <kbd>↩</kbd>
+            <span>Send message</span>
+          </div>
+          <div class="chat-empty-state__shortcut">
+            <kbd>⇧↩</kbd>
+            <span>New line</span>
+          </div>
+          <div class="chat-empty-state__shortcut">
+            <kbd>⌘N</kbd>
+            <span>New session</span>
+          </div>
+        </div>
+      </div>
+    `
+      : nothing;
+
   return html`
     <section class="card chat">
       ${props.disabledReason ? html`<div class="callout">${props.disabledReason}</div>` : nothing}
 
       ${props.error ? html`<div class="callout danger">${props.error}</div>` : nothing}
 
-      ${
-        props.focusMode
-          ? html`
+      <!-- Session Header Bar -->
+      <div class="chat-session-bar">
+        <div class="chat-session-bar__left">
+          <div class="chat-session-bar__info">
+            <span class="chat-session-bar__label" title=${props.sessionKey}>${sessionLabel}</span>
+            ${
+              messageCount > 0
+                ? html`<span class="chat-session-bar__badge">${messageCount} msgs</span>`
+                : nothing
+            }
+            ${
+              totalTokens > 0
+                ? html`
+                <span class="chat-session-bar__tokens" title="${totalTokens.toLocaleString()} / ${contextTokens.toLocaleString()} tokens">
+                  <span class="chat-session-bar__token-bar">
+                    <span class="chat-session-bar__token-fill ${tokenPercent > 80 ? "warn" : ""}" style="width: ${tokenPercent}%"></span>
+                  </span>
+                  ${tokenPercent}%
+                </span>
+              `
+                : nothing
+            }
+          </div>
+        </div>
+        <div class="chat-session-bar__right">
+          <div class="chat-toolbar">
+            ${
+              props.onToggleThinking
+                ? html`
+                <button
+                  class="chat-toolbar__btn ${props.showThinking ? "chat-toolbar__btn--active" : ""}"
+                  type="button"
+                  @click=${props.onToggleThinking}
+                  aria-label=${props.showThinking ? "Hide tool details" : "Show tool details"}
+                  title=${props.showThinking ? "Hide tool details" : "Show tool details"}
+                >
+                  ${icons.code}
+                </button>
+              `
+                : nothing
+            }
             <button
-              class="chat-focus-exit"
+              class="chat-toolbar__btn"
               type="button"
-              @click=${props.onToggleFocusMode}
-              aria-label="Exit focus mode"
-              title="Exit focus mode"
+              @click=${props.onRefresh}
+              aria-label="Refresh chat"
+              title="Refresh chat"
+            >
+              ${icons.loader}
+            </button>
+            <button
+              class="chat-toolbar__btn"
+              type="button"
+              @click=${() => {
+                if (confirm("Reset this session? The conversation will be cleared.")) {
+                  props.onResetSession?.();
+                }
+              }}
+              aria-label="Reset session"
+              title="Reset session"
+              ?disabled=${!props.connected}
             >
               ${icons.x}
             </button>
-          `
-          : nothing
-      }
+            <button
+              class="chat-toolbar__btn chat-toolbar__btn--accent"
+              type="button"
+              @click=${props.onNewSession}
+              aria-label="New session (⌘N)"
+              title="New session (⌘N)"
+              ?disabled=${!props.connected}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+          ${
+            props.focusMode
+              ? html`
+              <button
+                class="chat-toolbar__btn"
+                type="button"
+                @click=${props.onToggleFocusMode}
+                aria-label="Exit focus mode"
+                title="Exit focus mode"
+              >
+                ${icons.x}
+              </button>
+            `
+              : nothing
+          }
+        </div>
+      </div>
 
       <div
         class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}"
@@ -292,6 +410,7 @@ export function renderChat(props: ChatProps) {
           class="chat-main"
           style="flex: ${sidebarOpen ? `0 0 ${splitRatio * 100}%` : "1 1 100%"}"
         >
+          ${emptyState}
           ${thread}
         </div>
 
