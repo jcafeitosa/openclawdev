@@ -1,3 +1,4 @@
+import { execFileSync, execSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -84,54 +85,8 @@ type ClaudeCliWriteOptions = ClaudeCliFileOptions & {
   writeFile?: (credentials: OAuthCredentials, options?: ClaudeCliFileOptions) => boolean;
 };
 
-type ExecSyncFn = (
-  command: string,
-  options?: { encoding?: string; timeout?: number; stdio?: unknown },
-) => string;
-type ExecFileSyncFn = (
-  command: string,
-  args: string[],
-  options?: { encoding?: string; timeout?: number; stdio?: unknown },
-) => string;
-
-function bunExecSync(
-  command: string,
-  options?: { encoding?: string; timeout?: number; stdio?: unknown },
-): string {
-  const timeoutMs = typeof options?.timeout === "number" ? options.timeout : 5000;
-  const proc = Bun.spawnSync(["sh", "-c", command], {
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: timeoutMs,
-  });
-  if (!proc.success) {
-    const stderr = proc.stderr ? proc.stderr.toString("utf-8") : "";
-    throw Object.assign(new Error(stderr.trim() || `exit code ${proc.exitCode}`), {
-      status: proc.exitCode,
-    });
-  }
-  return proc.stdout ? proc.stdout.toString("utf-8") : "";
-}
-
-function bunExecFileSync(
-  command: string,
-  args: string[],
-  options?: { encoding?: string; timeout?: number },
-): string {
-  const timeoutMs = typeof options?.timeout === "number" ? options.timeout : 5000;
-  const proc = Bun.spawnSync([command, ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-    timeout: timeoutMs,
-  });
-  if (!proc.success) {
-    const stderr = proc.stderr ? proc.stderr.toString("utf-8") : "";
-    throw Object.assign(new Error(stderr.trim() || `exit code ${proc.exitCode}`), {
-      status: proc.exitCode,
-    });
-  }
-  return proc.stdout ? proc.stdout.toString("utf-8") : "";
-}
+type ExecSyncFn = typeof execSync;
+type ExecFileSyncFn = typeof execFileSync;
 
 function resolveClaudeCliCredentialsPath(homeDir?: string) {
   const baseDir = homeDir ?? resolveUserPath("~");
@@ -206,7 +161,7 @@ function readCodexKeychainCredentials(options?: {
   if (platform !== "darwin") {
     return null;
   }
-  const execSyncImpl = options?.execSync ?? bunExecSync;
+  const execSyncImpl = options?.execSync ?? execSync;
 
   const codexHome = resolveCodexHomePath();
   const account = computeCodexKeychainAccount(codexHome);
@@ -304,7 +259,7 @@ function readMiniMaxCliCredentials(options?: { homeDir?: string }): MiniMaxCliCr
 }
 
 function readClaudeCliKeychainCredentials(
-  execSyncImpl: ExecSyncFn = bunExecSync,
+  execSyncImpl: ExecSyncFn = execSync,
 ): ClaudeCliCredential | null {
   try {
     const result = execSyncImpl(
@@ -380,7 +335,7 @@ export function writeClaudeCliKeychainCredentials(
   newCredentials: OAuthCredentials,
   options?: { execFileSync?: ExecFileSyncFn },
 ): boolean {
-  const execFileSyncImpl = options?.execFileSync ?? bunExecFileSync;
+  const execFileSyncImpl = options?.execFileSync ?? execFileSync;
   try {
     const existingResult = execFileSyncImpl(
       "security",

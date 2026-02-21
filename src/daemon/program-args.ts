@@ -148,15 +148,22 @@ async function resolveNodePath(): Promise<string> {
 }
 
 async function resolveBinaryPath(binary: string): Promise<string> {
-  const resolved = Bun.which(binary);
-  if (!resolved) {
+  const { execSync } = await import("node:child_process");
+  const cmd = process.platform === "win32" ? "where" : "which";
+  try {
+    const output = execSync(`${cmd} ${binary}`, { encoding: "utf8" }).trim();
+    const resolved = output.split(/\r?\n/)[0]?.trim();
+    if (!resolved) {
+      throw new Error("empty");
+    }
+    await fs.access(resolved);
+    return resolved;
+  } catch {
     if (binary === "bun") {
       throw new Error("Bun not found in PATH. Install bun: https://bun.sh");
     }
     throw new Error("Node not found in PATH. Install Node 22+.");
   }
-  await fs.access(resolved);
-  return resolved;
 }
 
 async function resolveCliProgramArguments(params: {

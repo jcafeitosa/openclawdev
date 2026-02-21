@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import type { Component, SelectItem } from "@mariozechner/pi-tui";
 import { createSearchableSelectList } from "./components/selectors.js";
 
@@ -17,6 +18,7 @@ type LocalShellDeps = {
     onSelect?: (item: SelectItem) => void;
     onCancel?: () => void;
   };
+  spawnCommand?: typeof spawn;
   getCwd?: () => string;
   env?: NodeJS.ProcessEnv;
   maxOutputChars?: number;
@@ -26,6 +28,7 @@ export function createLocalShellRunner(deps: LocalShellDeps) {
   let localExecAsked = false;
   let localExecAllowed = false;
   const createSelector = deps.createSelector ?? createSearchableSelectList;
+  const spawnCommand = deps.spawnCommand ?? spawn;
   const getCwd = deps.getCwd ?? (() => process.cwd());
   const env = deps.env ?? process.env;
   const maxChars = deps.maxOutputChars ?? 40_000;
@@ -102,54 +105,47 @@ export function createLocalShellRunner(deps: LocalShellDeps) {
       return combined.length > maxChars ? combined.slice(-maxChars) : combined;
     };
 
-    let proc: ReturnType<typeof Bun.spawn>;
-    try {
-      // Intentionally a shell: this is an operator-only local TUI feature (prefixed with `!`)
-      // and is gated behind an explicit in-session approval prompt.
-      proc = Bun.spawn(["/bin/sh", "-c", cmd], {
-        stdin: null,
-        stdout: "pipe",
-        stderr: "pipe",
+    await new Promise<void>((resolve) => {
+      const child = spawnCommand(cmd, {
+        // Intentionally a shell: this is an operator-only local TUI feature (prefixed with `!`)
+        // and is gated behind an explicit in-session approval prompt.
+        shell: true,
         cwd: getCwd(),
-        env: env as Record<string, string>,
+        env,
       });
-    } catch (err) {
-      deps.chatLog.addSystem(`[local] error: ${String(err)}`);
-      deps.tui.requestRender();
-      return;
-    }
 
-    const stdoutP =
-      proc.stdout instanceof ReadableStream
-        ? new Response(proc.stdout).text()
-        : Promise.resolve("");
-    const stderrP =
-      proc.stderr instanceof ReadableStream
-        ? new Response(proc.stderr).text()
-        : Promise.resolve("");
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (buf) => {
+        stdout = appendWithCap(stdout, buf.toString("utf8"));
+      });
+      child.stderr.on("data", (buf) => {
+        stderr = appendWithCap(stderr, buf.toString("utf8"));
+      });
 
-    const exitCode = await proc.exited;
-    const [stdoutRaw, stderrRaw] = await Promise.all([stdoutP, stderrP]);
+      child.on("close", (code, signal) => {
+        const combined = (stdout + (stderr ? (stdout ? "\n" : "") + stderr : ""))
+          .slice(0, maxChars)
+          .trimEnd();
 
-    let stdout = "";
-    let stderr = "";
-    stdout = appendWithCap(stdout, stdoutRaw);
-    stderr = appendWithCap(stderr, stderrRaw);
+        if (combined) {
+          for (const line of combined.split("\n")) {
+            deps.chatLog.addSystem(`[local] ${line}`);
+          }
+        }
+        deps.chatLog.addSystem(
+          `[local] exit ${code ?? "?"}${signal ? ` (signal ${String(signal)})` : ""}`,
+        );
+        deps.tui.requestRender();
+        resolve();
+      });
 
-    const combined = (stdout + (stderr ? (stdout ? "\n" : "") + stderr : ""))
-      .slice(0, maxChars)
-      .trimEnd();
-
-    if (combined) {
-      for (const outputLine of combined.split("\n")) {
-        deps.chatLog.addSystem(`[local] ${outputLine}`);
-      }
-    }
-    const signal = proc.signalCode;
-    deps.chatLog.addSystem(
-      `[local] exit ${exitCode ?? "?"}${signal ? ` (signal ${String(signal)})` : ""}`,
-    );
-    deps.tui.requestRender();
+      child.on("error", (err) => {
+        deps.chatLog.addSystem(`[local] error: ${String(err)}`);
+        deps.tui.requestRender();
+        resolve();
+      });
+    });
   };
 
   return { runLocalShellLine };

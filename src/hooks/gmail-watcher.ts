@@ -5,6 +5,7 @@
  * if hooks.gmail is configured with an account.
  */
 
+import { type ChildProcess, spawn } from "node:child_process";
 import { hasBinary } from "../agents/skills.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -25,16 +26,7 @@ export function isAddressInUseError(line: string): boolean {
   return ADDRESS_IN_USE_RE.test(line);
 }
 
-type GogSubprocess = {
-  pid: number;
-  signalCode: NodeJS.Signals | null;
-  exited: Promise<number | null>;
-  kill: (signal?: NodeJS.Signals | number) => void;
-  stdout: ReadableStream<Uint8Array> | null | number;
-  stderr: ReadableStream<Uint8Array> | null | number;
-};
-
-let watcherProcess: GogSubprocess | null = null;
+let watcherProcess: ChildProcess | null = null;
 let renewInterval: ReturnType<typeof setInterval> | null = null;
 let shuttingDown = false;
 let currentConfig: GmailHookRuntimeConfig | null = null;
@@ -44,39 +36,6 @@ let currentConfig: GmailHookRuntimeConfig | null = null;
  */
 function isGogAvailable(): boolean {
   return hasBinary("gog");
-}
-
-/**
- * Consume a ReadableStream line-by-line, calling onLine for each trimmed line.
- */
-async function consumeStream(
-  stream: ReadableStream<Uint8Array>,
-  onLine: (line: string) => void,
-): Promise<void> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n");
-      buffer = parts.pop() ?? "";
-      for (const part of parts) {
-        onLine(part.trim());
-      }
-    }
-    if (buffer.trim()) {
-      onLine(buffer.trim());
-    }
-  } catch {
-    // Stream closed.
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 /**
@@ -104,38 +63,39 @@ async function startGmailWatch(
 /**
  * Spawn the gog gmail watch serve process
  */
-function spawnGogServe(cfg: GmailHookRuntimeConfig): GogSubprocess {
+function spawnGogServe(cfg: GmailHookRuntimeConfig): ChildProcess {
   const args = buildGogWatchServeArgs(cfg);
   log.info(`starting gog ${args.join(" ")}`);
   let addressInUse = false;
 
-  const proc = Bun.spawn(["gog", ...args], {
-    stdin: null,
-    stdout: "pipe",
-    stderr: "pipe",
+  const child = spawn("gog", args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: false,
   });
 
-  if (proc.stdout instanceof ReadableStream) {
-    void consumeStream(proc.stdout, (line) => {
-      if (line) {
-        log.info(`[gog] ${line}`);
-      }
-    });
-  }
+  child.stdout?.on("data", (data: Buffer) => {
+    const line = data.toString().trim();
+    if (line) {
+      log.info(`[gog] ${line}`);
+    }
+  });
 
-  if (proc.stderr instanceof ReadableStream) {
-    void consumeStream(proc.stderr, (line) => {
-      if (!line) {
-        return;
-      }
-      if (isAddressInUseError(line)) {
-        addressInUse = true;
-      }
-      log.warn(`[gog] ${line}`);
-    });
-  }
+  child.stderr?.on("data", (data: Buffer) => {
+    const line = data.toString().trim();
+    if (!line) {
+      return;
+    }
+    if (isAddressInUseError(line)) {
+      addressInUse = true;
+    }
+    log.warn(`[gog] ${line}`);
+  });
 
-  void proc.exited.then((code) => {
+  child.on("error", (err) => {
+    log.error(`gog process error: ${String(err)}`);
+  });
+
+  child.on("exit", (code, signal) => {
     if (shuttingDown) {
       return;
     }
@@ -147,7 +107,6 @@ function spawnGogServe(cfg: GmailHookRuntimeConfig): GogSubprocess {
       watcherProcess = null;
       return;
     }
-    const signal = proc.signalCode;
     log.warn(`gog exited (code=${code}, signal=${signal}); restarting in 5s`);
     watcherProcess = null;
     setTimeout(() => {
@@ -158,7 +117,7 @@ function spawnGogServe(cfg: GmailHookRuntimeConfig): GogSubprocess {
     }, 5000);
   });
 
-  return proc;
+  return child;
 }
 
 export type GmailWatcherStartResult = {
@@ -255,24 +214,23 @@ export async function stopGmailWatcher(): Promise<void> {
 
   if (watcherProcess) {
     log.info("stopping gmail watcher");
-    const proc = watcherProcess;
-    try {
-      proc.kill("SIGTERM");
-    } catch {
-      // ignore
-    }
-    const killTimer = setTimeout(() => {
-      try {
-        proc.kill("SIGKILL");
-      } catch {
-        // ignore
-      }
-    }, 3000);
-    try {
-      await proc.exited;
-    } finally {
-      clearTimeout(killTimer);
-    }
+    watcherProcess.kill("SIGTERM");
+
+    // Wait a bit for graceful shutdown
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        if (watcherProcess) {
+          watcherProcess.kill("SIGKILL");
+        }
+        resolve();
+      }, 3000);
+
+      watcherProcess?.on("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+
     watcherProcess = null;
   }
 

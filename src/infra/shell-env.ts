@@ -1,47 +1,10 @@
+import { execFileSync } from "node:child_process";
 import { isTruthyEnvValue } from "./env.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BUFFER_BYTES = 2 * 1024 * 1024;
 let lastAppliedKeys: string[] = [];
 let cachedShellPath: string | null | undefined;
-
-type ExecFileSyncBufferFn = (
-  command: string,
-  args: string[],
-  options: {
-    encoding: "buffer";
-    timeout: number;
-    maxBuffer: number;
-    env: NodeJS.ProcessEnv;
-    stdio: unknown[];
-  },
-) => Buffer;
-
-function bunExecLoginShell(
-  command: string,
-  args: string[],
-  options: {
-    encoding: "buffer";
-    timeout: number;
-    maxBuffer: number;
-    env: NodeJS.ProcessEnv;
-    stdio: unknown[];
-  },
-): Buffer {
-  const proc = Bun.spawnSync([command, ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: options.env as Record<string, string>,
-    timeout: options.timeout,
-  });
-  if (proc.exitCode !== 0 && (!proc.stdout || proc.stdout.byteLength === 0)) {
-    const stderr = proc.stderr ? proc.stderr.toString("utf-8") : "";
-    throw Object.assign(new Error(stderr.trim() || `${command} exited with ${proc.exitCode}`), {
-      status: proc.exitCode,
-    });
-  }
-  return proc.stdout ? Buffer.from(proc.stdout) : Buffer.alloc(0);
-}
 
 function resolveShell(env: NodeJS.ProcessEnv): string {
   const shell = env.SHELL?.trim();
@@ -51,7 +14,7 @@ function resolveShell(env: NodeJS.ProcessEnv): string {
 function execLoginShellEnvZero(params: {
   shell: string;
   env: NodeJS.ProcessEnv;
-  exec: ExecFileSyncBufferFn;
+  exec: typeof execFileSync;
   timeoutMs: number;
 }): Buffer {
   return params.exec(params.shell, ["-l", "-c", "env -0"], {
@@ -95,12 +58,12 @@ export type ShellEnvFallbackOptions = {
   expectedKeys: string[];
   logger?: Pick<typeof console, "warn">;
   timeoutMs?: number;
-  exec?: ExecFileSyncBufferFn;
+  exec?: typeof execFileSync;
 };
 
 export function loadShellEnvFallback(opts: ShellEnvFallbackOptions): ShellEnvFallbackResult {
   const logger = opts.logger ?? console;
-  const exec = opts.exec ?? bunExecLoginShell;
+  const exec = opts.exec ?? execFileSync;
 
   if (!opts.enabled) {
     lastAppliedKeys = [];
@@ -172,7 +135,7 @@ export function resolveShellEnvFallbackTimeoutMs(env: NodeJS.ProcessEnv): number
 export function getShellPathFromLoginShell(opts: {
   env: NodeJS.ProcessEnv;
   timeoutMs?: number;
-  exec?: ExecFileSyncBufferFn;
+  exec?: typeof execFileSync;
 }): string | null {
   if (cachedShellPath !== undefined) {
     return cachedShellPath;
@@ -182,7 +145,7 @@ export function getShellPathFromLoginShell(opts: {
     return cachedShellPath;
   }
 
-  const exec = opts.exec ?? bunExecLoginShell;
+  const exec = opts.exec ?? execFileSync;
   const timeoutMs =
     typeof opts.timeoutMs === "number" && Number.isFinite(opts.timeoutMs)
       ? Math.max(0, opts.timeoutMs)

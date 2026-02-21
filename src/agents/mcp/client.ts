@@ -9,6 +9,8 @@
  * If @modelcontextprotocol/sdk is available, it can be used instead.
  */
 
+import { spawn, type ChildProcess } from "node:child_process";
+import { createInterface } from "node:readline";
 import type { McpServerConfig, McpToolDefinition, McpToolCallResult } from "./types.js";
 
 const INIT_TIMEOUT_MS = 15_000;
@@ -34,56 +36,11 @@ type PendingRequest = {
   timer: ReturnType<typeof setTimeout>;
 };
 
-// Minimal structural type for the MCP server subprocess.
-type McpProcess = {
-  stdin: { write: (data: string | Uint8Array) => unknown; end: () => void } | null;
-  stdout: ReadableStream<Uint8Array> | null | number;
-  exited: Promise<number | null>;
-  signalCode: NodeJS.Signals | null;
-  kill: (signal?: NodeJS.Signals | number) => void;
-};
-
-/**
- * Read lines from a ReadableStream and call onLine for each non-empty line.
- */
-async function readLines(
-  stream: ReadableStream<Uint8Array> | null | number,
-  onLine: (line: string) => void,
-): Promise<void> {
-  if (!(stream instanceof ReadableStream)) {
-    return;
-  }
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      const parts = buffer.split("\n");
-      buffer = parts.pop() ?? "";
-      for (const part of parts) {
-        onLine(part);
-      }
-    }
-    if (buffer) {
-      onLine(buffer);
-    }
-  } catch {
-    // Stream closed.
-  } finally {
-    reader.releaseLock();
-  }
-}
-
 /**
  * MCP client that communicates with a server process via stdio.
  */
 export class McpClient {
-  private process: McpProcess | null = null;
+  private process: ChildProcess | null = null;
   private nextId = 1;
   private pending = new Map<number, PendingRequest>();
   private initialized = false;
@@ -99,12 +56,7 @@ export class McpClient {
    * Start the MCP server process and initialize the connection.
    */
   async connect(): Promise<void> {
-    const env: Record<string, string> = {};
-    for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined) {
-        env[k] = v;
-      }
-    }
+    const env: NodeJS.ProcessEnv = { ...process.env };
     if (this.config.env) {
       for (const [key, value] of Object.entries(this.config.env)) {
         env[key] = value;
@@ -115,26 +67,26 @@ export class McpClient {
       throw new Error(`MCP server ${this.serverName} config missing command`);
     }
 
-    const proc = Bun.spawn([this.config.command, ...(this.config.args ?? [])], {
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "pipe",
+    this.process = spawn(this.config.command, this.config.args ?? [], {
+      stdio: ["pipe", "pipe", "pipe"],
       env,
     });
 
-    if (!proc.stdout || !proc.stdin) {
+    if (!this.process.stdout || !this.process.stdin) {
       throw new Error(`Failed to start MCP server ${this.serverName}: no stdio`);
     }
 
-    this.process = proc;
-
-    // Read JSON-RPC responses line by line (fire-and-forget).
-    void readLines(proc.stdout, (line) => {
+    // Read JSON-RPC responses line by line
+    const rl = createInterface({ input: this.process.stdout });
+    rl.on("line", (line) => {
       this.handleLine(line);
     });
 
-    // Handle process exit.
-    void proc.exited.then((code) => {
+    this.process.on("error", (err) => {
+      this.rejectAll(new Error(`MCP server ${this.serverName} error: ${err.message}`));
+    });
+
+    this.process.on("close", (code) => {
       this.rejectAll(new Error(`MCP server ${this.serverName} exited with code ${code}`));
       this.process = null;
     });
@@ -248,24 +200,26 @@ export class McpClient {
     this.rejectAll(new Error("Client disconnected"));
 
     if (this.process) {
-      const proc = this.process;
-      try {
-        proc.kill("SIGTERM");
-      } catch {
-        // ignore
-      }
-      const killTimer = setTimeout(() => {
-        try {
-          proc.kill("SIGKILL");
-        } catch {
-          // ignore
+      this.process.kill("SIGTERM");
+      // Give it a moment to exit gracefully, then force kill
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          if (this.process) {
+            this.process.kill("SIGKILL");
+          }
+          resolve();
+        }, 2000);
+
+        if (this.process) {
+          this.process.once("close", () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        } else {
+          clearTimeout(timer);
+          resolve();
         }
-      }, 2000);
-      try {
-        await proc.exited;
-      } finally {
-        clearTimeout(killTimer);
-      }
+      });
       this.process = null;
     }
   }
@@ -311,7 +265,7 @@ export class McpClient {
       return;
     }
     const json = JSON.stringify(data);
-    this.process.stdin.write(json + "\n");
+    this.process.stdin?.write(json + "\n");
   }
 
   private handleLine(line: string): void {

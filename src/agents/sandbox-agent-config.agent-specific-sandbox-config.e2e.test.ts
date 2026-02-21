@@ -1,5 +1,7 @@
+import { EventEmitter } from "node:events";
 import path from "node:path";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { Readable } from "node:stream";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 
 type SpawnCall = {
@@ -9,48 +11,35 @@ type SpawnCall = {
 
 const spawnCalls: SpawnCall[] = [];
 
-type MockBunProcess = ReturnType<typeof Bun.spawn>;
-
-function createMockBunProcess(params?: { exitCode?: number }): MockBunProcess {
-  let exitResolve: (code: number | null) => void = () => {};
-  const exited = new Promise<number | null>((resolve) => {
-    exitResolve = resolve;
-  });
-
-  let stdoutCtrl: ReadableStreamDefaultController<Uint8Array> | null = null;
-  let stderrCtrl: ReadableStreamDefaultController<Uint8Array> | null = null;
-
-  const stdout = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      stdoutCtrl = ctrl;
-    },
-  });
-  const stderr = new ReadableStream<Uint8Array>({
-    start(ctrl) {
-      stderrCtrl = ctrl;
-    },
-  });
-
-  const exitCode = params?.exitCode ?? 0;
-  queueMicrotask(() => {
-    stdoutCtrl?.close();
-    stderrCtrl?.close();
-    exitResolve(exitCode);
-  });
-
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
   return {
-    stdout,
-    stderr,
-    exited,
-    exitCode: null,
-    signalCode: null,
-    pid: 1234,
-    kill: vi.fn(),
-    stdin: null,
-  } as unknown as ReturnType<typeof Bun.spawn>;
-}
+    ...actual,
+    spawn: (command: string, args: string[]) => {
+      spawnCalls.push({ command, args });
+      const child = new EventEmitter() as {
+        stdout?: Readable;
+        stderr?: Readable;
+        on: (event: string, cb: (...args: unknown[]) => void) => void;
+        emit: (event: string, ...args: unknown[]) => boolean;
+      };
+      child.stdout = new Readable({ read() {} });
+      child.stderr = new Readable({ read() {} });
 
-let bunSpawnSpy: ReturnType<typeof vi.spyOn>;
+      const dockerArgs = command === "docker" ? args : [];
+      const shouldFailContainerInspect =
+        dockerArgs[0] === "inspect" &&
+        dockerArgs[1] === "-f" &&
+        dockerArgs[2] === "{{.State.Running}}";
+      const shouldSucceedImageInspect = dockerArgs[0] === "image" && dockerArgs[1] === "inspect";
+
+      queueMicrotask(() =>
+        child.emit("close", shouldFailContainerInspect && !shouldSucceedImageInspect ? 1 : 0),
+      );
+      return child;
+    },
+  };
+});
 
 vi.mock("./skills.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./skills.js")>();
@@ -90,25 +79,6 @@ describe("Agent-specific sandbox config", () => {
 
   beforeEach(() => {
     spawnCalls.length = 0;
-
-    bunSpawnSpy = vi.spyOn(Bun, "spawn").mockImplementation((argv: unknown) => {
-      const [command, ...args] = argv as string[];
-      spawnCalls.push({ command: command ?? "", args });
-
-      const dockerArgs = command === "docker" ? args : [];
-      const shouldFailContainerInspect =
-        dockerArgs[0] === "inspect" &&
-        dockerArgs[1] === "-f" &&
-        dockerArgs[2] === "{{.State.Running}}";
-      const shouldSucceedImageInspect = dockerArgs[0] === "image" && dockerArgs[1] === "inspect";
-
-      const exitCode = shouldFailContainerInspect && !shouldSucceedImageInspect ? 1 : 0;
-      return createMockBunProcess({ exitCode });
-    });
-  });
-
-  afterEach(() => {
-    bunSpawnSpy.mockRestore();
   });
 
   it("should use agent-specific workspaceRoot", async () => {

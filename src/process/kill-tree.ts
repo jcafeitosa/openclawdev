@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 const DEFAULT_GRACE_MS = 3000;
 const MAX_GRACE_MS = 60_000;
 
@@ -78,10 +80,8 @@ function killProcessTreeUnix(pid: number, graceMs: number): void {
 
 function runTaskkill(args: string[]): void {
   try {
-    Bun.spawn(["taskkill", ...args], {
-      stdin: null,
-      stdout: null,
-      stderr: null,
+    spawn("taskkill", args, {
+      stdio: "ignore",
       detached: true,
     });
   } catch {

@@ -117,6 +117,7 @@ describe("hooks", () => {
     });
 
     it("should catch and log errors from handlers", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
       const errorHandler = vi.fn(() => {
         throw new Error("Handler failed");
       });
@@ -126,15 +127,16 @@ describe("hooks", () => {
       registerInternalHook("command:new", successHandler);
 
       const event = createInternalHookEvent("command", "new", "test-session");
-      // Should not throw even when a handler throws
-      await expect(triggerInternalHook(event)).resolves.toBeUndefined();
+      await triggerInternalHook(event);
 
-      // Both handlers should have been called
       expect(errorHandler).toHaveBeenCalled();
-      // The error should have been caught internally, so subsequent handlers still run
       expect(successHandler).toHaveBeenCalled();
-      // Note: The structured logger uses silent console in Vitest, so we verify behavior
-      // (error caught + subsequent handler executed) rather than console.error calls.
+      expect(consoleError).toHaveBeenCalledWith(
+        expect.stringContaining("Hook error"),
+        expect.stringContaining("Handler failed"),
+      );
+
+      consoleError.mockRestore();
     });
 
     it("should not throw if no handlers are registered", async () => {

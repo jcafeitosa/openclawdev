@@ -1,18 +1,4 @@
-// Minimal subprocess handle — structurally compatible with Node.js ChildProcess and Bun.Subprocess.
-type StreamLike = {
-  destroy?: () => void;
-  destroyed?: boolean;
-};
-
-type SubprocessHandle = {
-  pid?: number;
-  kill?: (signal?: string | number) => void | boolean;
-  stdin?: StreamLike | null;
-  stdout?: StreamLike | null;
-  stderr?: StreamLike | null;
-  removeAllListeners: () => void;
-  once: (event: string, listener: (...args: unknown[]) => void) => void;
-};
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { createSessionSlug as createSessionSlugId } from "./session-slug.js";
 
 const DEFAULT_JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -47,7 +33,7 @@ export interface ProcessSession {
   notifyOnExit?: boolean;
   notifyOnExitEmptySuccess?: boolean;
   exitNotified?: boolean;
-  child?: SubprocessHandle;
+  child?: ChildProcessWithoutNullStreams;
   stdin?: SessionStdin;
   pid?: number;
   startedAt: number;

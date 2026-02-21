@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 type RespawnMode = "spawned" | "supervised" | "disabled" | "failed";
 
 export type GatewayRespawnResult = {
@@ -5,8 +7,6 @@ export type GatewayRespawnResult = {
   pid?: number;
   detail?: string;
 };
-
-type SpawnLike = (argv: string[], opts: object) => { pid: number; unref(): void };
 
 const SUPERVISOR_HINT_ENV_VARS = [
   "LAUNCH_JOB_LABEL",
@@ -37,9 +37,7 @@ function isLikelySupervisedProcess(env: NodeJS.ProcessEnv = process.env): boolea
  * - OPENCLAW_NO_RESPAWN=1: caller should keep in-process restart behavior (tests/dev)
  * - otherwise: spawn detached child with current argv/execArgv, then caller exits
  */
-export function restartGatewayProcessWithFreshPid(opts?: {
-  spawnImpl?: SpawnLike;
-}): GatewayRespawnResult {
+export function restartGatewayProcessWithFreshPid(): GatewayRespawnResult {
   if (isTruthy(process.env.OPENCLAW_NO_RESPAWN)) {
     return { mode: "disabled" };
   }
@@ -47,19 +45,15 @@ export function restartGatewayProcessWithFreshPid(opts?: {
     return { mode: "supervised" };
   }
 
-  const spawnFn: SpawnLike = opts?.spawnImpl ?? Bun.spawn;
-
   try {
     const args = [...process.execArgv, ...process.argv.slice(1)];
-    const child = spawnFn([process.execPath, ...args], {
-      env: process.env as Record<string, string>,
+    const child = spawn(process.execPath, args, {
+      env: process.env,
       detached: true,
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
+      stdio: "inherit",
     });
     child.unref();
-    return { mode: "spawned", pid: child.pid };
+    return { mode: "spawned", pid: child.pid ?? undefined };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     return { mode: "failed", detail };

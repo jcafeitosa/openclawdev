@@ -245,7 +245,7 @@ function createProfileContext(
 
   const attachRunning = (running: NonNullable<ProfileRuntimeState["running"]>) => {
     setProfileRunning(running);
-    void running.proc.exited.then(() => {
+    running.proc.on("exit", () => {
       // Guard against server teardown (e.g., SIGUSR1 restart)
       if (!opts.getState()) {
         return;

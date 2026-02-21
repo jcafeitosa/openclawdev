@@ -1,3 +1,4 @@
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -44,22 +45,13 @@ function exists(filePath: string) {
   }
 }
 
-// Minimal structural type compatible with Bun.Subprocess for browser process management.
-type BrowserProcess = {
-  pid: number;
-  exitCode: number | null;
-  signalCode: NodeJS.Signals | null;
-  exited: Promise<number | null>;
-  kill: (signal?: NodeJS.Signals | number) => void;
-};
-
 export type RunningChrome = {
   pid: number;
   exe: BrowserExecutable;
   userDataDir: string;
   cdpPort: number;
   startedAt: number;
-  proc: BrowserProcess;
+  proc: ChildProcessWithoutNullStreams;
 };
 
 function resolveBrowserExecutable(resolved: ResolvedBrowserConfig): BrowserExecutable | null {
@@ -188,15 +180,8 @@ export async function launchOpenClawChrome(
     (profile.color ?? DEFAULT_OPENCLAW_BROWSER_COLOR).toUpperCase(),
   );
 
-  const spawnEnv: Record<string, string> = { HOME: os.homedir() };
-  for (const [k, v] of Object.entries(process.env)) {
-    if (v !== undefined) {
-      spawnEnv[k] = v;
-    }
-  }
-
   // First launch to create preference files if missing, then decorate and relaunch.
-  const spawnOnce = (): BrowserProcess => {
+  const spawnOnce = () => {
     const args: string[] = [
       `--remote-debugging-port=${profile.cdpPort}`,
       `--user-data-dir=${userDataDir}`,
@@ -235,11 +220,13 @@ export async function launchOpenClawChrome(
     // Always open a blank tab to ensure a target exists.
     args.push("about:blank");
 
-    return Bun.spawn([exe.path, ...args], {
-      stdin: null,
-      stdout: null,
-      stderr: null,
-      env: spawnEnv,
+    return spawn(exe.path, args, {
+      stdio: "pipe",
+      env: {
+        ...process.env,
+        // Reduce accidental sharing with the user's env.
+        HOME: os.homedir(),
+      },
     });
   };
 
@@ -267,7 +254,7 @@ export async function launchOpenClawChrome(
     }
     const exitDeadline = Date.now() + 5000;
     while (Date.now() < exitDeadline) {
-      if (bootstrap.exitCode != null || bootstrap.signalCode !== null) {
+      if (bootstrap.exitCode != null) {
         break;
       }
       await new Promise((r) => setTimeout(r, 50));
@@ -313,7 +300,7 @@ export async function launchOpenClawChrome(
     );
   }
 
-  const pid = proc.pid;
+  const pid = proc.pid ?? -1;
   log.info(
     `🦞 openclaw browser started (${exe.kind}) profile "${profile.name}" on 127.0.0.1:${profile.cdpPort} (pid ${pid})`,
   );
@@ -330,7 +317,7 @@ export async function launchOpenClawChrome(
 
 export async function stopOpenClawChrome(running: RunningChrome, timeoutMs = 2500) {
   const proc = running.proc;
-  if (proc.exitCode !== null || proc.signalCode !== null) {
+  if (proc.killed) {
     return;
   }
   try {
@@ -341,7 +328,7 @@ export async function stopOpenClawChrome(running: RunningChrome, timeoutMs = 250
 
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (proc.exitCode !== null || proc.signalCode !== null) {
+    if (!proc.exitCode && proc.killed) {
       break;
     }
     if (!(await isChromeReachable(cdpUrlForPort(running.cdpPort), 200))) {

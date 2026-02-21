@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { formatCliCommand } from "../cli/command-format.js";
 import {
   type OpenClawConfig,
@@ -335,29 +336,25 @@ export async function runGmailService(opts: GmailRunOptions) {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  const attachRestart = (proc: ReturnType<typeof Bun.spawn>) => {
-    void proc.exited.then(() => {
+  child.on("exit", () => {
+    if (shuttingDown) {
+      detachSignals();
+      return;
+    }
+    defaultRuntime.log("gog watch serve exited; restarting in 2s");
+    setTimeout(() => {
       if (shuttingDown) {
-        detachSignals();
         return;
       }
-      defaultRuntime.log("gog watch serve exited; restarting in 2s");
-      setTimeout(() => {
-        if (shuttingDown) {
-          return;
-        }
-        child = spawnGogServe(runtimeConfig);
-        attachRestart(child);
-      }, 2000);
-    });
-  };
-  attachRestart(child);
+      child = spawnGogServe(runtimeConfig);
+    }, 2000);
+  });
 }
 
 function spawnGogServe(cfg: GmailHookRuntimeConfig) {
   const args = buildGogWatchServeArgs(cfg);
   defaultRuntime.log(`Starting gog ${args.join(" ")}`);
-  return Bun.spawn(["gog", ...args], { stdin: "inherit", stdout: "inherit", stderr: "inherit" });
+  return spawn("gog", args, { stdio: "inherit" });
 }
 
 async function startGmailWatch(

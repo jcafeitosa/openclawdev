@@ -1,4 +1,6 @@
+import type { ChildProcessWithoutNullStreams, SpawnOptions } from "node:child_process";
 import { killProcessTree } from "../../kill-tree.js";
+import { spawnWithFallback } from "../../spawn-utils.js";
 import type { ManagedRunStdin } from "../types.js";
 import { toStringEnv } from "./env.js";
 
@@ -15,33 +17,6 @@ function resolveCommand(command: string): string {
     return `${command}.cmd`;
   }
   return command;
-}
-
-/**
- * Read chunks from a ReadableStream and call onChunk for each decoded string.
- */
-async function readStreamChunks(
-  stream: ReadableStream<Uint8Array> | null | number,
-  onChunk: (chunk: string) => void,
-): Promise<void> {
-  if (!(stream instanceof ReadableStream)) {
-    return;
-  }
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      onChunk(decoder.decode(value, { stream: true }));
-    }
-  } catch {
-    // Stream closed.
-  } finally {
-    reader.releaseLock();
-  }
 }
 
 export type ChildAdapter = {
@@ -67,132 +42,124 @@ export async function createChildAdapter(params: {
 
   const stdinMode = params.stdinMode ?? (params.input !== undefined ? "pipe-closed" : "inherit");
 
-  // Determine Bun stdin option.
-  // When input is provided, pass it as a Buffer so Bun sends it and auto-closes stdin.
-  // Otherwise, use "inherit" or "pipe" based on stdinMode.
-  let stdinOption: "inherit" | "pipe" | Buffer;
-  if (params.input !== undefined) {
-    stdinOption = Buffer.from(params.input, "utf8");
-  } else if (stdinMode === "inherit") {
-    stdinOption = "inherit";
-  } else {
-    stdinOption = "pipe";
-  }
+  // On Windows, `detached: true` creates a new process group and can prevent
+  // stdout/stderr pipes from connecting when running under a Scheduled Task
+  // (headless, no console). Default to `detached: false` on Windows; on
+  // POSIX systems keep `detached: true` so the child survives parent exit.
+  const useDetached = process.platform !== "win32";
 
-  const proc = Bun.spawn(resolvedArgv, {
-    stdin: stdinOption,
-    stdout: "pipe",
-    stderr: "pipe",
+  const options: SpawnOptions = {
     cwd: params.cwd,
     env: params.env ? toStringEnv(params.env) : undefined,
+    stdio: ["pipe", "pipe", "pipe"],
+    detached: useDetached,
+    windowsHide: true,
+    windowsVerbatimArguments: params.windowsVerbatimArguments,
+  };
+  if (stdinMode === "inherit") {
+    options.stdio = ["inherit", "pipe", "pipe"];
+  } else {
+    options.stdio = ["pipe", "pipe", "pipe"];
+  }
+
+  const spawned = await spawnWithFallback({
+    argv: resolvedArgv,
+    options,
+    fallbacks: useDetached
+      ? [
+          {
+            label: "no-detach",
+            options: { detached: false },
+          },
+        ]
+      : [],
   });
 
-  // If pipe-closed with no initial input, close stdin immediately.
-  if (stdinOption === "pipe" && typeof proc.stdin !== "number" && proc.stdin) {
-    if (stdinMode === "pipe-closed") {
-      try {
-        void proc.stdin.end();
-      } catch {
-        // ignore
+  const child = spawned.child as ChildProcessWithoutNullStreams;
+  if (child.stdin) {
+    if (params.input !== undefined) {
+      child.stdin.write(params.input);
+      child.stdin.end();
+    } else if (stdinMode === "pipe-closed") {
+      child.stdin.end();
+    }
+  }
+
+  const stdin: ManagedRunStdin | undefined = child.stdin
+    ? {
+        destroyed: false,
+        write: (data: string, cb?: (err?: Error | null) => void) => {
+          try {
+            child.stdin.write(data, cb);
+          } catch (err) {
+            cb?.(err as Error);
+          }
+        },
+        end: () => {
+          try {
+            child.stdin.end();
+          } catch {
+            // ignore close errors
+          }
+        },
+        destroy: () => {
+          try {
+            child.stdin.destroy();
+          } catch {
+            // ignore destroy errors
+          }
+        },
       }
-    }
-  }
-
-  // Expose stdin for pipe-open mode.
-  let managedStdin: ManagedRunStdin | undefined;
-  if (
-    stdinOption === "pipe" &&
-    stdinMode === "pipe-open" &&
-    typeof proc.stdin !== "number" &&
-    proc.stdin
-  ) {
-    const fileSink = proc.stdin;
-    managedStdin = {
-      write: (data: string, cb?: (err?: Error | null) => void) => {
-        try {
-          void fileSink.write(data);
-          cb?.();
-        } catch (err) {
-          cb?.(err as Error);
-        }
-      },
-      end: () => {
-        try {
-          void fileSink.end();
-        } catch {
-          // ignore
-        }
-      },
-      destroy: () => {
-        try {
-          void fileSink.end();
-        } catch {
-          // ignore
-        }
-      },
-      destroyed: false,
-    };
-  }
-
-  // Multiplex stdout/stderr to registered listeners via arrays.
-  const stdoutListeners: Array<(chunk: string) => void> = [];
-  const stderrListeners: Array<(chunk: string) => void> = [];
-
-  const stdoutDone = readStreamChunks(proc.stdout, (chunk) => {
-    for (const listener of stdoutListeners) {
-      listener(chunk);
-    }
-  });
-
-  const stderrDone = readStreamChunks(proc.stderr, (chunk) => {
-    for (const listener of stderrListeners) {
-      listener(chunk);
-    }
-  });
+    : undefined;
 
   const onStdout = (listener: (chunk: string) => void) => {
-    stdoutListeners.push(listener);
+    child.stdout.on("data", (chunk) => {
+      listener(chunk.toString());
+    });
   };
 
   const onStderr = (listener: (chunk: string) => void) => {
-    stderrListeners.push(listener);
+    child.stderr.on("data", (chunk) => {
+      listener(chunk.toString());
+    });
   };
 
-  const wait = async () => {
-    const code = await proc.exited;
-    await Promise.all([stdoutDone, stderrDone]);
-    return { code, signal: proc.signalCode };
-  };
+  const wait = async () =>
+    await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", (code, signal) => {
+        resolve({ code, signal });
+      });
+    });
 
   const kill = (signal?: NodeJS.Signals) => {
-    const pid = proc.pid ?? undefined;
+    const pid = child.pid ?? undefined;
     if (signal === undefined || signal === "SIGKILL") {
       if (pid) {
         killProcessTree(pid);
       } else {
         try {
-          proc.kill("SIGKILL");
+          child.kill("SIGKILL");
         } catch {
-          // ignore
+          // ignore kill errors
         }
       }
       return;
     }
     try {
-      proc.kill(signal);
+      child.kill(signal);
     } catch {
-      // ignore
+      // ignore kill errors for non-kill signals
     }
   };
 
   const dispose = () => {
-    stdoutListeners.length = 0;
-    stderrListeners.length = 0;
+    child.removeAllListeners();
   };
 
   return {
-    pid: proc.pid ?? undefined,
-    stdin: managedStdin,
+    pid: child.pid ?? undefined,
+    stdin,
     onStdout,
     onStderr,
     wait,

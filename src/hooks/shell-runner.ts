@@ -5,6 +5,7 @@
  * and environment variable injection for hook context.
  */
 
+import { spawn } from "node:child_process";
 import type { InternalHookEvent } from "./internal-hooks.js";
 import type { JsonHookEntry, JsonHookMatcher } from "./json-loader.js";
 
@@ -91,50 +92,54 @@ export async function runShellHook(
 ): Promise<ShellHookResult> {
   const timeoutMs = entry.timeout ?? DEFAULT_TIMEOUT_MS;
   const env = buildHookEnv(event);
-  const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
-  const shellArgs = process.platform === "win32" ? ["/c", entry.command] : ["-c", entry.command];
 
-  let proc: ReturnType<typeof Bun.spawn>;
-  try {
-    proc = Bun.spawn([shell, ...shellArgs], {
-      env: env as Record<string, string>,
-      stdin: null,
-      stdout: "pipe",
-      stderr: "pipe",
+  return new Promise<ShellHookResult>((resolve) => {
+    const shell = process.platform === "win32" ? "cmd.exe" : "/bin/sh";
+    const shellArgs = process.platform === "win32" ? ["/c", entry.command] : ["-c", entry.command];
+
+    const child = spawn(shell, shellArgs, {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: timeoutMs,
     });
-  } catch (err) {
-    return {
-      ok: false,
-      stdout: "",
-      stderr: `Spawn error: ${err instanceof Error ? err.message : String(err)}`,
-      exitCode: null,
-      timedOut: false,
-    };
-  }
 
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    proc.kill("SIGKILL");
-  }, timeoutMs);
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
 
-  const stdoutP =
-    proc.stdout instanceof ReadableStream ? new Response(proc.stdout).text() : Promise.resolve("");
-  const stderrP =
-    proc.stderr instanceof ReadableStream ? new Response(proc.stderr).text() : Promise.resolve("");
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (stdout.length < MAX_OUTPUT_LENGTH) {
+        stdout += chunk.toString("utf-8");
+      }
+    });
 
-  const exitCode = await proc.exited;
-  clearTimeout(timer);
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (stderr.length < MAX_OUTPUT_LENGTH) {
+        stderr += chunk.toString("utf-8");
+      }
+    });
 
-  const [stdoutRaw, stderrRaw] = await Promise.all([stdoutP, stderrP]);
-  const stdout = stdoutRaw.slice(0, MAX_OUTPUT_LENGTH);
-  const stderr = stderrRaw.slice(0, MAX_OUTPUT_LENGTH);
+    child.on("error", (err) => {
+      resolve({
+        ok: false,
+        stdout: stdout.slice(0, MAX_OUTPUT_LENGTH),
+        stderr: `Spawn error: ${err.message}`,
+        exitCode: null,
+        timedOut: false,
+      });
+    });
 
-  return {
-    ok: exitCode === 0 && !timedOut,
-    stdout,
-    stderr,
-    exitCode: timedOut ? null : exitCode,
-    timedOut,
-  };
+    child.on("close", (code, signal) => {
+      if (signal === "SIGTERM" || signal === "SIGKILL") {
+        timedOut = true;
+      }
+      resolve({
+        ok: code === 0,
+        stdout: stdout.slice(0, MAX_OUTPUT_LENGTH),
+        stderr: stderr.slice(0, MAX_OUTPUT_LENGTH),
+        exitCode: code,
+        timedOut,
+      });
+    });
+  });
 }

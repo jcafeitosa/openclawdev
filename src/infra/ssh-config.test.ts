@@ -1,18 +1,44 @@
+import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 
-function createMockBunProc(params: { stdout: string; exitCode: number }) {
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new TextEncoder().encode(params.stdout));
-      controller.close();
-    },
-  });
-  return {
-    stdout: stream as ReadableStream<Uint8Array> | number | null,
-    exited: Promise.resolve(params.exitCode) as Promise<number | null>,
-    kill: vi.fn() as (signal?: string | number) => void,
-  };
+type MockSpawnChild = EventEmitter & {
+  stdout?: EventEmitter & { setEncoding?: (enc: string) => void };
+  kill?: (signal?: string) => void;
+};
+
+function createMockSpawnChild() {
+  const child = new EventEmitter() as MockSpawnChild;
+  const stdout = new EventEmitter() as MockSpawnChild["stdout"];
+  stdout!.setEncoding = vi.fn();
+  child.stdout = stdout;
+  child.kill = vi.fn();
+  return { child, stdout };
 }
+
+vi.mock("node:child_process", () => {
+  const spawn = vi.fn(() => {
+    const { child, stdout } = createMockSpawnChild();
+    process.nextTick(() => {
+      stdout?.emit(
+        "data",
+        [
+          "user steipete",
+          "hostname peters-mac-studio-1.sheep-coho.ts.net",
+          "port 2222",
+          "identityfile none",
+          "identityfile /tmp/id_ed25519",
+          "",
+        ].join("\n"),
+      );
+      child.emit("exit", 0);
+    });
+    return child;
+  });
+  return { spawn };
+});
+
+const spawnMock = vi.mocked(spawn);
 
 describe("ssh-config", () => {
   it("parses ssh -G output", async () => {
@@ -28,36 +54,28 @@ describe("ssh-config", () => {
 
   it("resolves ssh config via ssh -G", async () => {
     const { resolveSshConfig } = await import("./ssh-config.js");
-    const mockProc = createMockBunProc({
-      stdout: [
-        "user steipete",
-        "hostname peters-mac-studio-1.sheep-coho.ts.net",
-        "port 2222",
-        "identityfile none",
-        "identityfile /tmp/id_ed25519",
-        "",
-      ].join("\n"),
-      exitCode: 0,
-    });
-    const spawnImpl = vi.fn(() => mockProc);
-    const config = await resolveSshConfig({ user: "me", host: "alias", port: 22 }, {}, spawnImpl);
+    const config = await resolveSshConfig({ user: "me", host: "alias", port: 22 });
     expect(config?.user).toBe("steipete");
     expect(config?.host).toBe("peters-mac-studio-1.sheep-coho.ts.net");
     expect(config?.port).toBe(2222);
     expect(config?.identityFiles).toEqual(["/tmp/id_ed25519"]);
-    const argv = spawnImpl.mock.calls[0]?.[0] as string[] | undefined;
-    expect(argv?.slice(-2)).toEqual(["--", "me@alias"]);
+    const args = spawnMock.mock.calls[0]?.[1] as string[] | undefined;
+    expect(args?.slice(-2)).toEqual(["--", "me@alias"]);
   });
 
   it("returns null when ssh -G fails", async () => {
-    const { resolveSshConfig } = await import("./ssh-config.js");
-    const mockProc = createMockBunProc({ stdout: "", exitCode: 1 });
-    const spawnImpl = vi.fn(() => mockProc);
-    const config = await resolveSshConfig(
-      { user: "me", host: "bad-host", port: 22 },
-      {},
-      spawnImpl,
+    spawnMock.mockImplementationOnce(
+      (_command: string, _args: readonly string[], _options: SpawnOptions): ChildProcess => {
+        const { child } = createMockSpawnChild();
+        process.nextTick(() => {
+          child.emit("exit", 1);
+        });
+        return child as unknown as ChildProcess;
+      },
     );
+
+    const { resolveSshConfig } = await import("./ssh-config.js");
+    const config = await resolveSshConfig({ user: "me", host: "bad-host", port: 22 });
     expect(config).toBeNull();
   });
 });

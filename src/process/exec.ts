@@ -1,6 +1,8 @@
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { danger, shouldLogVerbose } from "../globals.js";
 import { logDebug, logError } from "../logger.js";
+import { resolveCommandStdio } from "./spawn-utils.js";
 
 /**
  * Resolves a command for Windows compatibility.
@@ -119,6 +121,7 @@ export async function runCommandWithTimeout(
   const options: CommandOptions =
     typeof optionsOrTimeout === "number" ? { timeoutMs: optionsOrTimeout } : optionsOrTimeout;
   const { timeoutMs, cwd, input, env, noOutputTimeoutMs } = options;
+  const { windowsVerbatimArguments } = options;
   const hasInput = input !== undefined;
 
   const shouldSuppressNpmFund = (() => {
@@ -148,128 +151,108 @@ export async function runCommandWithTimeout(
     }
   }
 
+  const stdio = resolveCommandStdio({ hasInput, preferInherit: true });
   const resolvedCommand = resolveCommand(argv[0] ?? "");
-  const stdinMode: Buffer | "inherit" = hasInput ? Buffer.from(input ?? "", "utf8") : "inherit";
-
-  const proc = Bun.spawn([resolvedCommand, ...argv.slice(1)], {
-    stdin: stdinMode,
-    stdout: "pipe",
-    stderr: "pipe",
-    ...(cwd !== undefined && { cwd }),
+  const child = spawn(resolvedCommand, argv.slice(1), {
+    stdio,
+    cwd,
     env: resolvedEnv,
+    windowsVerbatimArguments,
+    ...(shouldSpawnWithShell({ resolvedCommand, platform: process.platform })
+      ? { shell: true }
+      : {}),
   });
+  // Spawn with inherited stdin (TTY) so tools like `pi` stay interactive when needed.
+  return await new Promise((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timedOut = false;
+    let noOutputTimedOut = false;
+    let noOutputTimer: NodeJS.Timeout | null = null;
+    const shouldTrackOutputTimeout =
+      typeof noOutputTimeoutMs === "number" &&
+      Number.isFinite(noOutputTimeoutMs) &&
+      noOutputTimeoutMs > 0;
 
-  let killed = false;
-  let timedOut = false;
-  let noOutputTimedOut = false;
-  let settled = false;
+    const clearNoOutputTimer = () => {
+      if (!noOutputTimer) {
+        return;
+      }
+      clearTimeout(noOutputTimer);
+      noOutputTimer = null;
+    };
 
-  const noOutputMs =
-    typeof noOutputTimeoutMs === "number" &&
-    Number.isFinite(noOutputTimeoutMs) &&
-    noOutputTimeoutMs > 0
-      ? Math.floor(noOutputTimeoutMs)
-      : 0;
-  const shouldTrackOutputTimeout = noOutputMs > 0;
+    const armNoOutputTimer = () => {
+      if (!shouldTrackOutputTimeout || settled) {
+        return;
+      }
+      clearNoOutputTimer();
+      noOutputTimer = setTimeout(() => {
+        if (settled) {
+          return;
+        }
+        noOutputTimedOut = true;
+        if (typeof child.kill === "function") {
+          child.kill("SIGKILL");
+        }
+      }, Math.floor(noOutputTimeoutMs));
+    };
 
-  let noOutputTimer: ReturnType<typeof setTimeout> | null = null;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      if (typeof child.kill === "function") {
+        child.kill("SIGKILL");
+      }
+    }, timeoutMs);
+    armNoOutputTimer();
 
-  const clearNoOutputTimer = () => {
-    if (!noOutputTimer) {
-      return;
+    if (hasInput && child.stdin) {
+      child.stdin.write(input ?? "");
+      child.stdin.end();
     }
-    clearTimeout(noOutputTimer);
-    noOutputTimer = null;
-  };
 
-  const armNoOutputTimer = () => {
-    if (!shouldTrackOutputTimeout || settled) {
-      return;
-    }
-    clearNoOutputTimer();
-    noOutputTimer = setTimeout(() => {
+    child.stdout?.on("data", (d) => {
+      stdout += d.toString();
+      armNoOutputTimer();
+    });
+    child.stderr?.on("data", (d) => {
+      stderr += d.toString();
+      armNoOutputTimer();
+    });
+    child.on("error", (err) => {
       if (settled) {
         return;
       }
-      noOutputTimedOut = true;
-      killed = true;
-      try {
-        proc.kill("SIGKILL");
-      } catch {
-        // ignore
+      settled = true;
+      clearTimeout(timer);
+      clearNoOutputTimer();
+      reject(err);
+    });
+    child.on("close", (code, signal) => {
+      if (settled) {
+        return;
       }
-    }, noOutputMs);
-  };
-
-  const overallTimer = setTimeout(() => {
-    timedOut = true;
-    killed = true;
-    try {
-      proc.kill("SIGKILL");
-    } catch {
-      // ignore
-    }
-  }, timeoutMs);
-
-  armNoOutputTimer();
-
-  const readStream = async (
-    stream: ReadableStream<Uint8Array> | number | null | undefined,
-  ): Promise<string> => {
-    if (!(stream instanceof ReadableStream)) {
-      return "";
-    }
-    const reader = stream.getReader();
-    const decoder = new TextDecoder();
-    let result = "";
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        result += decoder.decode(value, { stream: true });
-        armNoOutputTimer();
-      }
-    } catch {
-      // Stream closed.
-    } finally {
-      reader.releaseLock();
-    }
-    return result;
-  };
-
-  const stdoutP = readStream(proc.stdout);
-  const stderrP = readStream(proc.stderr);
-
-  let exitCode: number | null = null;
-  try {
-    exitCode = await proc.exited;
-  } finally {
-    settled = true;
-    clearTimeout(overallTimer);
-    clearNoOutputTimer();
-  }
-
-  const [stdout, stderr] = await Promise.all([stdoutP, stderrP]);
-
-  const signal = proc.signalCode;
-  const termination: SpawnResult["termination"] = noOutputTimedOut
-    ? "no-output-timeout"
-    : timedOut
-      ? "timeout"
-      : signal != null
-        ? "signal"
-        : "exit";
-
-  return {
-    pid: proc.pid,
-    stdout,
-    stderr,
-    code: exitCode,
-    signal,
-    killed,
-    termination,
-    noOutputTimedOut,
-  };
+      settled = true;
+      clearTimeout(timer);
+      clearNoOutputTimer();
+      const termination = noOutputTimedOut
+        ? "no-output-timeout"
+        : timedOut
+          ? "timeout"
+          : signal != null
+            ? "signal"
+            : "exit";
+      resolve({
+        pid: child.pid ?? undefined,
+        stdout,
+        stderr,
+        code,
+        signal,
+        killed: child.killed,
+        termination,
+        noOutputTimedOut,
+      });
+    });
+  });
 }

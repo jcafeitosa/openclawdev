@@ -1,18 +1,9 @@
 import { EventEmitter } from "node:events";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import zlib from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetLogger, setLoggerOverride } from "../logging.js";
 import { renderQrPngBase64 } from "./qr-image.js";
-
-// Bun.deflateSync is used by png-encode.ts. Vitest runs in Node.js so we need to stub it.
-vi.stubGlobal("Bun", {
-  deflateSync: (data: Uint8Array): Uint8Array => {
-    // Node's zlib.deflateSync produces zlib-wrapped DEFLATE (same as Bun.deflateSync).
-    return new Uint8Array(zlib.deflateSync(Buffer.from(data)));
-  },
-});
 
 vi.mock("./session.js", () => {
   const ev = new EventEmitter();

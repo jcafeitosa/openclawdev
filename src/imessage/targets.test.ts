@@ -6,6 +6,12 @@ import {
   parseIMessageTarget,
 } from "./targets.js";
 
+const spawnMock = vi.hoisted(() => vi.fn());
+
+vi.mock("node:child_process", () => ({
+  spawn: (...args: unknown[]) => spawnMock(...args),
+}));
+
 describe("imessage targets", () => {
   it("parses chat_id targets", () => {
     const target = parseIMessageTarget("chat_id:123");
@@ -73,6 +79,7 @@ describe("imessage targets", () => {
 
 describe("createIMessageRpcClient", () => {
   beforeEach(() => {
+    spawnMock.mockReset();
     vi.stubEnv("VITEST", "true");
   });
 
@@ -81,5 +88,6 @@ describe("createIMessageRpcClient", () => {
     await expect(createIMessageRpcClient()).rejects.toThrow(
       /Refusing to start imsg rpc in test environment/i,
     );
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 });

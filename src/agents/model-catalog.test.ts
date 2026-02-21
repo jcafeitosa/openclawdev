@@ -11,8 +11,7 @@ describe("loadModelCatalog", () => {
   installModelCatalogTestHooks();
 
   it("retries after import failure without poisoning the cache", async () => {
-    // Suppress the structured logger warning (which uses silent console in Vitest)
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const getCallCount = mockCatalogImportFailThenRecover();
 
     const cfg = {} as OpenClawConfig;
@@ -21,24 +20,17 @@ describe("loadModelCatalog", () => {
 
     const second = await loadModelCatalog({ config: cfg });
     expect(second).toEqual([{ id: "gpt-4.1", name: "GPT-4.1", provider: "openai" }]);
-    // Verify the mock was called twice: once (fail) and once (recover)
     expect(getCallCount()).toBe(2);
-    // Note: The structured logger uses a silent console in Vitest, so we don't
-    // assert on console.warn calls — we just verify the retry behavior via call count.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns partial results on discovery errors", async () => {
-    // Suppress any console output during this test
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     __setModelCatalogImportForTest(
       async () =>
         ({
-          AuthStorage: class {
-            static create() {
-              return {};
-            }
-          },
+          AuthStorage: class {},
           ModelRegistry: class {
             getAll() {
               return [
@@ -56,22 +48,16 @@ describe("loadModelCatalog", () => {
         }) as unknown as PiSdkModule,
     );
 
-    // When processing throws mid-loop, partial results already accumulated should be returned
     const result = await loadModelCatalog({ config: {} as OpenClawConfig });
     expect(result).toEqual([{ id: "gpt-4.1", name: "GPT-4.1", provider: "openai" }]);
-    // The structured logger silences console output in Vitest, so we verify behavior
-    // by checking that the partial results are returned rather than checking warn calls.
+    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("adds openai-codex/gpt-5.3-codex-spark when base gpt-5.3-codex exists", async () => {
     __setModelCatalogImportForTest(
       async () =>
         ({
-          AuthStorage: class {
-            static create() {
-              return {};
-            }
-          },
+          AuthStorage: class {},
           ModelRegistry: class {
             getAll() {
               return [
