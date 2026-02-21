@@ -18,6 +18,10 @@ export type VoiceProps = {
 
 export function renderVoice(props: VoiceProps) {
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Voice Controls</div>
+      <div class="page-header__sub">Text-to-speech, wake word, and talk mode settings.</div>
+    </div>
     <section class="card">
       <div class="row" style="justify-content: space-between; align-items: flex-start;">
         <div>

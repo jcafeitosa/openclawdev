@@ -50,7 +50,12 @@ export function renderChannels(props: ChannelsProps) {
       return a.order - b.order;
     });
 
+  const activeCount = orderedChannels.filter((c) => c.enabled).length;
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Channels</div>
+      <div class="page-header__sub">${activeCount} of ${orderedChannels.length} channels configured.</div>
+    </div>
     <section class="grid grid-cols-2">
       ${orderedChannels.map((channel) =>
         renderChannel(channel.key, props, {

@@ -49,6 +49,10 @@ export function renderNodes(props: NodesProps) {
   const bindingState = resolveBindingsState(props);
   const approvalsState = resolveExecApprovalsState(props);
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Nodes</div>
+      <div class="page-header__sub">Paired devices, exec approvals, and live node links.</div>
+    </div>
     ${renderExecApprovals(approvalsState)}
     ${renderBindings(bindingState)}
     ${renderDevices(props)}

@@ -33,6 +33,10 @@ export function renderDebug(props: DebugProps) {
     critical > 0 ? `${critical} critical` : warn > 0 ? `${warn} warnings` : "No critical issues";
 
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Debug</div>
+      <div class="page-header__sub">Gateway status snapshots, RPC tester, and event log.</div>
+    </div>
     <section class="grid grid-cols-2">
       <div class="card">
         <div class="row" style="justify-content: space-between;">

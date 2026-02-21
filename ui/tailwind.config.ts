@@ -33,6 +33,7 @@ export default {
       fontFamily: {
         sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
         mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        display: ["Plus Jakarta Sans", "Inter", "sans-serif"],
       },
       fontSize: {
         xs: ["12px", { lineHeight: "1.5" }],

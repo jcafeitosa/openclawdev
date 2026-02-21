@@ -12,24 +12,6 @@ export type HealthProps = {
   onRefresh: () => void;
 };
 
-function channelStatusColor(status: string): string {
-  switch (status) {
-    case "connected":
-    case "healthy":
-    case "ok":
-      return "var(--ok)";
-    case "degraded":
-    case "warning":
-      return "var(--warn)";
-    case "disconnected":
-    case "error":
-    case "down":
-      return "var(--danger)";
-    default:
-      return "var(--muted)";
-  }
-}
-
 function formatDuration(ms: number): string {
   if (ms < 1000) {
     return `${ms}ms`;
@@ -131,26 +113,21 @@ function renderSystemResources(sys: SystemResourceMetrics) {
       <div class="card-title">System Resources</div>
       <div class="card-sub">Machine and process resource utilization.</div>
 
-      <div class="grid" style="margin-top: 16px; margin-bottom: 16px; grid-template-columns: repeat(4, minmax(0, 1fr));">
-        <div class="card stat-card">
-          <div class="stat-label">Hostname</div>
-          <div class="stat-value" style="font-size: 16px; word-break: break-all;">${sys.platform.hostname}</div>
-          <div class="muted">${sys.platform.os}</div>
+      <div class="bento-grid-3" style="margin-top: 16px; margin-bottom: 16px;">
+        <div class="kpi-card">
+          <div class="kpi-label">Hostname</div>
+          <div class="kpi-value" style="font-size: 16px; word-break: break-all;">${sys.platform.hostname}</div>
+          <div class="kpi-sub">${sys.platform.os} · ${sys.platform.arch}</div>
         </div>
-        <div class="card stat-card">
-          <div class="stat-label">Architecture</div>
-          <div class="stat-value" style="font-size: 16px;">${sys.platform.arch}</div>
-          <div class="muted">${sys.cpu.cores} cores</div>
+        <div class="kpi-card">
+          <div class="kpi-label">System Uptime</div>
+          <div class="kpi-value" style="font-size: 16px;">${formatUptime(sys.uptime.systemSeconds)}</div>
+          <div class="kpi-sub">${sys.cpu.cores} cores · Node ${sys.platform.nodeVersion}</div>
         </div>
-        <div class="card stat-card">
-          <div class="stat-label">System Uptime</div>
-          <div class="stat-value" style="font-size: 16px;">${formatUptime(sys.uptime.systemSeconds)}</div>
-          <div class="muted">Node ${sys.platform.nodeVersion}</div>
-        </div>
-        <div class="card stat-card">
-          <div class="stat-label">Process Uptime</div>
-          <div class="stat-value" style="font-size: 16px;">${formatUptime(sys.uptime.processSeconds)}</div>
-          <div class="muted">RSS: ${formatBytes(sys.memory.process.rssBytes)}</div>
+        <div class="kpi-card">
+          <div class="kpi-label">Process Uptime</div>
+          <div class="kpi-value" style="font-size: 16px;">${formatUptime(sys.uptime.processSeconds)}</div>
+          <div class="kpi-sub">RSS: ${formatBytes(sys.memory.process.rssBytes)}</div>
         </div>
       </div>
 
@@ -168,15 +145,38 @@ function renderSystemResources(sys: SystemResourceMetrics) {
   `;
 }
 
+function channelStatusBadge(status: string) {
+  switch (status) {
+    case "connected":
+    case "healthy":
+    case "ok":
+      return "badge-ok";
+    case "degraded":
+    case "warning":
+      return "badge-warn";
+    case "disconnected":
+    case "error":
+    case "down":
+      return "badge-danger";
+    default:
+      return "badge-muted";
+  }
+}
+
 export function renderHealth(props: HealthProps) {
   const data = props.data;
 
   return html`
+    <div class="page-header">
+      <div class="page-header__title">System Health</div>
+      <div class="page-header__sub">Gateway health snapshot and channel status.</div>
+    </div>
+
     <section class="card">
       <div class="row" style="justify-content: space-between; align-items: flex-start;">
         <div>
-          <div class="card-title">System Health</div>
-          <div class="card-sub">Gateway health snapshot and channel status.</div>
+          <div class="card-title">Overview</div>
+          <div class="card-sub">Current gateway and session status.</div>
         </div>
         <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
           ${props.loading ? "Loading..." : "Refresh"}
@@ -189,23 +189,31 @@ export function renderHealth(props: HealthProps) {
         props.loading && !data
           ? renderSpinner("Loading health data...")
           : html`
-            <div class="grid grid-cols-3" style="margin-top: 16px;">
-              <div class="card stat-card">
-                <div class="stat-label">Gateway</div>
-                <div class="stat-value ${props.connected ? "ok" : ""}">
-                  ${props.connected ? "Online" : "Offline"}
+            <div class="bento-grid-3" style="margin-top: 16px;">
+              <div class="kpi-card">
+                <div class="kpi-label">Gateway</div>
+                <div class="kpi-value">
+                  ${
+                    props.connected
+                      ? html`
+                          <span class="badge badge-ok">Online</span>
+                        `
+                      : html`
+                          <span class="badge badge-danger">Offline</span>
+                        `
+                  }
                 </div>
-                ${data ? html`<div class="muted">Probe: ${formatDuration(data.durationMs)}</div>` : nothing}
+                ${data ? html`<div class="kpi-sub">Probe: ${formatDuration(data.durationMs)}</div>` : nothing}
               </div>
-              <div class="card stat-card">
-                <div class="stat-label">Sessions</div>
-                <div class="stat-value">${data?.sessionCount ?? 0}</div>
-                ${data?.sessionPath ? html`<div class="muted" style="word-break: break-all; font-size: 11px;">${data.sessionPath}</div>` : nothing}
+              <div class="kpi-card">
+                <div class="kpi-label">Sessions</div>
+                <div class="kpi-value">${data?.sessionCount ?? 0}</div>
+                ${data?.sessionPath ? html`<div class="kpi-sub" style="word-break: break-all;">${data.sessionPath}</div>` : nothing}
               </div>
-              <div class="card stat-card">
-                <div class="stat-label">Channels</div>
-                <div class="stat-value">${data?.channels.length ?? 0}</div>
-                <div class="muted">
+              <div class="kpi-card">
+                <div class="kpi-label">Channels</div>
+                <div class="kpi-value">${data?.channels.length ?? 0}</div>
+                <div class="kpi-sub">
                   ${data ? `${data.channels.filter((c) => c.linked).length} linked` : ""}
                 </div>
               </div>
@@ -241,8 +249,15 @@ export function renderHealth(props: HealthProps) {
                     </div>
                     <div class="list-meta" style="text-align: right;">
                       <div>
-                        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: ${agent.heartbeatAlive ? "var(--ok)" : "var(--danger)"}; margin-right: 4px;"></span>
-                        ${agent.heartbeatAlive ? "Alive" : "Dead"}
+                        ${
+                          agent.heartbeatAlive
+                            ? html`
+                                <span class="badge badge-ok">Alive</span>
+                              `
+                            : html`
+                                <span class="badge badge-danger">Dead</span>
+                              `
+                        }
                       </div>
                       <div class="muted">${formatHeartbeatAge(agent.heartbeatAgeMs)}</div>
                       <div class="muted">${agent.sessionCount} sessions</div>
@@ -266,9 +281,8 @@ export function renderHealth(props: HealthProps) {
               ${props.channels.map(
                 (ch) => html`
                   <div class="health-channel-cell">
-                    <div style="width: 8px; height: 8px; border-radius: 50%; background: ${channelStatusColor(ch.status)}; flex-shrink: 0;"></div>
                     <span>${ch.id}</span>
-                    <span class="muted" style="font-size: 11px;">${ch.status}</span>
+                    <span class="badge ${channelStatusBadge(ch.status)}">${ch.status}</span>
                   </div>
                 `,
               )}

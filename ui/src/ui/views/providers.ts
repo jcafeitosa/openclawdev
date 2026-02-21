@@ -74,6 +74,11 @@ export function renderProviders(props: ProvidersProps) {
   const totalCount = props.entries.length;
 
   return html`
+    <div class="page-header">
+      <div class="page-header__title">AI Providers</div>
+      <div class="page-header__sub">${detectedCount} of ${totalCount} providers detected and healthy.</div>
+    </div>
+
     <section class="grid grid-cols-3" style="margin-bottom: 18px;">
       <div class="card stat-card">
         <div class="stat-label">Instances</div>

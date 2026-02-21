@@ -61,7 +61,12 @@ export function renderCron(props: CronProps) {
   const selectedRunTitle = selectedJob?.name ?? props.runsJobId ?? "(select a job)";
   const orderedRuns = props.runs.toSorted((a, b) => b.ts - a.ts);
   return html`
-    <section class="grid grid-cols-2">
+    <div class="page-header">
+      <div class="page-header__title">Cron Scheduler</div>
+      <div class="page-header__sub">Manage scheduled jobs and inspect run history.</div>
+    </div>
+
+    <section class="bento-grid-2">
       <div class="card">
         <div class="card-title">Scheduler</div>
         <div class="card-sub">Gateway-owned cron scheduler status.</div>
@@ -69,7 +74,19 @@ export function renderCron(props: CronProps) {
           <div class="stat">
             <div class="stat-label">Enabled</div>
             <div class="stat-value">
-              ${props.status ? (props.status.enabled ? "Yes" : "No") : "n/a"}
+              ${
+                props.status
+                  ? props.status.enabled
+                    ? html`
+                        <span class="badge badge-ok">Yes</span>
+                      `
+                    : html`
+                        <span class="badge badge-danger">No</span>
+                      `
+                  : html`
+                      <span class="badge badge-muted">n/a</span>
+                    `
+              }
             </div>
           </div>
           <div class="stat">
@@ -395,11 +412,11 @@ function renderJob(job: CronJob, props: CronProps) {
       </div>
       <div class="cron-job-footer">
         <div class="chip-row cron-job-chips">
-          <span class=${`chip ${job.enabled ? "chip-ok" : "chip-danger"}`}>
+          <span class=${`badge ${job.enabled ? "badge-ok" : "badge-danger"}`}>
             ${job.enabled ? "enabled" : "disabled"}
           </span>
-          <span class="chip">${job.sessionTarget}</span>
-          <span class="chip">${job.wakeMode}</span>
+          <span class="badge badge-muted">${job.sessionTarget}</span>
+          <span class="badge badge-muted">${job.wakeMode}</span>
         </div>
         <div class="row cron-job-actions">
           <button
@@ -528,7 +545,9 @@ function renderRun(entry: CronRunLogEntry, basePath: string) {
   return html`
     <div class="list-item">
       <div class="list-main">
-        <div class="list-title">${entry.status}</div>
+        <div class="list-title">
+          <span class="badge ${entry.status === "ok" ? "badge-ok" : entry.status === "error" ? "badge-danger" : "badge-muted"}">${entry.status}</span>
+        </div>
         <div class="list-sub">${entry.summary ?? ""}</div>
       </div>
       <div class="list-meta">

@@ -1,5 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
-
 /* ===========================================
    Design System Tokens — OpenClaw Pro
    Based on UI/UX Pro Max guidelines:
@@ -19,7 +17,7 @@
   --bg-surface: #1a1c24;
 
   /* ── Card / Surface with glassmorphism ── */
-  --card: rgba(22, 24, 31, 0.85);
+  --card: rgba(22, 24, 31, 0.92);
   --card-solid: #16181f;
   --card-foreground: #f4f4f5;
   --card-highlight: rgba(255, 255, 255, 0.04);
@@ -95,11 +93,12 @@
   --theme-switch-x: 50%;
   --theme-switch-y: 50%;
 
-  /* ── Typography — Inter for data-dense dashboards ── */
+  /* ── Typography — Inter body, Plus Jakarta Sans for display headings ── */
   --mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, monospace;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Plus Jakarta Sans", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display-weight: 600;
 
   /* ── Shadows (Layered for depth) ── */
   --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);

@@ -56,11 +56,16 @@ export function renderLogs(props: LogsProps) {
   const exportLabel = needle || levelFiltered ? "filtered" : "visible";
 
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Logs</div>
+      <div class="page-header__sub">Gateway file logs (JSONL).</div>
+    </div>
+
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">Logs</div>
-          <div class="card-sub">Gateway file logs (JSONL).</div>
+          <div class="card-title">Log Stream</div>
+          <div class="card-sub">${filtered.length} entries${needle ? " (filtered)" : ""}</div>
         </div>
         <div class="row" style="gap: 8px;">
           <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>

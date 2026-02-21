@@ -76,13 +76,26 @@ const TIME_RANGES: Array<{ value: "1h" | "24h" | "7d" | "30d" | "all"; label: st
   { value: "all", label: "All time" },
 ];
 
+function severityBadgeClass(severity: SecurityEventSeverity): string {
+  switch (severity) {
+    case "critical":
+      return "badge-danger";
+    case "high":
+      return "badge-warn";
+    case "medium":
+      return "badge-info";
+    case "low":
+      return "badge-muted";
+    case "info":
+      return "badge-muted";
+    default:
+      return "badge-muted";
+  }
+}
+
 function severityBadge(severity: SecurityEventSeverity) {
-  const color = severityColor(severity);
   return html`
-    <span
-      class="chip"
-      style="background: ${color}20; color: ${color}; border: 1px solid ${color}40;"
-    >
+    <span class="badge ${severityBadgeClass(severity)}">
       ${severity}
     </span>
   `;
@@ -113,17 +126,17 @@ function renderSecurityTabs(props: SecurityProps) {
   ];
 
   return html`
-    <div class="tabs" style="margin-bottom: 16px;">
+    <div class="dash-tabs" style="margin-bottom: 16px;">
       ${tabs.map(
         (tab) => html`
           <button
-            class="tab ${props.activeTab === tab.id ? "tab--active" : ""}"
+            class="dash-tab ${props.activeTab === tab.id ? "active" : ""}"
             @click=${() => props.onTabChange(tab.id)}
           >
             ${tab.label}
             ${
               tab.count !== undefined && tab.count > 0
-                ? html`<span class="badge" style="margin-left: 6px;">${tab.count}</span>`
+                ? html`<span class="badge badge-danger" style="margin-left: 6px;">${tab.count}</span>`
                 : nothing
             }
           </button>
@@ -147,43 +160,29 @@ function renderSummaryTab(props: SecurityProps) {
       : summary?.status === "warning"
         ? "Warning"
         : "Healthy";
-  const statusColor =
-    summary?.status === "critical"
-      ? "var(--danger)"
-      : summary?.status === "warning"
-        ? "var(--warn)"
-        : "var(--ok)";
-
   return html`
     <!-- Status Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: 20px;">
-      <div class="card stat-card">
-        <div class="stat-label">Security Status</div>
-        <div class="stat-value" style="color: ${statusColor}; display: flex; align-items: center; gap: 8px;">
+    <div class="bento-grid-3" style="margin-bottom: 20px;">
+      <div class="kpi-card">
+        <div class="kpi-label">Security Status</div>
+        <div class="kpi-value" style="display: flex; align-items: center; gap: 8px;">
           ${summary ? statusIcon(summary.status) : nothing}
-          ${statusText}
+          <span class="badge ${summary?.status === "critical" ? "badge-danger" : summary?.status === "warning" ? "badge-warn" : "badge-ok"}">${statusText}</span>
         </div>
-        <div class="muted">${summary?.period ?? "24h"} overview</div>
+        <div class="kpi-sub">${summary?.period ?? "24h"} overview</div>
       </div>
-      <div class="card stat-card">
-        <div class="stat-label">Total Events</div>
-        <div class="stat-value">${summary?.totalEvents ?? 0}</div>
-        <div class="muted">
-          <span style="color: var(--danger);">${summary?.criticalCount ?? 0} critical</span>,
-          <span style="color: var(--warn);">${summary?.highCount ?? 0} high</span>
+      <div class="kpi-card">
+        <div class="kpi-label">Total Events</div>
+        <div class="kpi-value">${summary?.totalEvents ?? 0}</div>
+        <div class="kpi-sub">
+          <span class="badge badge-danger">${summary?.criticalCount ?? 0} critical</span>
+          <span class="badge badge-warn">${summary?.highCount ?? 0} high</span>
         </div>
       </div>
-      <div class="card stat-card">
-        <div class="stat-label">Blocked Threats</div>
-        <div class="stat-value" style="color: var(--ok);">${summary?.blockedCount ?? 0}</div>
-        <div class="muted">Attacks prevented</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-label">Active Alerts</div>
-        <div class="stat-value" style="color: ${(summary?.criticalCount ?? 0) > 0 ? "var(--danger)" : "var(--ok)"};">
-          ${(summary?.criticalCount ?? 0) + (summary?.highCount ?? 0)}
-        </div>
-        <div class="muted">Require attention</div>
+      <div class="kpi-card">
+        <div class="kpi-label">Blocked Threats</div>
+        <div class="kpi-value" style="color: var(--ok);">${summary?.blockedCount ?? 0}</div>
+        <div class="kpi-sub">Attacks prevented</div>
       </div>
     </div>
 
@@ -278,7 +277,7 @@ function renderEventItem(event: SecurityEvent) {
           ${
             event.blocked
               ? html`
-                  <span class="chip chip-ok" style="font-size: 10px">BLOCKED</span>
+                  <span class="badge badge-ok">BLOCKED</span>
                 `
               : nothing
           }
@@ -489,25 +488,28 @@ function renderAuditTab(props: SecurityProps) {
         : audit
           ? html`
             <!-- Audit Summary -->
-            <div class="grid grid-cols-4" style="margin-bottom: 20px;">
-              <div class="card stat-card">
-                <div class="stat-label">Audit Status</div>
-                <div class="stat-value" style="color: ${audit.status === "critical" ? "var(--danger)" : audit.status === "warning" ? "var(--warn)" : "var(--ok)"}; display: flex; align-items: center; gap: 8px;">
+            <div class="bento-grid-3" style="margin-bottom: 20px;">
+              <div class="kpi-card">
+                <div class="kpi-label">Audit Status</div>
+                <div class="kpi-value" style="display: flex; align-items: center; gap: 8px;">
                   ${statusIcon(audit.status)}
-                  ${audit.status === "critical" ? "Critical" : audit.status === "warning" ? "Warning" : "Healthy"}
+                  <span class="badge ${audit.status === "critical" ? "badge-danger" : audit.status === "warning" ? "badge-warn" : "badge-ok"}">
+                    ${audit.status === "critical" ? "Critical" : audit.status === "warning" ? "Warning" : "Healthy"}
+                  </span>
                 </div>
               </div>
-              <div class="card stat-card">
-                <div class="stat-label">Total Findings</div>
-                <div class="stat-value">${audit.totalFindings}</div>
+              <div class="kpi-card">
+                <div class="kpi-label">Total Findings</div>
+                <div class="kpi-value">${audit.totalFindings}</div>
+                <div class="kpi-sub">
+                  <span class="badge badge-danger">${audit.criticalCount} critical</span>
+                  <span class="badge badge-warn">${audit.warningCount} warnings</span>
+                </div>
               </div>
-              <div class="card stat-card">
-                <div class="stat-label">Critical</div>
-                <div class="stat-value" style="color: var(--danger);">${audit.criticalCount}</div>
-              </div>
-              <div class="card stat-card">
-                <div class="stat-label">Warnings</div>
-                <div class="stat-value" style="color: var(--warn);">${audit.warningCount}</div>
+              <div class="kpi-card">
+                <div class="kpi-label">Issues</div>
+                <div class="kpi-value">${audit.criticalCount + audit.warningCount}</div>
+                <div class="kpi-sub">Require attention</div>
               </div>
             </div>
 
@@ -524,10 +526,7 @@ function renderAuditTab(props: SecurityProps) {
                           <div class="list-item">
                             <div class="list-main">
                               <div class="list-title" style="display: flex; align-items: center; gap: 8px;">
-                                <span
-                                  class="chip"
-                                  style="background: ${finding.severity === "critical" ? "var(--danger)" : finding.severity === "warn" ? "var(--warn)" : "var(--muted)"}20; color: ${finding.severity === "critical" ? "var(--danger)" : finding.severity === "warn" ? "var(--warn)" : "var(--muted)"}; border: 1px solid ${finding.severity === "critical" ? "var(--danger)" : finding.severity === "warn" ? "var(--warn)" : "var(--muted)"}40;"
-                                >
+                                <span class="badge ${finding.severity === "critical" ? "badge-danger" : finding.severity === "warn" ? "badge-warn" : "badge-muted"}">
                                   ${finding.severity}
                                 </span>
                                 ${finding.title}
@@ -574,11 +573,16 @@ function renderAuditTab(props: SecurityProps) {
 
 export function renderSecurity(props: SecurityProps) {
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Security Monitoring</div>
+      <div class="page-header__sub">Monitor security events, alerts, and threats in real-time.</div>
+    </div>
+
     <section class="card">
       <div class="row" style="justify-content: space-between; align-items: flex-start;">
         <div>
-          <div class="card-title">Security Monitoring</div>
-          <div class="card-sub">Monitor security events, alerts, and threats in real-time.</div>
+          <div class="card-title">Security</div>
+          <div class="card-sub">Events, alerts, and audit reports.</div>
         </div>
         <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
           ${props.loading ? "Loading..." : "Refresh"}
@@ -589,11 +593,13 @@ export function renderSecurity(props: SecurityProps) {
 
       ${renderSecurityTabs(props)}
 
-      ${props.activeTab === "summary" ? renderSummaryTab(props) : nothing}
-      ${props.activeTab === "events" ? renderEventsTab(props) : nothing}
-      ${props.activeTab === "alerts" ? renderAlertsTab(props) : nothing}
-      ${props.activeTab === "blocked" ? renderBlockedTab(props) : nothing}
-      ${props.activeTab === "audit" ? renderAuditTab(props) : nothing}
+      <div class="dash-tab-panel">
+        ${props.activeTab === "summary" ? renderSummaryTab(props) : nothing}
+        ${props.activeTab === "events" ? renderEventsTab(props) : nothing}
+        ${props.activeTab === "alerts" ? renderAlertsTab(props) : nothing}
+        ${props.activeTab === "blocked" ? renderBlockedTab(props) : nothing}
+        ${props.activeTab === "audit" ? renderAuditTab(props) : nothing}
+      </div>
     </section>
   `;
 }

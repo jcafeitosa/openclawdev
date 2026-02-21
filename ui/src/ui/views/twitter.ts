@@ -48,6 +48,10 @@ export function renderTwitter(props: TwitterViewProps): TemplateResult {
   ];
 
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Twitter Analytics</div>
+      <div class="page-header__sub">Monitor account performance, engagement, and network.</div>
+    </div>
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>

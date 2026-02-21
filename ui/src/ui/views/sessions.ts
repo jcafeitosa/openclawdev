@@ -113,6 +113,10 @@ function resolveThinkLevelPatchValue(value: string, isBinary: boolean): string |
 export function renderSessions(props: SessionsProps) {
   const rows = props.result?.sessions ?? [];
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Sessions</div>
+      <div class="page-header__sub">Active session keys and per-session model overrides.</div>
+    </div>
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>

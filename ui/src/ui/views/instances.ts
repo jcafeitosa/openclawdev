@@ -14,11 +14,16 @@ export type InstancesProps = {
 
 export function renderInstances(props: InstancesProps) {
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Connected Instances</div>
+      <div class="page-header__sub">Presence beacons from the gateway and clients.</div>
+    </div>
+
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">Connected Instances</div>
-          <div class="card-sub">Presence beacons from the gateway and clients.</div>
+          <div class="card-title">Instances</div>
+          <div class="card-sub">${props.entries.length} connected</div>
         </div>
         <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
           ${props.loading ? "Loading…" : "Refresh"}
@@ -70,17 +75,17 @@ function renderEntry(entry: PresenceEntry) {
         <div class="list-title">${entry.host ?? "unknown host"}</div>
         <div class="list-sub">${formatPresenceSummary(entry)}</div>
         <div class="chip-row">
-          <span class="chip">${mode}</span>
-          ${roles.map((role) => html`<span class="chip">${role}</span>`)}
-          ${scopesLabel ? html`<span class="chip">${scopesLabel}</span>` : nothing}
-          ${entry.platform ? html`<span class="chip">${entry.platform}</span>` : nothing}
-          ${entry.deviceFamily ? html`<span class="chip">${entry.deviceFamily}</span>` : nothing}
+          <span class="badge badge-accent">${mode}</span>
+          ${roles.map((role) => html`<span class="badge badge-info">${role}</span>`)}
+          ${scopesLabel ? html`<span class="badge badge-muted">${scopesLabel}</span>` : nothing}
+          ${entry.platform ? html`<span class="badge badge-muted">${entry.platform}</span>` : nothing}
+          ${entry.deviceFamily ? html`<span class="badge badge-muted">${entry.deviceFamily}</span>` : nothing}
           ${
             entry.modelIdentifier
-              ? html`<span class="chip">${entry.modelIdentifier}</span>`
+              ? html`<span class="badge badge-muted">${entry.modelIdentifier}</span>`
               : nothing
           }
-          ${entry.version ? html`<span class="chip">${entry.version}</span>` : nothing}
+          ${entry.version ? html`<span class="badge badge-muted">${entry.version}</span>` : nothing}
         </div>
       </div>
       <div class="list-meta">

@@ -165,17 +165,17 @@ export function renderResources(props: ResourcesProps) {
                 </div>
               </div>
 
-              <div style="margin-top: 16px; overflow: auto;">
-                <table class="table" style="width: 100%; min-width: 860px;">
+              <div style="margin-top: 16px; overflow-x: auto;">
+                <table class="data-table" style="min-width: 820px;">
                   <thead>
                     <tr>
-                      <th style="text-align: left;">Agent</th>
-                      <th style="text-align: left;">Default</th>
-                      <th style="text-align: right;">Sessions</th>
-                      <th style="text-align: right;">Tokens</th>
-                      <th style="text-align: right;">Cost</th>
-                      <th style="text-align: right;">Heartbeat</th>
-                      <th style="text-align: right;">Workspace</th>
+                      <th>Agent</th>
+                      <th>Default</th>
+                      <th>Sessions</th>
+                      <th>Tokens</th>
+                      <th>Cost</th>
+                      <th>Heartbeat</th>
+                      <th>Workspace</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -189,25 +189,27 @@ export function renderResources(props: ResourcesProps) {
                       .map(
                         (row) => html`
                           <tr>
-                            <td style="text-align: left; font-weight: 600;">${row.agentId}</td>
-                            <td style="text-align: left;">${row.isDefault ? "yes" : ""}</td>
-                            <td style="text-align: right;" class="mono">
-                              ${row.sessions.active}/${row.sessions.total}
-                            </td>
-                            <td style="text-align: right;" class="mono">
+                            <td style="font-weight: 600;">${row.agentId}</td>
+                            <td>${
+                              row.isDefault
+                                ? html`
+                                    <span class="badge badge-accent">default</span>
+                                  `
+                                : ""
+                            }</td>
+                            <td class="mono num">${row.sessions.active}/${row.sessions.total}</td>
+                            <td class="mono num">
                               ${formatNumber(row.tokens.total)}
-                              <span class="muted" style="font-size: 12px;">(${formatNumber(row.tokens.input)} in / ${formatNumber(row.tokens.output)} out)</span>
+                              <span class="muted" style="font-size: 11px;"> (${formatNumber(row.tokens.input)} in / ${formatNumber(row.tokens.output)} out)</span>
                             </td>
-                            <td style="text-align: right;" class="mono">
+                            <td class="mono num">
                               ${formatUsd(row.cost.total)}
-                              <span class="muted" style="font-size: 12px;">/${row.cost.days}d</span>
+                              <span class="muted" style="font-size: 11px;">/${row.cost.days}d</span>
                             </td>
-                            <td style="text-align: right;" class="mono">
-                              ${formatHeartbeat(row.heartbeat.everyMs, row.heartbeat.enabled, row.heartbeat.every)}
-                            </td>
-                            <td style="text-align: right;" class="mono">
+                            <td class="mono num">${formatHeartbeat(row.heartbeat.everyMs, row.heartbeat.enabled, row.heartbeat.every)}</td>
+                            <td class="mono num">
                               ${formatBytes(row.workspace.totalBytes)}
-                              <span class="muted" style="font-size: 12px;">(${formatNumber(row.workspace.files)} files)</span>
+                              <span class="muted" style="font-size: 11px;"> (${formatNumber(row.workspace.files)} files)</span>
                             </td>
                           </tr>
                         `,

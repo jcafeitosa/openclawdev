@@ -7,7 +7,49 @@ import { $hello } from "../../stores/gateway.ts";
 import type { SystemInfoResult } from "../controllers/system-info.ts";
 import { loadSettings, saveSettings, type UiSettings } from "../storage.ts";
 import type { PresenceEntry, CronStatus } from "../types.ts";
-import { renderOverview, type OverviewProps } from "../views/overview.ts";
+import {
+  renderOverview,
+  type OverviewProps,
+  type GlobalMetricsSummary,
+  type ProvidersMetrics,
+} from "../views/overview.ts";
+
+// ECharts tree-shaken imports (loaded lazily)
+type EChartsInstance = {
+  setOption: (option: unknown, notMerge?: boolean) => void;
+  resize: () => void;
+  dispose: () => void;
+};
+
+type EChartsModule = {
+  init: (dom: HTMLElement, theme?: string | null, opts?: { renderer?: string }) => EChartsInstance;
+  use: (components: unknown[]) => void;
+};
+
+async function loadECharts(): Promise<EChartsModule> {
+  const [
+    { BarChart, GaugeChart, PieChart },
+    { GridComponent, TooltipComponent, LegendComponent, TitleComponent },
+    { CanvasRenderer },
+    echarts,
+  ] = await Promise.all([
+    import("echarts/charts"),
+    import("echarts/components"),
+    import("echarts/renderers"),
+    import("echarts/core"),
+  ]);
+  echarts.use([
+    BarChart,
+    GaugeChart,
+    PieChart,
+    GridComponent,
+    TooltipComponent,
+    LegendComponent,
+    TitleComponent,
+    CanvasRenderer,
+  ]);
+  return echarts as unknown as EChartsModule;
+}
 
 @customElement("overview-island")
 export class OverviewIsland extends LitElement {
@@ -33,8 +75,16 @@ export class OverviewIsland extends LitElement {
   @state() private freeModelsCount = 0;
   @state() private freeModelsVerified = 0;
   @state() private freeModelsDiscovered = 0;
+  @state() private metricsSummary: GlobalMetricsSummary | null = null;
+  @state() private modelsMetrics: ProvidersMetrics | null = null;
+  @state() private activeTab: "system" | "models" | "activity" = "system";
 
   private eventUnsub: (() => void) | null = null;
+  private chartBar: EChartsInstance | null = null;
+  private chartGauge: EChartsInstance | null = null;
+  private chartPie: EChartsInstance | null = null;
+  private resizeObservers: ResizeObserver[] = [];
+  private echartsModule: EChartsModule | null = null;
 
   protected createRenderRoot() {
     return this;
@@ -55,6 +105,201 @@ export class OverviewIsland extends LitElement {
     super.disconnectedCallback();
     this.eventUnsub?.();
     this.eventUnsub = null;
+    this.disposeCharts();
+  }
+
+  private disposeCharts() {
+    this.chartBar?.dispose();
+    this.chartGauge?.dispose();
+    this.chartPie?.dispose();
+    this.chartBar = null;
+    this.chartGauge = null;
+    this.chartPie = null;
+    for (const ro of this.resizeObservers) {
+      ro.disconnect();
+    }
+    this.resizeObservers = [];
+  }
+
+  private getCssVar(name: string): string {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  private async initOrUpdateCharts() {
+    if (!this.echartsModule) {
+      try {
+        this.echartsModule = await loadECharts();
+      } catch {
+        // ECharts not available, skip charts
+        return;
+      }
+    }
+
+    const metrics = this.modelsMetrics;
+
+    // Bar chart: top models by requests (Tab: Models)
+    const barEl = this.querySelector<HTMLElement>("#overview-bar-chart");
+    if (barEl && this.activeTab === "models") {
+      if (!this.chartBar) {
+        this.chartBar = this.echartsModule.init(barEl);
+        const ro = new ResizeObserver(() => this.chartBar?.resize());
+        ro.observe(barEl);
+        this.resizeObservers.push(ro);
+      }
+      const models: Array<{ model: string; requests: number }> = [];
+      if (metrics?.providers) {
+        for (const providerData of Object.values(metrics.providers)) {
+          if (providerData.models) {
+            for (const [modelId, modelData] of Object.entries(providerData.models)) {
+              models.push({ model: modelId, requests: modelData.requests?.started ?? 0 });
+            }
+          }
+        }
+      }
+      models.sort((a, b) => b.requests - a.requests);
+      const top = models.slice(0, 8);
+      const textColor = this.getCssVar("--text");
+      const mutedColor = this.getCssVar("--muted");
+      const accentColor = this.getCssVar("--accent");
+      const borderColor = this.getCssVar("--border");
+      this.chartBar.setOption(
+        {
+          backgroundColor: "transparent",
+          grid: { left: "2%", right: "4%", bottom: "3%", containLabel: true },
+          tooltip: {
+            trigger: "axis",
+            axisPointer: { type: "shadow" },
+            backgroundColor: this.getCssVar("--card-solid"),
+            borderColor,
+            textStyle: { color: textColor },
+          },
+          xAxis: {
+            type: "value",
+            axisLine: { show: false },
+            splitLine: { lineStyle: { color: borderColor } },
+            axisLabel: { color: mutedColor },
+          },
+          yAxis: {
+            type: "category",
+            data: top.map((m) => (m.model.length > 20 ? m.model.slice(0, 18) + "…" : m.model)),
+            axisLabel: { color: textColor, fontSize: 11 },
+            axisLine: { show: false },
+            axisTick: { show: false },
+          },
+          series: [
+            {
+              type: "bar",
+              data: top.map((m) => m.requests),
+              itemStyle: { color: accentColor, borderRadius: [0, 4, 4, 0] },
+              barMaxWidth: 24,
+            },
+          ],
+        },
+        true,
+      );
+    }
+
+    // Gauge: success rate (Tab: Activity)
+    const gaugeEl = this.querySelector<HTMLElement>("#overview-gauge-chart");
+    if (gaugeEl && this.activeTab === "activity") {
+      if (!this.chartGauge) {
+        this.chartGauge = this.echartsModule.init(gaugeEl);
+        const ro = new ResizeObserver(() => this.chartGauge?.resize());
+        ro.observe(gaugeEl);
+        this.resizeObservers.push(ro);
+      }
+      const rate = (metrics?.global?.requests?.successRate ?? 0) * 100;
+      const textColor = this.getCssVar("--text");
+      const mutedColor = this.getCssVar("--muted");
+      this.chartGauge.setOption(
+        {
+          backgroundColor: "transparent",
+          series: [
+            {
+              type: "gauge",
+              startAngle: 210,
+              endAngle: -30,
+              min: 0,
+              max: 100,
+              radius: "80%",
+              pointer: { show: false },
+              progress: { show: true, width: 14, itemStyle: { color: this.getCssVar("--ok") } },
+              axisLine: { lineStyle: { width: 14, color: [[1, this.getCssVar("--bg-muted")]] } },
+              axisTick: { show: false },
+              splitLine: { show: false },
+              axisLabel: { show: false },
+              detail: {
+                valueAnimation: true,
+                formatter: "{value}%",
+                color: textColor,
+                fontSize: 24,
+                fontWeight: 700,
+                offsetCenter: [0, "15%"],
+              },
+              title: { offsetCenter: [0, "40%"], color: mutedColor, fontSize: 12 },
+              data: [{ value: rate.toFixed(1), name: "Success Rate" }],
+            },
+          ],
+        },
+        true,
+      );
+    }
+
+    // Pie: tokens by provider (Tab: Activity)
+    const pieEl = this.querySelector<HTMLElement>("#overview-pie-chart");
+    if (pieEl && this.activeTab === "activity") {
+      if (!this.chartPie) {
+        this.chartPie = this.echartsModule.init(pieEl);
+        const ro = new ResizeObserver(() => this.chartPie?.resize());
+        ro.observe(pieEl);
+        this.resizeObservers.push(ro);
+      }
+      const pieData: Array<{ name: string; value: number }> = [];
+      if (metrics?.providers) {
+        for (const [name, providerData] of Object.entries(metrics.providers)) {
+          const total = providerData.totals?.tokens?.total ?? 0;
+          if (total > 0) {
+            pieData.push({ name, value: total });
+          }
+        }
+      }
+      const textColor = this.getCssVar("--text");
+      const mutedColor = this.getCssVar("--muted");
+      const borderColor = this.getCssVar("--border");
+      this.chartPie.setOption(
+        {
+          backgroundColor: "transparent",
+          tooltip: {
+            trigger: "item",
+            formatter: "{b}: {c} ({d}%)",
+            backgroundColor: this.getCssVar("--card-solid"),
+            borderColor,
+            textStyle: { color: textColor },
+          },
+          legend: {
+            orient: "vertical",
+            right: "5%",
+            top: "center",
+            textStyle: { color: mutedColor, fontSize: 11 },
+          },
+          series: [
+            {
+              type: "pie",
+              radius: ["45%", "70%"],
+              center: ["40%", "50%"],
+              avoidLabelOverlap: false,
+              itemStyle: { borderRadius: 4, borderColor: this.getCssVar("--bg"), borderWidth: 2 },
+              label: { show: false },
+              emphasis: {
+                label: { show: true, fontSize: 12, fontWeight: "bold", color: textColor },
+              },
+              data: pieData.length > 0 ? pieData : [{ name: "No data", value: 1 }],
+            },
+          ],
+        },
+        true,
+      );
+    }
   }
 
   private async loadData() {
@@ -69,6 +314,8 @@ export class OverviewIsland extends LitElement {
         securityResult,
         usageResult,
         modelsResult,
+        metricsSum,
+        modelsMetrics,
       ] = await Promise.all([
         gateway.call<PresenceEntry[]>("system-presence", {}).catch(() => [] as PresenceEntry[]),
         gateway.call<{ sessions: unknown[] }>("sessions.list").catch(() => ({ sessions: [] })),
@@ -94,6 +341,12 @@ export class OverviewIsland extends LitElement {
             freeModelsSummary?: { verifiedCount?: number; discoveredFreeCount?: number };
           }>("models.list", {})
           .catch(() => ({ freeModels: [], freeModelsSummary: null })),
+        fetch("/api/models/metrics/summary")
+          .then((r) => (r.ok ? (r.json() as Promise<GlobalMetricsSummary>) : null))
+          .catch(() => null),
+        fetch("/api/models/metrics")
+          .then((r) => (r.ok ? (r.json() as Promise<ProvidersMetrics>) : null))
+          .catch(() => null),
       ]);
 
       this.presenceCount = Array.isArray(presenceResult) ? presenceResult.length : 0;
@@ -119,6 +372,8 @@ export class OverviewIsland extends LitElement {
       this.freeModelsDiscovered = (modelsResult.freeModels ?? []).filter(
         (m: Record<string, unknown>) => m.discoveredFree === true,
       ).length;
+      this.metricsSummary = metricsSum;
+      this.modelsMetrics = modelsMetrics;
 
       this.lastError = null;
     } catch (err) {
@@ -141,12 +396,10 @@ export class OverviewIsland extends LitElement {
 
   private async handleConnect() {
     try {
-      // Reconnect the WebSocket with current settings (URL, token, password)
       const url = this.settings.gatewayUrl.trim() || undefined;
       const token = this.settings.token.trim() || undefined;
       const password = this.password.trim() || undefined;
       gateway.connect(url, token, password);
-      // Wait briefly for the handshake, then reload dashboard data
       await gateway.call("hello");
       await this.loadData();
     } catch (err) {
@@ -156,6 +409,14 @@ export class OverviewIsland extends LitElement {
 
   private async handleRefresh() {
     await this.loadData();
+  }
+
+  protected updated(changedProps: Map<string, unknown>) {
+    super.updated(changedProps);
+    if (changedProps.has("activeTab") || changedProps.has("modelsMetrics")) {
+      // Use requestAnimationFrame to ensure DOM is fully updated
+      requestAnimationFrame(() => void this.initOrUpdateCharts());
+    }
   }
 
   render() {
@@ -181,6 +442,12 @@ export class OverviewIsland extends LitElement {
       freeModelsCount: this.freeModelsCount,
       freeModelsVerified: this.freeModelsVerified,
       freeModelsDiscovered: this.freeModelsDiscovered,
+      metricsSummary: this.metricsSummary,
+      modelsMetrics: this.modelsMetrics,
+      activeTab: this.activeTab,
+      onTabChange: (tab) => {
+        this.activeTab = tab;
+      },
       onSettingsChange: (next) => this.handleSettingsChange(next),
       onPasswordChange: (next) => this.handlePasswordChange(next),
       onSessionKeyChange: (next) => this.handleSessionKeyChange(next),

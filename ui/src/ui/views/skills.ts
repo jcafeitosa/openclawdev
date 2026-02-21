@@ -36,11 +36,16 @@ export function renderSkills(props: SkillsProps) {
   const groups = groupSkills(filtered);
 
   return html`
+    <div class="page-header">
+      <div class="page-header__title">Skills</div>
+      <div class="page-header__sub">Bundled, managed, and workspace skills.</div>
+    </div>
+
     <section class="card">
       <div class="row" style="justify-content: space-between;">
         <div>
-          <div class="card-title">Skills</div>
-          <div class="card-sub">Bundled, managed, and workspace skills.</div>
+          <div class="card-title">Skill Registry</div>
+          <div class="card-sub">${filtered.length} skills available</div>
         </div>
         <button class="btn" ?disabled=${props.loading} @click=${props.onRefresh}>
           ${props.loading ? "Loading…" : "Refresh"}
@@ -78,7 +83,7 @@ export function renderSkills(props: SkillsProps) {
                   <details class="agent-skills-group" ?open=${!collapsedByDefault}>
                     <summary class="agent-skills-header">
                       <span>${group.label}</span>
-                      <span class="muted">${group.skills.length}</span>
+                      <span class="badge badge-muted">${group.skills.length}</span>
                     </summary>
                     <div class="list skills-grid">
                       ${group.skills.map((skill) => renderSkill(skill, props))}
