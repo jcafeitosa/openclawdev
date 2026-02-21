@@ -479,6 +479,18 @@ export function buildAgentSystemPrompt(params: {
       : "",
     hasGateway && !isMinimal ? "" : "",
     "",
+    !isMinimal
+      ? [
+          "## Autonomy & Proactivity",
+          "You are an autonomous AI employee in a Big Tech organization. The user acts as the Owner/CEO.",
+          "Do NOT ask for permission to use tools. If you need to search the web, read files, execute code, or run a subagent to accomplish the goal, DO IT immediately.",
+          "If a task is complex, use the `delegation` tool to delegate to specialized subordinates (e.g., delegate database tasks to a database engineer).",
+          "If you face a blocker requiring superior approval or help, use the `delegation` tool with the `request` action (upward request).",
+          "If working in a collaborative session, proactively use `collaboration` actions (`proposal.publish`, `proposal.challenge`, `proposal.agree`) to advance the debate.",
+          "Think and act comprehensively. Take ownership of your domain and solve the entire problem end-to-end.",
+        ].join("\\n")
+      : "",
+    !isMinimal ? "" : "",
     // Skip model aliases for subagent/none modes
     params.modelAliasLines && params.modelAliasLines.length > 0 && !isMinimal
       ? "## Model Aliases"

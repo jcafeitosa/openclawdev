@@ -217,28 +217,28 @@ function computeNodeValue(node: AgentHierarchyNode): number {
 
 function computeRepulsion(nodeCount: number): number {
   if (nodeCount <= 5) {
-    return 120;
+    return 300;
   }
   if (nodeCount <= 15) {
-    return 250;
+    return 600;
   }
   if (nodeCount <= 30) {
-    return 400;
+    return 1000;
   }
-  return 550;
+  return 1500;
 }
 
 function computeEdgeLength(nodeCount: number): number {
   if (nodeCount <= 5) {
-    return 80;
+    return 150;
   }
   if (nodeCount <= 15) {
-    return 120;
+    return 200;
   }
   if (nodeCount <= 30) {
-    return 180;
+    return 300;
   }
-  return 220;
+  return 400;
 }
 
 function formatTokenCount(tokens: number): string {
@@ -1067,6 +1067,8 @@ function initECharts(
   const nodeCount = graphData.nodes.length;
   const chartWidth = container.clientWidth || 800;
   const chartHeight = container.clientHeight || 500;
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  const labelColor = isLight ? "#3f3f46" : "#e4e4e7";
 
   chartInstance = echarts.init(container, undefined, {
     renderer: "canvas",
@@ -1094,6 +1096,7 @@ function initECharts(
           show: true,
           position: "right" as const,
           formatter: "{b}",
+          color: labelColor,
         },
         labelLayout: {
           hideOverlap: true,
@@ -1165,19 +1168,27 @@ function schedulePositionLock() {
     }
 
     // Extract settled positions from the chart
-    const opt = chartInstance.getOption() as {
-      series?: { data?: { id?: string; x?: number; y?: number }[] }[];
-    };
-    const data = opt?.series?.[0]?.data;
-    if (!Array.isArray(data)) {
-      return;
-    }
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const seriesModel = (chartInstance as any).getModel().getSeriesByIndex(0);
+      const seriesData = seriesModel.getData();
+      lockedPositions = new Map();
 
-    lockedPositions = new Map();
-    for (const n of data) {
-      if (n.id && typeof n.x === "number" && typeof n.y === "number") {
-        lockedPositions.set(n.id, { x: n.x, y: n.y });
+      const gdNodes = currentGraphData?.nodes;
+      if (!gdNodes) {
+        return;
       }
+
+      for (let i = 0; i < gdNodes.length; i++) {
+        const layout = seriesData.getItemLayout(i);
+        const id = gdNodes[i].id;
+
+        if (id && layout && layout.length >= 2) {
+          lockedPositions.set(id, { x: layout[0], y: layout[1] });
+        }
+      }
+    } catch (e) {
+      console.warn("Could not extract ECharts node layouts", e);
     }
 
     startPulseTimer();

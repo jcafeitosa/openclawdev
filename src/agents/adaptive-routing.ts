@@ -63,7 +63,7 @@ export function selectModelForTask(params: {
         downgraded: false,
       };
     }
-    return null;
+    // Fall through to standard relaxation if no preferred model is found.
   }
 
   // For trivial/moderate tasks, try a cheaper tier first.
