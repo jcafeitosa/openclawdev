@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
 import type { OAuthCredentials } from "@mariozechner/pi-ai";
 
 export const CHUTES_OAUTH_ISSUER = "https://api.chutes.ai";
@@ -28,7 +28,7 @@ export type ChutesStoredOAuth = OAuthCredentials & {
 };
 
 export function generateChutesPkce(): ChutesPkce {
-  const verifier = randomBytes(32).toString("hex");
+  const verifier = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("hex");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   return { verifier, challenge };
 }

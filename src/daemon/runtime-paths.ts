@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { isSupportedNodeVersion } from "../infra/runtime-guard.js";
 
 const VERSION_MANAGER_MARKERS = [
@@ -62,7 +60,16 @@ type ExecFileAsync = (
   options: { encoding: "utf8" },
 ) => Promise<{ stdout: string; stderr: string }>;
 
-const execFileAsync = promisify(execFile) as unknown as ExecFileAsync;
+const execFileAsync: ExecFileAsync = async (file, args) => {
+  if (typeof Bun === "undefined") {
+    return { stdout: "", stderr: "" };
+  }
+  const proc = Bun.spawnSync([file, ...args], { stdout: "pipe", stderr: "pipe" });
+  return {
+    stdout: proc.stdout ? proc.stdout.toString("utf-8") : "",
+    stderr: proc.stderr ? proc.stderr.toString("utf-8") : "",
+  };
+};
 
 async function resolveNodeVersion(
   nodePath: string,

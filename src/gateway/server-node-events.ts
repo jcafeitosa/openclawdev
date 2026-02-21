@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { resolveSessionAgentId } from "../agents/agent-scope.js";
 import { normalizeChannelId } from "../channels/plugins/index.js";
 import { createOutboundSendDeps } from "../cli/outbound-send-deps.js";
@@ -299,7 +298,7 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
       if (shouldDropDuplicateVoiceTranscript({ sessionKey: canonicalKey, fingerprint, now })) {
         return;
       }
-      const sessionId = entry?.sessionId ?? randomUUID();
+      const sessionId = entry?.sessionId ?? crypto.randomUUID();
       queueSessionStoreTouch({
         ctx,
         cfg,
@@ -315,7 +314,7 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
       // This maps agent bus events (keyed by sessionId) to chat events (keyed by clientRunId).
       ctx.addChatRun(sessionId, {
         sessionKey: canonicalKey,
-        clientRunId: `voice-${randomUUID()}`,
+        clientRunId: `voice-${crypto.randomUUID()}`,
       });
 
       void agentCommand(
@@ -405,7 +404,7 @@ export const handleNodeEvent = async (ctx: NodeEventContext, nodeId: string, evt
       const cfg = loadConfig();
       const { storePath, entry, canonicalKey } = loadSessionEntry(sessionKey);
       const now = Date.now();
-      const sessionId = entry?.sessionId ?? randomUUID();
+      const sessionId = entry?.sessionId ?? crypto.randomUUID();
       await touchSessionStore({ cfg, sessionKey, storePath, canonicalKey, entry, sessionId, now });
 
       if (deliver && (!channel || !to)) {

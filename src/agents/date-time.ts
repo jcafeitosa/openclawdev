@@ -1,5 +1,3 @@
-import { execSync } from "node:child_process";
-
 export type TimeFormatPreference = "auto" | "12" | "24";
 export type ResolvedTimeFormat = "12" | "24";
 
@@ -94,12 +92,13 @@ export function withNormalizedTimestamp<T extends Record<string, unknown>>(
 }
 
 function detectSystemTimeFormat(): boolean {
-  if (process.platform === "darwin") {
+  if (process.platform === "darwin" && typeof Bun !== "undefined") {
     try {
-      const result = execSync("defaults read -g AppleICUForce24HourTime 2>/dev/null", {
-        encoding: "utf8",
-        timeout: 500,
-      }).trim();
+      const proc = Bun.spawnSync(["defaults", "read", "-g", "AppleICUForce24HourTime"], {
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const result = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
       if (result === "1") {
         return true;
       }
@@ -111,12 +110,13 @@ function detectSystemTimeFormat(): boolean {
     }
   }
 
-  if (process.platform === "win32") {
+  if (process.platform === "win32" && typeof Bun !== "undefined") {
     try {
-      const result = execSync(
-        'powershell -Command "(Get-Culture).DateTimeFormat.ShortTimePattern"',
-        { encoding: "utf8", timeout: 1000 },
-      ).trim();
+      const proc = Bun.spawnSync(
+        ["powershell", "-Command", "(Get-Culture).DateTimeFormat.ShortTimePattern"],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      const result = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
       if (result.startsWith("H")) {
         return true;
       }

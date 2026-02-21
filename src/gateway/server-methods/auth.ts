@@ -2,7 +2,6 @@
  * Gateway handlers for provider auth configuration.
  */
 
-import { randomBytes } from "node:crypto";
 import { getOAuthProvider } from "@mariozechner/pi-ai";
 import {
   listProfilesForProvider,
@@ -340,7 +339,7 @@ export const authHandlers: GatewayRequestHandlers = {
         log.info(
           `startOAuth: using pi-ai native OAuth for provider=${normalizedId} (callbackServer=${usesCallback})`,
         );
-        const flowId = randomBytes(8).toString("hex");
+        const flowId = Buffer.from(crypto.getRandomValues(new Uint8Array(8))).toString("hex");
         const flow: OAuthFlowState = {
           status: "waiting_url",
           createdAt: Date.now(),
@@ -468,7 +467,7 @@ export const authHandlers: GatewayRequestHandlers = {
         return;
       }
 
-      const flowId = randomBytes(8).toString("hex");
+      const flowId = Buffer.from(crypto.getRandomValues(new Uint8Array(8))).toString("hex");
       const flow: OAuthFlowState = {
         status: "waiting_url",
         createdAt: Date.now(),

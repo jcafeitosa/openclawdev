@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {
   Button,
   ChannelSelectMenu,
@@ -210,7 +209,7 @@ const BLOCK_ALIASES = new Map<string, DiscordComponentBlock["type"]>([
 ]);
 
 function createShortId(prefix: string) {
-  return `${prefix}${crypto.randomBytes(6).toString("base64url")}`;
+  return `${prefix}${Buffer.from(crypto.getRandomValues(new Uint8Array(6))).toString("base64url")}`;
 }
 
 function requireObject(value: unknown, label: string): Record<string, unknown> {

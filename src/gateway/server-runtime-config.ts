@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import {
   type GatewayAuthConfig,
   type GatewayBindMode,
@@ -90,7 +89,7 @@ export async function resolveGatewayRuntimeConfig(params: {
     !resolvedAuth.allowTailscale &&
     isLoopbackHost(bindHost)
   ) {
-    const generatedToken = crypto.randomBytes(24).toString("hex");
+    const generatedToken = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("hex");
     // Update memory
     resolvedAuth.token = generatedToken;
     // Update disk safely

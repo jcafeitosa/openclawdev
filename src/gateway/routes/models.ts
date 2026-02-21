@@ -245,12 +245,9 @@ export function modelsRoutes() {
     .get("/metrics/summary", ({ set }) => {
       try {
         return handleGetMetricsSummary();
-      } catch (error) {
+      } catch {
         set.status = 500;
-        return {
-          error: "Failed to fetch metrics summary",
-          message: error instanceof Error ? error.message : String(error),
-        };
+        return { error: "Failed to fetch metrics summary" };
       }
     })
     .get("/metrics", ({ query, set }) => {
@@ -263,23 +260,17 @@ export function modelsRoutes() {
           return result.body;
         }
         return result.body;
-      } catch (error) {
+      } catch {
         set.status = 500;
-        return {
-          error: "Failed to fetch metrics",
-          message: error instanceof Error ? error.message : String(error),
-        };
+        return { error: "Failed to fetch metrics" };
       }
     })
     .delete("/metrics", ({ query, set }) => {
       try {
         return handleDeleteMetrics(query as Record<string, string | undefined>);
-      } catch (error) {
+      } catch {
         set.status = 500;
-        return {
-          error: "Failed to reset metrics",
-          message: error instanceof Error ? error.message : String(error),
-        };
+        return { error: "Failed to reset metrics" };
       }
     })
     .get("/health", () => {

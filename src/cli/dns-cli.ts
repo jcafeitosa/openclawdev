@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import type { Command } from "commander";
@@ -13,21 +12,18 @@ import { theme } from "../terminal/theme.js";
 type RunOpts = { allowFailure?: boolean; inherit?: boolean };
 
 function run(cmd: string, args: string[], opts?: RunOpts): string {
-  const res = spawnSync(cmd, args, {
-    encoding: "utf-8",
-    stdio: opts?.inherit ? "inherit" : "pipe",
+  const captureMode = opts?.inherit ? ("inherit" as const) : ("pipe" as const);
+  const res = Bun.spawnSync([cmd, ...args], {
+    stdout: captureMode,
+    stderr: captureMode,
   });
-  if (res.error) {
-    throw res.error;
-  }
-  if (!opts?.allowFailure && res.status !== 0) {
-    const errText =
-      typeof res.stderr === "string" && res.stderr.trim()
-        ? res.stderr.trim()
-        : `exit ${res.status ?? "unknown"}`;
+  if (!opts?.allowFailure && !res.success) {
+    const errText = res.stderr
+      ? res.stderr.toString("utf-8").trim() || `exit ${res.exitCode ?? "unknown"}`
+      : `exit ${res.exitCode ?? "unknown"}`;
     throw new Error(`${cmd} ${args.join(" ")} failed: ${errText}`);
   }
-  return typeof res.stdout === "string" ? res.stdout : "";
+  return res.stdout ? res.stdout.toString("utf-8") : "";
 }
 
 function writeFileSudoIfNeeded(filePath: string, content: string): void {
@@ -41,16 +37,13 @@ function writeFileSudoIfNeeded(filePath: string, content: string): void {
     }
   }
 
-  const res = spawnSync("sudo", ["tee", filePath], {
-    input: content,
-    encoding: "utf-8",
-    stdio: ["pipe", "ignore", "inherit"],
+  const res = Bun.spawnSync(["sudo", "tee", filePath], {
+    stdin: Buffer.from(content, "utf-8"),
+    stdout: "ignore",
+    stderr: "inherit",
   });
-  if (res.error) {
-    throw res.error;
-  }
-  if (res.status !== 0) {
-    throw new Error(`sudo tee ${filePath} failed: exit ${res.status ?? "unknown"}`);
+  if (!res.success) {
+    throw new Error(`sudo tee ${filePath} failed: exit ${res.exitCode ?? "unknown"}`);
   }
 }
 

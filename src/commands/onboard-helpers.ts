@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { inspect } from "node:util";
@@ -67,7 +66,7 @@ export function summarizeExistingConfig(config: OpenClawConfig): string {
 }
 
 export function randomToken(): string {
-  return crypto.randomBytes(24).toString("hex");
+  return Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("hex");
 }
 
 export function normalizeGatewayTokenInput(value: unknown): string {

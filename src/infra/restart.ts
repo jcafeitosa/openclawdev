@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   resolveGatewayLaunchAgentLabel,
   resolveGatewaySystemdServiceName,
@@ -11,7 +10,6 @@ export type RestartAttempt = {
   tried?: string[];
 };
 
-const SPAWN_TIMEOUT_MS = 2000;
 const SIGUSR1_AUTH_GRACE_MS = 5000;
 const DEFAULT_DEFERRAL_POLL_MS = 500;
 const DEFAULT_DEFERRAL_MAX_WAIT_MS = 30_000;
@@ -235,25 +233,25 @@ export function triggerOpenClawRestart(): RestartAttempt {
       );
       const userArgs = ["--user", "restart", unit];
       tried.push(`systemctl ${userArgs.join(" ")}`);
-      const userRestart = spawnSync("systemctl", userArgs, {
-        encoding: "utf8",
-        timeout: SPAWN_TIMEOUT_MS,
+      const userRestart = Bun.spawnSync(["systemctl", ...userArgs], {
+        stdout: "pipe",
+        stderr: "pipe",
       });
-      if (!userRestart.error && userRestart.status === 0) {
+      if (userRestart.success) {
         return { ok: true, method: "systemd", tried };
       }
       const systemArgs = ["restart", unit];
       tried.push(`systemctl ${systemArgs.join(" ")}`);
-      const systemRestart = spawnSync("systemctl", systemArgs, {
-        encoding: "utf8",
-        timeout: SPAWN_TIMEOUT_MS,
+      const systemRestart = Bun.spawnSync(["systemctl", ...systemArgs], {
+        stdout: "pipe",
+        stderr: "pipe",
       });
-      if (!systemRestart.error && systemRestart.status === 0) {
+      if (systemRestart.success) {
         return { ok: true, method: "systemd", tried };
       }
       const detail = [
-        `user: ${formatSpawnDetail(userRestart)}`,
-        `system: ${formatSpawnDetail(systemRestart)}`,
+        `user: ${formatSpawnDetail({ status: userRestart.exitCode, stdout: userRestart.stdout, stderr: userRestart.stderr })}`,
+        `system: ${formatSpawnDetail({ status: systemRestart.exitCode, stdout: systemRestart.stdout, stderr: systemRestart.stderr })}`,
       ].join("; ");
       return { ok: false, method: "systemd", detail, tried };
     }
@@ -271,17 +269,17 @@ export function triggerOpenClawRestart(): RestartAttempt {
   const target = uid !== undefined ? `gui/${uid}/${label}` : label;
   const args = ["kickstart", "-k", target];
   tried.push(`launchctl ${args.join(" ")}`);
-  const res = spawnSync("launchctl", args, {
-    encoding: "utf8",
-    timeout: SPAWN_TIMEOUT_MS,
+  const res = Bun.spawnSync(["launchctl", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
   });
-  if (!res.error && res.status === 0) {
+  if (res.success) {
     return { ok: true, method: "launchctl", tried };
   }
   return {
     ok: false,
     method: "launchctl",
-    detail: formatSpawnDetail(res),
+    detail: formatSpawnDetail({ status: res.exitCode, stdout: res.stdout, stderr: res.stderr }),
     tried,
   };
 }

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   type OpenClawConfig,
   DEFAULT_GATEWAY_PORT,
@@ -59,7 +58,7 @@ export type GmailHookRuntimeConfig = {
 };
 
 export function generateHookToken(bytes = 24): string {
-  return randomBytes(bytes).toString("hex");
+  return Buffer.from(crypto.getRandomValues(new Uint8Array(bytes))).toString("hex");
 }
 
 export function mergeHookPresets(existing: string[] | undefined, preset: string): string[] {

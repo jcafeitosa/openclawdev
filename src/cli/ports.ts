@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { resolveLsofCommandSync } from "../infra/ports-lsof.js";
 import { sleep } from "../utils.js";
 
@@ -31,21 +30,24 @@ export function parseLsofOutput(output: string): PortProcess[] {
 }
 
 export function listPortListeners(port: number): PortProcess[] {
+  const lsof = resolveLsofCommandSync();
   try {
-    const lsof = resolveLsofCommandSync();
-    const out = execFileSync(lsof, ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-FpFc"], {
-      encoding: "utf-8",
+    const proc = Bun.spawnSync([lsof, "-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-FpFc"], {
+      stdout: "pipe",
+      stderr: "pipe",
     });
-    return parseLsofOutput(out);
+    if (proc.exitCode === 1) {
+      return [];
+    } // no listeners
+    if (!proc.success) {
+      throw new Error(`lsof exited with code ${proc.exitCode}`);
+    }
+    return parseLsofOutput(proc.stdout ? proc.stdout.toString("utf-8") : "");
   } catch (err: unknown) {
-    const status = (err as { status?: number }).status;
     const code = (err as { code?: string }).code;
     if (code === "ENOENT") {
       throw new Error("lsof not found; required for --force", { cause: err });
     }
-    if (status === 1) {
-      return [];
-    } // no listeners
     throw err instanceof Error ? err : new Error(String(err));
   }
 }

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { loadConfig } from "../config/config.js";
 import { resolveMarkdownTableMode } from "../config/markdown-tables.js";
 import { getChildLogger } from "../logging/logger.js";
@@ -24,7 +23,7 @@ export async function sendMessageWhatsApp(
   },
 ): Promise<{ messageId: string; toJid: string }> {
   let text = body;
-  const correlationId = randomUUID();
+  const correlationId = crypto.randomUUID();
   const startedAt = Date.now();
   const { listener: active, accountId: resolvedAccountId } = requireActiveWebListener(
     options.accountId,
@@ -112,7 +111,7 @@ export async function sendReactionWhatsApp(
     accountId?: string;
   },
 ): Promise<void> {
-  const correlationId = randomUUID();
+  const correlationId = crypto.randomUUID();
   const { listener: active } = requireActiveWebListener(options.accountId);
   const logger = getChildLogger({
     module: "web-outbound",
@@ -147,7 +146,7 @@ export async function sendPollWhatsApp(
   poll: PollInput,
   options: { verbose: boolean; accountId?: string },
 ): Promise<{ messageId: string; toJid: string }> {
-  const correlationId = randomUUID();
+  const correlationId = crypto.randomUUID();
   const startedAt = Date.now();
   const { listener: active } = requireActiveWebListener(options.accountId);
   const logger = getChildLogger({

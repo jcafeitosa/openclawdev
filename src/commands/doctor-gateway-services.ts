@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveGatewayPort, resolveIsNixMode } from "../config/paths.js";
 import { findExtraGatewayServices, renderGatewayServiceCleanupHints } from "../daemon/inspect.js";
@@ -18,8 +16,6 @@ import { note } from "../terminal/note.js";
 import { buildGatewayInstallPlan } from "./daemon-install-helpers.js";
 import { DEFAULT_GATEWAY_DAEMON_RUNTIME, type GatewayDaemonRuntime } from "./daemon-runtime.js";
 import type { DoctorOptions, DoctorPrompter } from "./doctor-prompter.js";
-
-const execFileAsync = promisify(execFile);
 
 function detectGatewayRuntime(programArguments: string[] | undefined): GatewayDaemonRuntime {
   const first = programArguments?.[0];
@@ -73,8 +69,19 @@ async function cleanupLegacyLaunchdService(params: {
   plistPath: string;
 }): Promise<string | null> {
   const domain = typeof process.getuid === "function" ? `gui/${process.getuid()}` : "gui/501";
-  await execFileAsync("launchctl", ["bootout", domain, params.plistPath]).catch(() => undefined);
-  await execFileAsync("launchctl", ["unload", params.plistPath]).catch(() => undefined);
+  try {
+    Bun.spawnSync(["launchctl", "bootout", domain, params.plistPath], {
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  } catch {
+    /* ignore */
+  }
+  try {
+    Bun.spawnSync(["launchctl", "unload", params.plistPath], { stdout: "pipe", stderr: "pipe" });
+  } catch {
+    /* ignore */
+  }
 
   const trashDir = path.join(os.homedir(), ".Trash");
   try {

@@ -7,6 +7,7 @@
 
 import { Elysia, type Context } from "elysia";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
+import { safeEqualSecret } from "../../security/secret-equal.js";
 import type { HookDispatchers } from "../elysia-gateway.js";
 import { getNodeRequest, getWebBearerToken } from "../elysia-node-compat.js";
 import { applyHookMappings } from "../hooks-mapping.js";
@@ -39,7 +40,9 @@ function extractHookTokenFromRequest(
     return { token: headerToken, fromQuery: false };
   }
 
-  // Check query parameter (deprecated)
+  // Query parameter tokens are explicitly NOT supported — tokens in URLs are
+  // logged by proxies, CDNs, and browser history, leaking the secret.
+  // Return fromQuery=true so the caller can reject with 400.
   const queryToken = url.searchParams.get("token")?.trim();
   if (queryToken) {
     return { token: queryToken, fromQuery: true };
@@ -74,17 +77,21 @@ export function hooksRoutes(params: {
 
       // Extract and verify token
       const { token, fromQuery } = extractHookTokenFromRequest(request, url);
-      if (!token || token !== hooksConfig.token) {
+
+      // Reject query-parameter tokens with 400 — tokens in URLs appear in proxy
+      // logs, CDN access logs, and browser history, leaking the secret.
+      if (fromQuery) {
+        set.status = 400;
+        set.headers["content-type"] = "text/plain; charset=utf-8";
+        return "Token must be provided via Authorization: Bearer or X-OpenClaw-Token header, not as a query parameter.";
+      }
+
+      // Use timing-safe comparison to prevent timing-oracle attacks that could
+      // leak the secret byte-by-byte via response latency differences.
+      if (!token || !safeEqualSecret(token, hooksConfig.token)) {
         set.status = 401;
         set.headers["content-type"] = "text/plain; charset=utf-8";
         return "Unauthorized";
-      }
-      if (fromQuery) {
-        logHooks.warn(
-          "Hook token provided via query parameter is deprecated for security reasons. " +
-            "Tokens in URLs appear in logs, browser history, and referrer headers. " +
-            "Use Authorization: Bearer <token> or X-OpenClaw-Token header instead.",
-        );
       }
 
       if (request.method !== "POST") {

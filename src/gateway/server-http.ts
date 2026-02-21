@@ -642,7 +642,27 @@ export function attachGatewayUpgradeHandler(opts: {
       return;
     }
 
-    // Default Gateway WebSocket handler - sync call to handleUpgrade is safer in Node.js
+    // Default Gateway WebSocket handler.
+    // Defense-in-depth: if the HTTP Upgrade request carries a Bearer token,
+    // validate it immediately at the HTTP level before spending resources on
+    // the WebSocket handshake. Clients that omit the Authorization header are
+    // still accepted here — they must authenticate via the challenge/response
+    // protocol exchanged over the WebSocket itself.
+    const upgradeAuthHeader = req.headers.authorization;
+    if (upgradeAuthHeader?.startsWith("Bearer ")) {
+      const providedToken = upgradeAuthHeader.slice(7).trim();
+      if (
+        resolvedAuth.mode === "token" &&
+        resolvedAuth.token &&
+        !safeEqualSecret(providedToken, resolvedAuth.token)
+      ) {
+        socket.write("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return;
+      }
+    }
+
+    // sync call to handleUpgrade is safer in Node.js (avoids interleaved upgrade events)
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
     });
