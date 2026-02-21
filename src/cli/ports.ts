@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { resolveLsofCommandSync } from "../infra/ports-lsof.js";
 import { sleep } from "../utils.js";
 
@@ -32,17 +33,19 @@ export function parseLsofOutput(output: string): PortProcess[] {
 export function listPortListeners(port: number): PortProcess[] {
   const lsof = resolveLsofCommandSync();
   try {
-    const proc = Bun.spawnSync([lsof, "-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-FpFc"], {
-      stdout: "pipe",
-      stderr: "pipe",
+    const proc = spawnSync(lsof, ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-FpFc"], {
+      encoding: "utf-8",
     });
-    if (proc.exitCode === 1) {
+    if (proc.error) {
+      throw proc.error;
+    }
+    if (proc.status === 1) {
       return [];
     } // no listeners
-    if (!proc.success) {
-      throw new Error(`lsof exited with code ${proc.exitCode}`);
+    if (proc.status !== 0) {
+      throw new Error(`lsof exited with code ${proc.status}`);
     }
-    return parseLsofOutput(proc.stdout ? proc.stdout.toString("utf-8") : "");
+    return parseLsofOutput(proc.stdout ?? "");
   } catch (err: unknown) {
     const code = (err as { code?: string }).code;
     if (code === "ENOENT") {
