@@ -51,6 +51,7 @@ const PROBE_PROVIDER_DELAY_MS = 600;
 /** Per-provider delay overrides for stricter rate limits. */
 const PROBE_PROVIDER_DELAY_OVERRIDES: Record<string, number> = {
   "github-copilot": 3_000,
+  huggingface: 3_000,
 };
 /** Entries older than this are considered stale. */
 const HEALTH_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 h
