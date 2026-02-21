@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -143,7 +144,7 @@ export async function listMemoryFiles(
 }
 
 export function hashText(value: string): string {
-  return new Bun.CryptoHasher("sha256").update(value).digest("hex");
+  return crypto.createHash("sha256").update(value).digest("hex");
 }
 
 export async function buildFileEntry(

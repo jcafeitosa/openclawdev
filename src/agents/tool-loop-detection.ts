@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ToolLoopDetectionConfig } from "../config/types.tools.js";
 import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
@@ -120,7 +121,7 @@ function stableStringify(value: unknown): string {
 
 function digestStable(value: unknown): string {
   const serialized = stableStringifyFallback(value);
-  return new Bun.CryptoHasher("sha256").update(serialized).digest("hex");
+  return createHash("sha256").update(serialized).digest("hex");
 }
 
 function stableStringifyFallback(value: unknown): string {

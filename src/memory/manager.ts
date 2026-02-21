@@ -1,6 +1,6 @@
-import type { Database } from "bun:sqlite";
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 import { type FSWatcher } from "chokidar";
 import { resolveAgentDir, resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import type { ResolvedMemorySearchConfig } from "../agents/memory-search.js";
@@ -63,7 +63,7 @@ export class MemoryIndexManager extends MemoryManagerEmbeddingOps implements Mem
   protected batchFailureLastError?: string;
   protected batchFailureLastProvider?: string;
   protected batchFailureLock: Promise<void> = Promise.resolve();
-  protected db: Database;
+  protected db: DatabaseSync;
   protected readonly sources: Set<MemorySource>;
   protected providerKey: string;
   protected readonly cache: { enabled: boolean; maxEntries?: number };

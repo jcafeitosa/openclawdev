@@ -14,8 +14,8 @@
  *  - status() is fully overridden to count from PG tables
  */
 
-import { Database } from "bun:sqlite";
 import fs from "node:fs/promises";
+import type { DatabaseSync } from "node:sqlite";
 import { resolveAgentDir } from "../agents/agent-scope.js";
 import { resolveAgentWorkspaceDir } from "../agents/agent-scope.js";
 import { resolveMemorySearchConfig } from "../agents/memory-search.js";
@@ -60,6 +60,7 @@ import {
   listSessionFilesForAgent,
   sessionPathForFile,
 } from "./session-files.js";
+import { requireNodeSqlite } from "./sqlite.js";
 import type {
   MemoryEmbeddingProbeResult,
   MemoryProviderStatus,
@@ -138,8 +139,9 @@ export class MemoryIndexManagerPg extends MemoryIndexManager {
    * All the abstract class's structural requirements (schema, etc.) operate on
    * this ephemeral DB. Actual data is stored in PostgreSQL.
    */
-  protected override openDatabase(): Database {
-    return new Database(":memory:");
+  protected override openDatabase(): DatabaseSync {
+    const { DatabaseSync } = requireNodeSqlite();
+    return new DatabaseSync(":memory:");
   }
 
   /**

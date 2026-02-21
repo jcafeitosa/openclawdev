@@ -67,55 +67,62 @@ function ensureExperimentalWarningSuppressed(): boolean {
   process.env.OPENCLAW_NODE_OPTIONS_READY = "1";
   // Pass flag as a Node CLI option, not via NODE_OPTIONS (--disable-warning is disallowed in NODE_OPTIONS).
   const spawnEnv = buildSpawnEnv();
-  const child = Bun.spawn(
-    [process.execPath, EXPERIMENTAL_WARNING_FLAG, ...process.execArgv, ...process.argv.slice(1)],
-    {
-      stdin: "inherit",
-      stdout: "inherit",
-      stderr: "inherit",
-      env: spawnEnv,
-    },
-  );
 
-  // Forward termination signals to child process.
-  const signals: NodeJS.Signals[] =
-    process.platform === "win32"
-      ? ["SIGTERM", "SIGINT"]
-      : ["SIGTERM", "SIGINT", "SIGHUP", "SIGQUIT"];
+  // NOTE: This file is a module so we shouldn't use require directly if we don't have to,
+  // but since we need it inline we'll do a dynamic import or just rely on child_process being available.
+  // We'll import child_process at the top instead (which you should provide as a chunk if missing).
+  // I will add the import at the top in another chunk.
+  import("node:child_process")
+    .then(({ spawn }) => {
+      const child = spawn(
+        process.execPath,
+        [EXPERIMENTAL_WARNING_FLAG, ...process.execArgv, ...process.argv.slice(1)],
+        {
+          stdio: "inherit",
+          env: spawnEnv,
+        },
+      );
 
-  const signalListeners = new Map<NodeJS.Signals, () => void>();
-  const detachSignals = (): void => {
-    for (const [signal, listener] of signalListeners) {
-      process.off(signal, listener);
-    }
-    signalListeners.clear();
-  };
+      // Forward termination signals to child process.
+      const signals: NodeJS.Signals[] =
+        process.platform === "win32"
+          ? ["SIGTERM", "SIGINT"]
+          : ["SIGTERM", "SIGINT", "SIGHUP", "SIGQUIT"];
 
-  for (const signal of signals) {
-    const listener = (): void => {
-      try {
-        child.kill(signal);
-      } catch {
-        // ignore
+      const signalListeners = new Map<NodeJS.Signals, () => void>();
+      const detachSignals = (): void => {
+        for (const [signal, listener] of signalListeners) {
+          process.off(signal, listener);
+        }
+        signalListeners.clear();
+      };
+
+      for (const signal of signals) {
+        const listener = (): void => {
+          try {
+            child.kill(signal);
+          } catch {
+            // ignore
+          }
+        };
+        try {
+          process.on(signal, listener);
+          signalListeners.set(signal, listener);
+        } catch {
+          // Unsupported signal on this platform.
+        }
       }
-    };
-    try {
-      process.on(signal, listener);
-      signalListeners.set(signal, listener);
-    } catch {
-      // Unsupported signal on this platform.
-    }
-  }
 
-  void child.exited.then((code) => {
-    detachSignals();
-    const sig = child.signalCode;
-    if (sig) {
-      process.exitCode = 1;
-      return;
-    }
-    process.exit(code ?? 1);
-  });
+      child.on("exit", (code, sig) => {
+        detachSignals();
+        if (sig) {
+          process.exitCode = 1;
+          return;
+        }
+        process.exit(code ?? 1);
+      });
+    })
+    .catch(() => process.exit(1));
 
   // Parent must not continue running the CLI.
   return true;

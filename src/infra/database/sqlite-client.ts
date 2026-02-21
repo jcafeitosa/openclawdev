@@ -1,16 +1,17 @@
 /**
  * SQLite client for OpenClaw metrics storage.
  * Used as fallback when PostgreSQL is not available.
+ * Uses Node.js built-in sqlite module.
  */
 
-import { Database } from "bun:sqlite";
 import path from "node:path";
 import { resolveStateDir } from "../../config/paths.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { requireNodeSqlite } from "../../memory/sqlite.js";
 
 const log = createSubsystemLogger("database/sqlite");
 
-let db: Database | null = null;
+let db: InstanceType<typeof import("node:sqlite").DatabaseSync> | null = null;
 
 /**
  * Get the SQLite database path.
@@ -23,13 +24,14 @@ export function getSqlitePath(): string {
 /**
  * Get or create the SQLite database connection.
  */
-export function getSqliteDatabase(): Database {
+export function getSqliteDatabase() {
   if (db) {
     return db;
   }
 
+  const sqlite = requireNodeSqlite();
   const dbPath = getSqlitePath();
-  db = new Database(dbPath);
+  db = new sqlite.DatabaseSync(dbPath);
 
   // Enable WAL mode for better concurrent access
   db.exec("PRAGMA journal_mode=WAL");
@@ -223,7 +225,8 @@ export function querySqliteUsage(params: {
 
     query += " GROUP BY provider_id, model_id ORDER BY total_cost DESC, requests DESC";
 
-    const rows = database.prepare(query).all(...values) as Array<{
+    const stmt = database.prepare(query);
+    const rows = stmt.all(...values) as Array<{
       provider_id: string;
       model_id: string;
       requests: number;

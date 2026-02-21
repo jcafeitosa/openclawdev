@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -121,7 +122,10 @@ export type ReadConfigFileSnapshotForWriteResult = {
 };
 
 function hashConfigRaw(raw: string | null): string {
-  return new Bun.CryptoHasher("sha256").update(raw ?? "").digest("hex");
+  return crypto
+    .createHash("sha256")
+    .update(raw ?? "")
+    .digest("hex");
 }
 
 export function resolveConfigSnapshotHash(snapshot: {

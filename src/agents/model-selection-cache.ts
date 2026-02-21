@@ -10,6 +10,7 @@
  * - Feature flag: OPENCLAW_MODEL_CACHE_ENABLED (default: enabled)
  */
 
+import crypto from "node:crypto";
 import { getChildLogger } from "../logging.js";
 
 const log = getChildLogger({ module: "model-selection-cache" });
@@ -38,7 +39,7 @@ export class ModelSelectionLRUCache<T> {
    */
   static generateKey(params: Record<string, unknown>): string {
     const serialized = JSON.stringify(params, Object.keys(params).toSorted());
-    return new Bun.CryptoHasher("sha256").update(serialized).digest("hex");
+    return crypto.createHash("sha256").update(serialized).digest("hex");
   }
 
   /**

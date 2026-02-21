@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import path from "node:path";
 import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import type { OpenClawConfig } from "../config/config.js";
@@ -138,7 +139,7 @@ function stableStringify(value: unknown): string {
 
 function digest(value: unknown): string {
   const serialized = stableStringify(value);
-  return new Bun.CryptoHasher("sha256").update(serialized).digest("hex");
+  return crypto.createHash("sha256").update(serialized).digest("hex");
 }
 
 function summarizeMessages(messages: AgentMessage[]): {

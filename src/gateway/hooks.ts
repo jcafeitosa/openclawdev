@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { listAgentIds, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { listChannelPlugins } from "../channels/plugins/index.js";
@@ -318,7 +319,7 @@ export function resolveHookSessionKey(params: {
     return { ok: true, value: defaultSessionKey };
   }
 
-  const generated = `hook:${params.idFactory ? params.idFactory() : crypto.randomUUID()}`;
+  const generated = `hook:${(params.idFactory ?? randomUUID)()}`;
   const allowedPrefixes = params.hooksConfig.sessionPolicy.allowedSessionKeyPrefixes;
   if (allowedPrefixes && !isSessionKeyAllowedByPrefix(generated, allowedPrefixes)) {
     return { ok: false, error: getHookSessionKeyPrefixError(allowedPrefixes) };

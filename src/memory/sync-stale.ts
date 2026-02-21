@@ -1,7 +1,7 @@
-import type { Database } from "bun:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 
 export function deleteStaleIndexedPaths(params: {
-  db: Database;
+  db: DatabaseSync;
   source: string;
   activePaths: Set<string>;
   vectorTable: string;

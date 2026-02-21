@@ -1,4 +1,4 @@
-import type { Database } from "bun:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 
 type SyncProgress = {
   completed: number;
@@ -20,7 +20,7 @@ function tickProgress(progress: SyncProgress | undefined): void {
 export async function indexFileEntryIfChanged<
   TEntry extends { path: string; hash: string },
 >(params: {
-  db: Database;
+  db: DatabaseSync;
   source: string;
   needsFullReindex: boolean;
   entry: TEntry;

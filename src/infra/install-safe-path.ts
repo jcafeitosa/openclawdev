@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 
 export function unscopedPackageName(name: string): string {
@@ -28,7 +29,7 @@ export function safePathSegmentHashed(input: string): string {
   const normalized = base.length > 0 ? base : "skill";
   const safe = normalized === "." || normalized === ".." ? "skill" : normalized;
 
-  const hash = new Bun.CryptoHasher("sha256").update(trimmed).digest("hex").slice(0, 10);
+  const hash = createHash("sha256").update(trimmed).digest("hex").slice(0, 10);
 
   if (safe !== trimmed) {
     const prefix = safe.length > 50 ? safe.slice(0, 50) : safe;
