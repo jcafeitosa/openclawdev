@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import path from "node:path";
 import type { AgentMessage, StreamFn } from "@mariozechner/pi-agent-core";
 import type { Api, Model } from "@mariozechner/pi-ai";
@@ -71,7 +70,7 @@ function digest(value: unknown): string | undefined {
   if (!serialized) {
     return undefined;
   }
-  return crypto.createHash("sha256").update(serialized).digest("hex");
+  return new Bun.CryptoHasher("sha256").update(serialized).digest("hex");
 }
 
 function isAnthropicModel(model: Model<Api> | undefined | null): boolean {

@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { requestJsonlSocket } from "./jsonl-socket.js";
 
 export type ExecHostRequest = {
@@ -46,8 +45,7 @@ export async function requestExecHostViaSocket(params: {
   const requestJson = JSON.stringify(request);
   const nonce = Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("hex");
   const ts = Date.now();
-  const hmac = crypto
-    .createHmac("sha256", token)
+  const hmac = new Bun.CryptoHasher("sha256", token)
     .update(`${nonce}:${ts}:${requestJson}`)
     .digest("hex");
   const payload = JSON.stringify({

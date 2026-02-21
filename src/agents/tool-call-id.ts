@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 
 export type ToolCallIdMode = "strict" | "strict9";
@@ -94,7 +93,7 @@ export function isValidCloudCodeAssistToolId(id: string, mode: ToolCallIdMode = 
 }
 
 function shortHash(text: string, length = 8): string {
-  return createHash("sha1").update(text).digest("hex").slice(0, length);
+  return new Bun.CryptoHasher("sha1").update(text).digest("hex").slice(0, length);
 }
 
 function makeUniqueToolId(params: { id: string; used: Set<string>; mode: ToolCallIdMode }): string {

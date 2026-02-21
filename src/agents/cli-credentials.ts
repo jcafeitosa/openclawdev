@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type { OAuthCredentials, OAuthProvider } from "@mariozechner/pi-ai";
@@ -194,7 +193,7 @@ function resolveMiniMaxCliCredentialsPath(homeDir?: string) {
 }
 
 function computeCodexKeychainAccount(codexHome: string) {
-  const hash = createHash("sha256").update(codexHome).digest("hex");
+  const hash = new Bun.CryptoHasher("sha256").update(codexHome).digest("hex");
   return `cli|${hash.slice(0, 16)}`;
 }
 
