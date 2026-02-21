@@ -1,8 +1,6 @@
-import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import * as readline from "node:readline";
-import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import {
   ClientSideConnection,
@@ -242,9 +240,17 @@ export type AcpClientOptions = {
   verbose?: boolean;
 };
 
+// Minimal structural type for the ACP agent subprocess.
+type AcpAgentProcess = {
+  stdin: { write: (data: string | Uint8Array) => unknown; end: () => void } | null;
+  stdout: ReadableStream<Uint8Array> | null | number;
+  exited: Promise<number | null>;
+  kill: (signal?: NodeJS.Signals | number) => void;
+};
+
 export type AcpClientHandle = {
   client: ClientSideConnection;
-  agent: ChildProcess;
+  agent: AcpAgentProcess;
   sessionId: string;
 };
 
@@ -331,17 +337,29 @@ export async function createAcpClient(opts: AcpClientOptions = {}): Promise<AcpC
 
   log(`spawning: ${serverCommand} ${effectiveArgs.join(" ")}`);
 
-  const agent = spawn(serverCommand, effectiveArgs, {
-    stdio: ["pipe", "pipe", "inherit"],
+  const proc = Bun.spawn([serverCommand, ...effectiveArgs], {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "inherit",
     cwd,
   });
 
-  if (!agent.stdin || !agent.stdout) {
+  if (!proc.stdin || !proc.stdout) {
     throw new Error("Failed to create ACP stdio pipes");
   }
 
-  const input = Writable.toWeb(agent.stdin);
-  const output = Readable.toWeb(agent.stdout) as unknown as ReadableStream<Uint8Array>;
+  // Wrap Bun FileSink into a Web Streams WritableStream for SDK compatibility.
+  const fileSink = proc.stdin;
+  const input = new WritableStream<Uint8Array>({
+    write(chunk) {
+      void fileSink.write(chunk);
+    },
+    close() {
+      void fileSink.end();
+    },
+  });
+
+  const output = proc.stdout as ReadableStream<Uint8Array>;
   const stream = ndJsonStream(input, output);
 
   const client = new ClientSideConnection(
@@ -374,7 +392,7 @@ export async function createAcpClient(opts: AcpClientOptions = {}): Promise<AcpC
 
   return {
     client,
-    agent,
+    agent: proc,
     sessionId: session.sessionId,
   };
 }
@@ -420,7 +438,7 @@ export async function runAcpClientInteractive(opts: AcpClientOptions = {}): Prom
 
   prompt();
 
-  agent.on("exit", (code) => {
+  void agent.exited.then((code) => {
     console.log(`\nAgent exited with code ${code ?? 0}`);
     rl.close();
     process.exit(code ?? 0);

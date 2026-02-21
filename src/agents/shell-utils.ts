@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -150,8 +149,10 @@ export function sanitizeBinaryOutput(text: string): string {
 export function killProcessTree(pid: number): void {
   if (process.platform === "win32") {
     try {
-      spawn("taskkill", ["/F", "/T", "/PID", String(pid)], {
-        stdio: "ignore",
+      Bun.spawn(["taskkill", "/F", "/T", "/PID", String(pid)], {
+        stdin: null,
+        stdout: null,
+        stderr: null,
         detached: true,
       });
     } catch {

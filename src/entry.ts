@@ -1,11 +1,9 @@
 #!/usr/bin/env node
-import { spawn } from "node:child_process";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./cli/profile.js";
 import { shouldSkipRespawnForArgv } from "./cli/respawn-policy.js";
 import { normalizeWindowsArgv } from "./cli/windows-argv.js";
 import { isTruthyEnvValue, normalizeEnv } from "./infra/env.js";
 import { installProcessWarningFilter } from "./infra/warning-filter.js";
-import { attachChildProcessBridge } from "./process/child-process-bridge.js";
 
 process.title = "openclaw";
 installProcessWarningFilter();
@@ -41,6 +39,16 @@ function hasExperimentalWarningSuppressed(): boolean {
   return false;
 }
 
+function buildSpawnEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (v !== undefined) {
+      env[k] = v;
+    }
+  }
+  return env;
+}
+
 function ensureExperimentalWarningSuppressed(): boolean {
   if (shouldSkipRespawnForArgv(process.argv)) {
     return false;
@@ -58,31 +66,55 @@ function ensureExperimentalWarningSuppressed(): boolean {
   // Respawn guard (and keep recursion bounded if something goes wrong).
   process.env.OPENCLAW_NODE_OPTIONS_READY = "1";
   // Pass flag as a Node CLI option, not via NODE_OPTIONS (--disable-warning is disallowed in NODE_OPTIONS).
-  const child = spawn(
-    process.execPath,
-    [EXPERIMENTAL_WARNING_FLAG, ...process.execArgv, ...process.argv.slice(1)],
+  const spawnEnv = buildSpawnEnv();
+  const child = Bun.spawn(
+    [process.execPath, EXPERIMENTAL_WARNING_FLAG, ...process.execArgv, ...process.argv.slice(1)],
     {
-      stdio: "inherit",
-      env: process.env,
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+      env: spawnEnv,
     },
   );
 
-  attachChildProcessBridge(child);
+  // Forward termination signals to child process.
+  const signals: NodeJS.Signals[] =
+    process.platform === "win32"
+      ? ["SIGTERM", "SIGINT"]
+      : ["SIGTERM", "SIGINT", "SIGHUP", "SIGQUIT"];
 
-  child.once("exit", (code, signal) => {
-    if (signal) {
+  const signalListeners = new Map<NodeJS.Signals, () => void>();
+  const detachSignals = (): void => {
+    for (const [signal, listener] of signalListeners) {
+      process.off(signal, listener);
+    }
+    signalListeners.clear();
+  };
+
+  for (const signal of signals) {
+    const listener = (): void => {
+      try {
+        child.kill(signal);
+      } catch {
+        // ignore
+      }
+    };
+    try {
+      process.on(signal, listener);
+      signalListeners.set(signal, listener);
+    } catch {
+      // Unsupported signal on this platform.
+    }
+  }
+
+  void child.exited.then((code) => {
+    detachSignals();
+    const sig = child.signalCode;
+    if (sig) {
       process.exitCode = 1;
       return;
     }
     process.exit(code ?? 1);
-  });
-
-  child.once("error", (error) => {
-    console.error(
-      "[openclaw] Failed to respawn CLI:",
-      error instanceof Error ? (error.stack ?? error.message) : error,
-    );
-    process.exit(1);
   });
 
   // Parent must not continue running the CLI.

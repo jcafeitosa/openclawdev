@@ -1,8 +1,6 @@
-import { EventEmitter } from "node:events";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { Mock } from "vitest";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { logWarnMock, logDebugMock, logInfoMock } = vi.hoisted(() => ({
@@ -11,49 +9,87 @@ const { logWarnMock, logDebugMock, logInfoMock } = vi.hoisted(() => ({
   logInfoMock: vi.fn(),
 }));
 
-type MockChild = EventEmitter & {
-  stdout: EventEmitter;
-  stderr: EventEmitter;
-  kill: (signal?: NodeJS.Signals) => void;
+type MockBunProcess = ReturnType<typeof Bun.spawn> & {
   closeWith: (code?: number | null) => void;
+  pushStdout: (data: string) => void;
+  pushStderr: (data: string) => void;
 };
 
-function createMockChild(params?: { autoClose?: boolean; closeDelayMs?: number }): MockChild {
-  const stdout = new EventEmitter();
-  const stderr = new EventEmitter();
-  const child = new EventEmitter() as MockChild;
-  child.stdout = stdout;
-  child.stderr = stderr;
-  child.closeWith = (code = 0) => {
-    child.emit("close", code);
+function createMockBunProcess(params?: {
+  autoClose?: boolean;
+  closeDelayMs?: number;
+  exitCode?: number;
+}): MockBunProcess {
+  const encoder = new TextEncoder();
+  let exitResolve: (code: number | null) => void = () => {};
+  const exited = new Promise<number | null>((resolve) => {
+    exitResolve = resolve;
+  });
+
+  let stdoutCtrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let stderrCtrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+
+  const stdout = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      stdoutCtrl = ctrl;
+    },
+  });
+  const stderr = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      stderrCtrl = ctrl;
+    },
+  });
+
+  const pushStdout = (data: string) => {
+    stdoutCtrl?.enqueue(encoder.encode(data));
   };
-  child.kill = () => {
-    // Let timeout rejection win in tests that simulate hung QMD commands.
+  const pushStderr = (data: string) => {
+    stderrCtrl?.enqueue(encoder.encode(data));
   };
+
+  const closeWith = (code: number | null = params?.exitCode ?? 0) => {
+    stdoutCtrl?.close();
+    stderrCtrl?.close();
+    exitResolve(code);
+  };
+
   if (params?.autoClose !== false) {
-    const delayMs = params?.closeDelayMs ?? 0;
-    if (delayMs <= 0) {
-      queueMicrotask(() => {
-        child.emit("close", 0);
-      });
+    const delay = params?.closeDelayMs ?? 0;
+    if (delay <= 0) {
+      queueMicrotask(() => closeWith());
     } else {
-      setTimeout(() => {
-        child.emit("close", 0);
-      }, delayMs);
+      setTimeout(() => closeWith(), delay);
     }
   }
-  return child;
+
+  return Object.assign(
+    {
+      stdout,
+      stderr,
+      exited,
+      exitCode: null,
+      signalCode: null,
+      pid: 1234,
+      kill: vi.fn(),
+      stdin: null,
+    } as unknown as ReturnType<typeof Bun.spawn>,
+    { closeWith, pushStdout, pushStderr },
+  );
 }
 
 function emitAndClose(
-  child: MockChild,
+  proc: MockBunProcess,
   stream: "stdout" | "stderr",
   data: string,
   code: number = 0,
 ) {
   queueMicrotask(() => {
-    child[stream].emit("data", data);
-    child.closeWith(code);
+    if (stream === "stdout") {
+      proc.pushStdout(data);
+    } else {
+      proc.pushStderr(data);
+    }
+    proc.closeWith(code);
   });
 }
 
@@ -69,20 +105,11 @@ vi.mock("../logging/subsystem.js", () => ({
   },
 }));
 
-vi.mock("node:child_process", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:child_process")>();
-  return {
-    ...actual,
-    spawn: vi.fn(),
-  };
-});
-
-import { spawn as mockedSpawn } from "node:child_process";
 import type { OpenClawConfig } from "../config/config.js";
 import { resolveMemoryBackendConfig } from "./backend-config.js";
 import { QmdMemoryManager } from "./qmd-manager.js";
 
-const spawnMock = mockedSpawn as unknown as Mock;
+let bunSpawnSpy: ReturnType<typeof vi.spyOn>;
 
 describe("QmdMemoryManager", () => {
   let fixtureRoot: string;
@@ -118,8 +145,7 @@ describe("QmdMemoryManager", () => {
   });
 
   beforeEach(async () => {
-    spawnMock.mockReset();
-    spawnMock.mockImplementation(() => createMockChild());
+    bunSpawnSpy = vi.spyOn(Bun, "spawn").mockImplementation(() => createMockBunProcess());
     logWarnMock.mockReset();
     logDebugMock.mockReset();
     logInfoMock.mockReset();
@@ -146,6 +172,7 @@ describe("QmdMemoryManager", () => {
   });
 
   afterEach(async () => {
+    bunSpawnSpy?.mockRestore();
     vi.useRealTimers();
     delete process.env.OPENCLAW_STATE_DIR;
   });
@@ -153,20 +180,20 @@ describe("QmdMemoryManager", () => {
   it("debounces back-to-back sync calls", async () => {
     const { manager, resolved } = await createManager();
 
-    const baselineCalls = spawnMock.mock.calls.length;
+    const baselineCalls = bunSpawnSpy.mock.calls.length;
 
     await manager.sync({ reason: "manual" });
-    expect(spawnMock.mock.calls.length).toBe(baselineCalls + 2);
+    expect(bunSpawnSpy.mock.calls.length).toBe(baselineCalls + 2);
 
     await manager.sync({ reason: "manual-again" });
-    expect(spawnMock.mock.calls.length).toBe(baselineCalls + 2);
+    expect(bunSpawnSpy.mock.calls.length).toBe(baselineCalls + 2);
 
     (manager as unknown as { lastUpdateAt: number | null }).lastUpdateAt =
       Date.now() - (resolved.qmd?.update.debounceMs ?? 0) - 10;
 
     await manager.sync({ reason: "after-wait" });
     // By default we refresh embeddings less frequently than index updates.
-    expect(spawnMock.mock.calls.length).toBe(baselineCalls + 3);
+    expect(bunSpawnSpy.mock.calls.length).toBe(baselineCalls + 3);
 
     await manager.close();
   });
@@ -185,13 +212,14 @@ describe("QmdMemoryManager", () => {
     } as OpenClawConfig;
 
     let releaseUpdate: (() => void) | null = null;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
-        const child = createMockChild({ autoClose: false });
-        releaseUpdate = () => child.closeWith(0);
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        releaseUpdate = () => proc.closeWith(0);
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager({ mode: "full" });
@@ -214,7 +242,7 @@ describe("QmdMemoryManager", () => {
     } as OpenClawConfig;
 
     const { manager } = await createManager({ mode: "status" });
-    expect(spawnMock).not.toHaveBeenCalled();
+    expect(bunSpawnSpy).not.toHaveBeenCalled();
     await manager?.close();
   });
 
@@ -238,14 +266,15 @@ describe("QmdMemoryManager", () => {
 
     const updateSpawned = createDeferred<void>();
     let releaseUpdate: (() => void) | null = null;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
-        const child = createMockChild({ autoClose: false });
-        releaseUpdate = () => child.closeWith(0);
+        const proc = createMockBunProcess({ autoClose: false });
+        releaseUpdate = () => proc.closeWith(0);
         updateSpawned.resolve();
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const resolved = resolveMemoryBackendConfig({ cfg, agentId });
@@ -280,11 +309,12 @@ describe("QmdMemoryManager", () => {
       },
     } as OpenClawConfig;
 
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "collection" && args[1] === "list") {
-        return createMockChild({ autoClose: false });
+        return createMockBunProcess({ autoClose: false });
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager({ mode: "full" });
@@ -316,19 +346,20 @@ describe("QmdMemoryManager", () => {
 
     const sessionCollectionName = `sessions-${devAgentId}`;
     const wrongSessionsPath = path.join(stateDir, "agents", agentId, "qmd", "sessions");
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "collection" && args[1] === "list") {
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         emitAndClose(
-          child,
+          proc,
           "stdout",
           JSON.stringify([
             { name: sessionCollectionName, path: wrongSessionsPath, mask: "**/*.md" },
           ]),
         );
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const resolved = resolveMemoryBackendConfig({ cfg, agentId: devAgentId });
@@ -341,7 +372,9 @@ describe("QmdMemoryManager", () => {
     expect(manager).toBeTruthy();
     await manager?.close();
 
-    const commands = spawnMock.mock.calls.map((call: unknown[]) => call[1] as string[]);
+    const commands = bunSpawnSpy.mock.calls.map((call: unknown[]) =>
+      (call[0] as string[]).slice(1),
+    );
     const removeSessions = commands.find(
       (args) =>
         args[0] === "collection" && args[1] === "remove" && args[2] === sessionCollectionName,
@@ -374,23 +407,26 @@ describe("QmdMemoryManager", () => {
     } as OpenClawConfig;
 
     const sessionCollectionName = `sessions-${agentId}`;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "collection" && args[1] === "list") {
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         emitAndClose(
-          child,
+          proc,
           "stdout",
           JSON.stringify([`workspace-${agentId}`, sessionCollectionName]),
         );
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager({ mode: "full" });
     await manager.close();
 
-    const commands = spawnMock.mock.calls.map((call: unknown[]) => call[1] as string[]);
+    const commands = bunSpawnSpy.mock.calls.map((call: unknown[]) =>
+      (call[0] as string[]).slice(1),
+    );
     const removeSessions = commands.find(
       (args) =>
         args[0] === "collection" && args[1] === "remove" && args[2] === sessionCollectionName,
@@ -425,11 +461,12 @@ describe("QmdMemoryManager", () => {
         },
       },
     } as OpenClawConfig;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
-        return createMockChild({ autoClose: false });
+        return createMockBunProcess({ autoClose: false });
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const resolved = resolveMemoryBackendConfig({ cfg, agentId });
@@ -461,36 +498,37 @@ describe("QmdMemoryManager", () => {
     } as OpenClawConfig;
 
     let updateCalls = 0;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
         updateCalls += 1;
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         if (updateCalls === 1) {
           emitAndClose(
-            child,
+            proc,
             "stderr",
             "ENOTDIR: not a directory, open '/tmp/workspace/MEMORY.md^@'",
             1,
           );
-          return child;
+          return proc;
         }
         queueMicrotask(() => {
-          child.closeWith(0);
+          proc.closeWith(0);
         });
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager({ mode: "status" });
     await expect(manager.sync({ reason: "manual" })).resolves.toBeUndefined();
 
-    const removeCalls = spawnMock.mock.calls
-      .map((call: unknown[]) => call[1] as string[])
+    const removeCalls = bunSpawnSpy.mock.calls
+      .map((call: unknown[]) => (call[0] as string[]).slice(1))
       .filter((args: string[]) => args[0] === "collection" && args[1] === "remove")
       .map((args) => args[2]);
-    const addCalls = spawnMock.mock.calls
-      .map((call: unknown[]) => call[1] as string[])
+    const addCalls = bunSpawnSpy.mock.calls
+      .map((call: unknown[]) => (call[0] as string[]).slice(1))
       .filter((args: string[]) => args[0] === "collection" && args[1] === "add")
       .map((args) => args[args.indexOf("--name") + 1]);
 
@@ -517,18 +555,19 @@ describe("QmdMemoryManager", () => {
       },
     } as OpenClawConfig;
 
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         emitAndClose(
-          child,
+          proc,
           "stderr",
           "ENOTDIR: not a directory, open '/tmp/workspace/MEMORY.md'",
           1,
         );
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager({ mode: "status" });
@@ -536,8 +575,8 @@ describe("QmdMemoryManager", () => {
       "ENOTDIR: not a directory, open '/tmp/workspace/MEMORY.md'",
     );
 
-    const removeCalls = spawnMock.mock.calls
-      .map((call: unknown[]) => call[1] as string[])
+    const removeCalls = bunSpawnSpy.mock.calls
+      .map((call: unknown[]) => (call[0] as string[]).slice(1))
       .filter((args: string[]) => args[0] === "collection" && args[1] === "remove");
     expect(removeCalls).toHaveLength(0);
 
@@ -557,13 +596,14 @@ describe("QmdMemoryManager", () => {
         },
       },
     } as OpenClawConfig;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "[]");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "[]");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager, resolved } = await createManager();
@@ -576,10 +616,13 @@ describe("QmdMemoryManager", () => {
       manager.search("test", { sessionKey: "agent:main:slack:dm:u123" }),
     ).resolves.toEqual([]);
 
-    const searchCall = spawnMock.mock.calls.find(
-      (call: unknown[]) => (call[1] as string[])?.[0] === "search",
+    const searchCall = bunSpawnSpy.mock.calls.find(
+      (call: unknown[]) => (call[0] as string[])?.slice(1)?.[0] === "search",
     );
-    expect(searchCall?.[1]).toEqual([
+    if (!searchCall) {
+      throw new Error("search spawn call not found");
+    }
+    expect((searchCall[0] as string[]).slice(1)).toEqual([
       "search",
       "test",
       "--json",
@@ -589,7 +632,9 @@ describe("QmdMemoryManager", () => {
       "workspace-main",
     ]);
     expect(
-      spawnMock.mock.calls.some((call: unknown[]) => (call[1] as string[])?.[0] === "query"),
+      bunSpawnSpy.mock.calls.some(
+        (call: unknown[]) => (call[0] as string[])?.slice(1)?.[0] === "query",
+      ),
     ).toBe(false);
     expect(maxResults).toBeGreaterThan(0);
     await manager.close();
@@ -608,18 +653,19 @@ describe("QmdMemoryManager", () => {
         },
       },
     } as OpenClawConfig;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stderr", "unknown flag: --json", 2);
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stderr", "unknown flag: --json", 2);
+        return proc;
       }
       if (args[0] === "query") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "[]");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "[]");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager, resolved } = await createManager();
@@ -632,8 +678,8 @@ describe("QmdMemoryManager", () => {
       manager.search("test", { sessionKey: "agent:main:slack:dm:u123" }),
     ).resolves.toEqual([]);
 
-    const searchAndQueryCalls = spawnMock.mock.calls
-      .map((call: unknown[]) => call[1])
+    const searchAndQueryCalls = bunSpawnSpy.mock.calls
+      .map((call: unknown[]) => (call[0] as string[]).slice(1))
       .filter(
         (args): args is string[] => Array.isArray(args) && ["search", "query"].includes(args[0]),
       );
@@ -665,18 +711,19 @@ describe("QmdMemoryManager", () => {
     const firstUpdateSpawned = createDeferred<void>();
     let updateCalls = 0;
     let releaseFirstUpdate: (() => void) | null = null;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
         updateCalls += 1;
         if (updateCalls === 1) {
-          const first = createMockChild({ autoClose: false });
+          const first = createMockBunProcess({ autoClose: false });
           releaseFirstUpdate = () => first.closeWith(0);
           firstUpdateSpawned.resolve();
           return first;
         }
-        return createMockChild();
+        return createMockBunProcess();
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -719,24 +766,25 @@ describe("QmdMemoryManager", () => {
     let updateCalls = 0;
     let releaseFirstUpdate: (() => void) | null = null;
     let releaseSecondUpdate: (() => void) | null = null;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "update") {
         updateCalls += 1;
         if (updateCalls === 1) {
-          const first = createMockChild({ autoClose: false });
+          const first = createMockBunProcess({ autoClose: false });
           releaseFirstUpdate = () => first.closeWith(0);
           firstUpdateSpawned.resolve();
           return first;
         }
         if (updateCalls === 2) {
-          const second = createMockChild({ autoClose: false });
+          const second = createMockBunProcess({ autoClose: false });
           releaseSecondUpdate = () => second.closeWith(0);
           secondUpdateSpawned.resolve();
           return second;
         }
-        return createMockChild();
+        return createMockBunProcess();
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -780,26 +828,30 @@ describe("QmdMemoryManager", () => {
       },
     } as OpenClawConfig;
 
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "[]");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "[]");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager, resolved } = await createManager();
 
     await manager.search("test", { sessionKey: "agent:main:slack:dm:u123" });
-    const searchCall = spawnMock.mock.calls.find(
-      (call: unknown[]) => (call[1] as string[])?.[0] === "search",
+    const searchCall = bunSpawnSpy.mock.calls.find(
+      (call: unknown[]) => (call[0] as string[])?.slice(1)?.[0] === "search",
     );
     const maxResults = resolved.qmd?.limits.maxResults;
     if (!maxResults) {
       throw new Error("qmd maxResults missing");
     }
-    expect(searchCall?.[1]).toEqual([
+    if (!searchCall) {
+      throw new Error("search spawn call not found");
+    }
+    expect((searchCall[0] as string[]).slice(1)).toEqual([
       "search",
       "test",
       "--json",
@@ -830,13 +882,14 @@ describe("QmdMemoryManager", () => {
       },
     } as OpenClawConfig;
 
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "query") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "[]");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "[]");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager, resolved } = await createManager();
@@ -849,8 +902,8 @@ describe("QmdMemoryManager", () => {
       manager.search("test", { sessionKey: "agent:main:slack:dm:u123" }),
     ).resolves.toEqual([]);
 
-    const queryCalls = spawnMock.mock.calls
-      .map((call: unknown[]) => call[1] as string[])
+    const queryCalls = bunSpawnSpy.mock.calls
+      .map((call: unknown[]) => (call[0] as string[]).slice(1))
       .filter((args: string[]) => args[0] === "query");
     expect(queryCalls).toEqual([
       ["query", "test", "--json", "-n", String(maxResults), "-c", "workspace-main"],
@@ -876,18 +929,19 @@ describe("QmdMemoryManager", () => {
       },
     } as OpenClawConfig;
 
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stderr", "unknown flag: --json", 2);
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stderr", "unknown flag: --json", 2);
+        return proc;
       }
       if (args[0] === "query") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "[]");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "[]");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager, resolved } = await createManager();
@@ -900,8 +954,8 @@ describe("QmdMemoryManager", () => {
       manager.search("test", { sessionKey: "agent:main:slack:dm:u123" }),
     ).resolves.toEqual([]);
 
-    const searchAndQueryCalls = spawnMock.mock.calls
-      .map((call: unknown[]) => call[1] as string[])
+    const searchAndQueryCalls = bunSpawnSpy.mock.calls
+      .map((call: unknown[]) => (call[0] as string[]).slice(1))
       .filter((args: string[]) => args[0] === "search" || args[0] === "query");
     expect(searchAndQueryCalls).toEqual([
       [
@@ -939,7 +993,9 @@ describe("QmdMemoryManager", () => {
     const results = await manager.search("test", { sessionKey: "agent:main:slack:dm:u123" });
     expect(results).toEqual([]);
     expect(
-      spawnMock.mock.calls.some((call: unknown[]) => (call[1] as string[])?.[0] === "query"),
+      bunSpawnSpy.mock.calls.some(
+        (call: unknown[]) => (call[0] as string[])?.slice(1)?.[0] === "query",
+      ),
     ).toBe(false);
     await manager.close();
   });
@@ -962,11 +1018,12 @@ describe("QmdMemoryManager", () => {
         },
       },
     } as OpenClawConfig;
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "embed") {
-        return createMockChild({ autoClose: false });
+        return createMockBunProcess({ autoClose: false });
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const resolved = resolveMemoryBackendConfig({ cfg, agentId });
@@ -1032,12 +1089,12 @@ describe("QmdMemoryManager", () => {
     const { manager } = await createManager();
 
     logWarnMock.mockClear();
-    const beforeCalls = spawnMock.mock.calls.length;
+    const beforeCalls = bunSpawnSpy.mock.calls.length;
     await expect(
       manager.search("blocked", { sessionKey: "agent:main:discord:channel:c123" }),
     ).resolves.toEqual([]);
 
-    expect(spawnMock.mock.calls.length).toBe(beforeCalls);
+    expect(bunSpawnSpy.mock.calls.length).toBe(beforeCalls);
     expect(logWarnMock).toHaveBeenCalledWith(expect.stringContaining("qmd search denied by scope"));
     expect(logWarnMock).toHaveBeenCalledWith(expect.stringContaining("chatType=channel"));
 
@@ -1148,17 +1205,18 @@ describe("QmdMemoryManager", () => {
   });
 
   it("fails search when sqlite index is busy so caller can fallback", async () => {
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         emitAndClose(
-          child,
+          proc,
           "stdout",
           JSON.stringify([{ docid: "abc123", score: 1, snippet: "@@ -1,1\nremember this" }]),
         );
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -1182,19 +1240,20 @@ describe("QmdMemoryManager", () => {
   it("prefers exact docid match before prefix fallback for qmd document lookups", async () => {
     const prepareCalls: string[] = [];
     const exactDocid = "abc123";
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         emitAndClose(
-          child,
+          proc,
           "stdout",
           JSON.stringify([
             { docid: exactDocid, score: 1, snippet: "@@ -5,2\nremember this\nnext line" },
           ]),
         );
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -1241,13 +1300,14 @@ describe("QmdMemoryManager", () => {
 
   it("errors when qmd output exceeds command output safety cap", async () => {
     const noisyPayload = "x".repeat(240_000);
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", noisyPayload);
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", noisyPayload);
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -1259,13 +1319,14 @@ describe("QmdMemoryManager", () => {
   });
 
   it("treats plain-text no-results stdout as an empty result set", async () => {
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "No results found.");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "No results found.");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -1277,13 +1338,14 @@ describe("QmdMemoryManager", () => {
   });
 
   it("treats plain-text no-results stdout without punctuation as empty", async () => {
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stdout", "No results found\n\n");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stdout", "No results found\n\n");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -1295,13 +1357,14 @@ describe("QmdMemoryManager", () => {
   });
 
   it("treats plain-text no-results stderr as an empty result set", async () => {
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "search") {
-        const child = createMockChild({ autoClose: false });
-        emitAndClose(child, "stderr", "No results found.\n");
-        return child;
+        const proc = createMockBunProcess({ autoClose: false });
+        emitAndClose(proc, "stderr", "No results found.\n");
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();
@@ -1313,17 +1376,18 @@ describe("QmdMemoryManager", () => {
   });
 
   it("throws when stdout is empty without the no-results marker", async () => {
-    spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+    bunSpawnSpy.mockImplementation((argv: unknown) => {
+      const args = (argv as string[]).slice(1);
       if (args[0] === "query") {
-        const child = createMockChild({ autoClose: false });
+        const proc = createMockBunProcess({ autoClose: false });
         queueMicrotask(() => {
-          child.stdout.emit("data", "   \n");
-          child.stderr.emit("data", "unexpected parser error");
-          child.closeWith(0);
+          proc.pushStdout("   \n");
+          proc.pushStderr("unexpected parser error");
+          proc.closeWith(0);
         });
-        return child;
+        return proc;
       }
-      return createMockChild();
+      return createMockBunProcess();
     });
 
     const { manager } = await createManager();

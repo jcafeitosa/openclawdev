@@ -1,5 +1,3 @@
-import { spawn } from "node:child_process";
-
 type ExecDockerRawOptions = {
   allowFailure?: boolean;
   input?: Buffer | string;
@@ -24,84 +22,72 @@ function createAbortError(): Error {
   return err;
 }
 
-export function execDockerRaw(
+export async function execDockerRaw(
   args: string[],
   opts?: ExecDockerRawOptions,
 ): Promise<ExecDockerRawResult> {
-  return new Promise<ExecDockerRawResult>((resolve, reject) => {
-    const child = spawn("docker", args, {
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const stdoutChunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    let aborted = false;
-
-    const signal = opts?.signal;
-    const handleAbort = () => {
-      if (aborted) {
-        return;
-      }
-      aborted = true;
-      child.kill("SIGTERM");
-    };
-    if (signal) {
-      if (signal.aborted) {
-        handleAbort();
-      } else {
-        signal.addEventListener("abort", handleAbort);
-      }
-    }
-
-    child.stdout?.on("data", (chunk) => {
-      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
-    child.stderr?.on("data", (chunk) => {
-      stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    });
-
-    child.on("error", (error) => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      reject(error);
-    });
-
-    child.on("close", (code) => {
-      if (signal) {
-        signal.removeEventListener("abort", handleAbort);
-      }
-      const stdout = Buffer.concat(stdoutChunks);
-      const stderr = Buffer.concat(stderrChunks);
-      if (aborted || signal?.aborted) {
-        reject(createAbortError());
-        return;
-      }
-      const exitCode = code ?? 0;
-      if (exitCode !== 0 && !opts?.allowFailure) {
-        const message = stderr.length > 0 ? stderr.toString("utf8").trim() : "";
-        const error: ExecDockerRawError = Object.assign(
-          new Error(message || `docker ${args.join(" ")} failed`),
-          {
-            code: exitCode,
-            stdout,
-            stderr,
-          },
-        );
-        reject(error);
-        return;
-      }
-      resolve({ stdout, stderr, code: exitCode });
-    });
-
-    const stdin = child.stdin;
-    if (stdin) {
-      if (opts?.input !== undefined) {
-        stdin.end(opts.input);
-      } else {
-        stdin.end();
-      }
-    }
+  const stdinValue =
+    opts?.input !== undefined
+      ? typeof opts.input === "string"
+        ? Buffer.from(opts.input, "utf8")
+        : opts.input
+      : null;
+  const proc = Bun.spawn(["docker", ...args], {
+    stdin: stdinValue,
+    stdout: "pipe",
+    stderr: "pipe",
   });
+
+  let aborted = false;
+  const signal = opts?.signal;
+  const handleAbort = () => {
+    if (aborted) {
+      return;
+    }
+    aborted = true;
+    proc.kill("SIGTERM");
+  };
+  if (signal) {
+    if (signal.aborted) {
+      handleAbort();
+    } else {
+      signal.addEventListener("abort", handleAbort);
+    }
+  }
+
+  const stdoutP =
+    proc.stdout instanceof ReadableStream
+      ? new Response(proc.stdout).arrayBuffer()
+      : Promise.resolve(new ArrayBuffer(0));
+  const stderrP =
+    proc.stderr instanceof ReadableStream
+      ? new Response(proc.stderr).arrayBuffer()
+      : Promise.resolve(new ArrayBuffer(0));
+
+  const exitCode = await proc.exited;
+  if (signal) {
+    signal.removeEventListener("abort", handleAbort);
+  }
+
+  const [stdoutAB, stderrAB] = await Promise.all([stdoutP, stderrP]);
+  const stdout = Buffer.from(stdoutAB);
+  const stderr = Buffer.from(stderrAB);
+
+  if (aborted || signal?.aborted) {
+    throw createAbortError();
+  }
+
+  const code = exitCode ?? 0;
+  if (code !== 0 && !opts?.allowFailure) {
+    const message = stderr.length > 0 ? stderr.toString("utf8").trim() : "";
+    throw Object.assign(new Error(message || `docker ${args.join(" ")} failed`), {
+      code,
+      stdout,
+      stderr,
+    }) as ExecDockerRawError;
+  }
+
+  return { stdout, stderr, code };
 }
 
 import { formatCliCommand } from "../../cli/command-format.js";

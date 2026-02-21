@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveAgentConfig } from "../agents/agent-scope.js";
@@ -203,81 +202,95 @@ async function runCommand(
   env: Record<string, string> | undefined,
   timeoutMs: number | undefined,
 ): Promise<RunResult> {
-  return await new Promise((resolve) => {
-    let stdout = "";
-    let stderr = "";
-    let outputLen = 0;
-    let truncated = false;
-    let timedOut = false;
-    let settled = false;
-
-    const child = spawn(argv[0], argv.slice(1), {
+  let proc: ReturnType<typeof Bun.spawn>;
+  try {
+    proc = Bun.spawn([argv[0], ...argv.slice(1)], {
       cwd,
       env,
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
+      stdin: null,
+      stdout: "pipe",
+      stderr: "pipe",
     });
-
-    const onChunk = (chunk: Buffer, target: "stdout" | "stderr") => {
-      if (outputLen >= OUTPUT_CAP) {
-        truncated = true;
-        return;
-      }
-      const remaining = OUTPUT_CAP - outputLen;
-      const slice = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk;
-      const str = slice.toString("utf8");
-      outputLen += slice.length;
-      if (target === "stdout") {
-        stdout += str;
-      } else {
-        stderr += str;
-      }
-      if (chunk.length > remaining) {
-        truncated = true;
-      }
+  } catch (err) {
+    return {
+      exitCode: undefined,
+      timedOut: false,
+      success: false,
+      stdout: "",
+      stderr: "",
+      error: err instanceof Error ? err.message : String(err),
+      truncated: false,
     };
+  }
 
-    child.stdout?.on("data", (chunk) => onChunk(chunk as Buffer, "stdout"));
-    child.stderr?.on("data", (chunk) => onChunk(chunk as Buffer, "stderr"));
+  let timedOut = false;
+  const timer =
+    timeoutMs && timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          try {
+            proc.kill("SIGKILL");
+          } catch {
+            // ignore
+          }
+        }, timeoutMs)
+      : undefined;
 
-    let timer: NodeJS.Timeout | undefined;
-    if (timeoutMs && timeoutMs > 0) {
-      timer = setTimeout(() => {
-        timedOut = true;
-        try {
-          child.kill("SIGKILL");
-        } catch {
-          // ignore
-        }
-      }, timeoutMs);
+  const stdoutP =
+    proc.stdout instanceof ReadableStream
+      ? new Response(proc.stdout).arrayBuffer()
+      : Promise.resolve(new ArrayBuffer(0));
+  const stderrP =
+    proc.stderr instanceof ReadableStream
+      ? new Response(proc.stderr).arrayBuffer()
+      : Promise.resolve(new ArrayBuffer(0));
+
+  const exitCode = await proc.exited;
+  if (timer) {
+    clearTimeout(timer);
+  }
+
+  const [stdoutAB, stderrAB] = await Promise.all([stdoutP, stderrP]);
+  const stdoutBuf = Buffer.from(stdoutAB);
+  const stderrBuf = Buffer.from(stderrAB);
+
+  // Replicate the byte-level OUTPUT_CAP / truncation logic
+  let stdout = "";
+  let stderr = "";
+  let outputLen = 0;
+  let truncated = false;
+
+  const consumeBuf = (buf: Buffer, target: "stdout" | "stderr") => {
+    if (outputLen >= OUTPUT_CAP) {
+      truncated = true;
+      return;
     }
+    const remaining = OUTPUT_CAP - outputLen;
+    const slice = buf.length > remaining ? buf.subarray(0, remaining) : buf;
+    const str = slice.toString("utf8");
+    outputLen += slice.length;
+    if (target === "stdout") {
+      stdout = str;
+    } else {
+      stderr = str;
+    }
+    if (buf.length > remaining) {
+      truncated = true;
+    }
+  };
 
-    const finalize = (exitCode?: number, error?: string | null) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      if (timer) {
-        clearTimeout(timer);
-      }
-      resolve({
-        exitCode,
-        timedOut,
-        success: exitCode === 0 && !timedOut && !error,
-        stdout,
-        stderr,
-        error: error ?? null,
-        truncated,
-      });
-    };
+  consumeBuf(stdoutBuf, "stdout");
+  consumeBuf(stderrBuf, "stderr");
 
-    child.on("error", (err) => {
-      finalize(undefined, err.message);
-    });
-    child.on("exit", (code) => {
-      finalize(code === null ? undefined : code, null);
-    });
-  });
+  return {
+    exitCode: exitCode === null ? undefined : exitCode,
+    timedOut,
+    success: exitCode === 0 && !timedOut,
+    stdout,
+    stderr,
+    error: null,
+    truncated,
+  };
 }
 
 function resolveEnvPath(env?: Record<string, string>): string[] {

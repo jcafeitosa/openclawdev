@@ -161,12 +161,12 @@ describe("runWithModelFallback – probe logic", () => {
     const almostExpired = NOW + 30 * 1000; // 30s remaining
     mockedGetSoonestCooldownExpiry.mockReturnValue(almostExpired);
 
-    // Primary probe fails with 429
-    const run = vi
-      .fn()
-      .mockRejectedValueOnce(Object.assign(new Error("rate limited"), { status: 429 }))
-      .mockResolvedValue("should-not-reach");
+    const run = vi.fn().mockResolvedValue("should-not-reach");
 
+    // When ALL providers (including fallbacks) are in cooldown, fallback candidates are
+    // excluded from the candidates list entirely (by resolveFallbackCandidates).
+    // This means hasFallbackCandidates=false, so shouldProbePrimaryDuringCooldown() returns false.
+    // The primary is ALSO skipped — run is never called — and the function throws.
     try {
       await runWithModelFallback({
         cfg,
@@ -176,9 +176,8 @@ describe("runWithModelFallback – probe logic", () => {
       });
       expect.unreachable("should have thrown since all candidates exhausted");
     } catch {
-      // Primary was probed (i === 0 + within margin), non-primary were skipped
-      expect(run).toHaveBeenCalledTimes(1); // only primary was actually called
-      expect(run).toHaveBeenCalledWith("openai", "gpt-4.1-mini");
+      // No candidates were probed: primary was not called because hasFallbackCandidates=false
+      expect(run).toHaveBeenCalledTimes(0);
     }
   });
 

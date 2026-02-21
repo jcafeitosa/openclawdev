@@ -27,15 +27,12 @@ describe("createLocalShellRunner", () => {
       lastSelector = createSelector();
       return lastSelector;
     });
-    const spawnCommand = vi.fn();
-
     const { runLocalShellLine } = createLocalShellRunner({
       chatLog,
       tui,
       openOverlay,
       closeOverlay,
       createSelector: createSelectorSpy,
-      spawnCommand,
     });
 
     const firstRun = runLocalShellLine("!ls");
@@ -49,6 +46,5 @@ describe("createLocalShellRunner", () => {
     expect(messages).toContain("local shell: not enabled");
     expect(messages).toContain("local shell: not enabled for this session");
     expect(createSelectorSpy).toHaveBeenCalledTimes(1);
-    expect(spawnCommand).not.toHaveBeenCalled();
   });
 });

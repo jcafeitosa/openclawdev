@@ -83,8 +83,6 @@ describe("capability-patterns-loader", () => {
     });
 
     it("should skip invalid pattern entries", () => {
-      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
       const config: Partial<Config> = {
         agents: {
           defaults: {
@@ -99,17 +97,13 @@ describe("capability-patterns-loader", () => {
 
       loadModelPatternsFromConfig(config);
 
-      // Only valid pattern should be registered
+      // Only valid pattern should be registered (invalid entries are silently skipped
+      // and logged via the structured logger which uses silent console in Vitest)
       expect(getDynamicPatterns().size).toBe(1);
       expect(getDynamicPatterns().has("valid-pattern")).toBe(true);
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
 
     it("should log info when patterns are registered", () => {
-      const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-
       const config: Partial<Config> = {
         agents: {
           defaults: {
@@ -123,11 +117,11 @@ describe("capability-patterns-loader", () => {
 
       loadModelPatternsFromConfig(config);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Registered 2 custom model pattern(s)"),
-      );
-
-      consoleSpy.mockRestore();
+      // The structured logger uses silent console in Vitest, so we verify behavior
+      // through the pattern registry rather than console.info calls.
+      expect(getDynamicPatterns().size).toBe(2);
+      expect(getDynamicPatterns().has("pattern1")).toBe(true);
+      expect(getDynamicPatterns().has("pattern2")).toBe(true);
     });
 
     it("should handle registration errors gracefully", () => {

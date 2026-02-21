@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -86,9 +85,13 @@ function createEnv(
 
 function resolveBashForCompatCheck(): string | null {
   for (const candidate of ["/bin/bash", "bash"]) {
-    const probe = spawnSync(candidate, ["-c", "exit 0"], { encoding: "utf8" });
-    if (!probe.error && probe.status === 0) {
-      return candidate;
+    try {
+      const probe = Bun.spawnSync([candidate, "-c", "exit 0"]);
+      if (probe.exitCode === 0) {
+        return candidate;
+      }
+    } catch {
+      // command not found
     }
   }
 
@@ -115,16 +118,21 @@ describe("docker-setup.sh", () => {
       throw new Error("sandbox missing");
     }
 
-    const result = spawnSync("bash", [sandbox.scriptPath], {
-      cwd: sandbox.rootDir,
-      env: createEnv(sandbox, {
-        OPENCLAW_DOCKER_APT_PACKAGES: "ffmpeg build-essential",
-        OPENCLAW_EXTRA_MOUNTS: undefined,
-        OPENCLAW_HOME_VOLUME: "openclaw-home",
-      }),
-      stdio: ["ignore", "ignore", "pipe"],
+    const rawEnv = createEnv(sandbox, {
+      OPENCLAW_DOCKER_APT_PACKAGES: "ffmpeg build-essential",
+      OPENCLAW_EXTRA_MOUNTS: undefined,
+      OPENCLAW_HOME_VOLUME: "openclaw-home",
     });
-    expect(result.status).toBe(0);
+    const result = Bun.spawnSync(["bash", sandbox.scriptPath], {
+      cwd: sandbox.rootDir,
+      env: Object.fromEntries(
+        Object.entries(rawEnv).filter((e): e is [string, string] => e[1] !== undefined),
+      ),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+    });
+    expect(result.exitCode).toBe(0);
     const envFile = await readFile(join(sandbox.rootDir, ".env"), "utf8");
     expect(envFile).toContain("OPENCLAW_DOCKER_APT_PACKAGES=ffmpeg build-essential");
     expect(envFile).toContain("OPENCLAW_EXTRA_MOUNTS=");
@@ -146,21 +154,19 @@ describe("docker-setup.sh", () => {
       return;
     }
 
-    const assocCheck = spawnSync(systemBash, ["-c", "declare -A _t=()"], {
-      encoding: "utf8",
-    });
-    if (assocCheck.status === 0 || assocCheck.status === null) {
+    const assocCheck = Bun.spawnSync([systemBash, "-c", "declare -A _t=()"]);
+    if (assocCheck.exitCode === 0 || assocCheck.exitCode === null) {
       // Skip runtime check when system bash supports associative arrays
       // (not Bash 3.2) or when /bin/bash is unavailable (e.g. Windows).
       return;
     }
 
-    const syntaxCheck = spawnSync(systemBash, ["-n", join(repoRoot, "docker-setup.sh")], {
-      encoding: "utf8",
+    const syntaxCheck = Bun.spawnSync([systemBash, "-n", join(repoRoot, "docker-setup.sh")], {
+      stderr: "pipe",
     });
 
-    expect(syntaxCheck.status).toBe(0);
-    expect(syntaxCheck.stderr).not.toContain("declare: -A: invalid option");
+    expect(syntaxCheck.exitCode).toBe(0);
+    expect(syntaxCheck.stderr?.toString()).not.toContain("declare: -A: invalid option");
   });
 
   it("keeps docker-compose gateway command in sync", async () => {

@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import net from "node:net";
 import { isErrno } from "./errors.js";
 import { ensurePortAvailable } from "./ports.js";
@@ -152,45 +151,70 @@ export async function startSshPortForward(opts: {
   args.push("--", userHost);
 
   const stderr: string[] = [];
-  const child = spawn("/usr/bin/ssh", args, {
-    stdio: ["ignore", "ignore", "pipe"],
-  });
-  child.stderr?.setEncoding("utf8");
-  child.stderr?.on("data", (chunk) => {
-    const lines = String(chunk)
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-    stderr.push(...lines);
+  const proc = Bun.spawn(["/usr/bin/ssh", ...args], {
+    stdin: null,
+    stdout: null,
+    stderr: "pipe",
   });
 
+  // Consume stderr asynchronously into the array.
+  if (proc.stderr instanceof ReadableStream) {
+    const stderrStream = proc.stderr;
+    void (async () => {
+      const reader = stderrStream.getReader();
+      const decoder = new TextDecoder();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          const lines = decoder
+            .decode(value, { stream: true })
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          stderr.push(...lines);
+        }
+      } catch {
+        // Stream closed — nothing to do.
+      } finally {
+        reader.releaseLock();
+      }
+    })();
+  }
+
+  let stopped = false;
   const stop = async () => {
-    if (child.killed) {
+    if (stopped) {
       return;
     }
-    child.kill("SIGTERM");
-    await new Promise<void>((resolve) => {
-      const t = setTimeout(() => {
-        try {
-          child.kill("SIGKILL");
-        } finally {
-          resolve();
-        }
-      }, 1500);
-      child.once("exit", () => {
-        clearTimeout(t);
-        resolve();
-      });
-    });
+    stopped = true;
+    try {
+      proc.kill("SIGTERM");
+    } catch {
+      // ignore
+    }
+    const forceKillTimer = setTimeout(() => {
+      try {
+        proc.kill("SIGKILL");
+      } catch {
+        // ignore
+      }
+    }, 1500);
+    try {
+      await proc.exited;
+    } finally {
+      clearTimeout(forceKillTimer);
+    }
   };
 
   try {
     await Promise.race([
       waitForLocalListener(localPort, Math.max(250, opts.timeoutMs)),
-      new Promise<void>((_, reject) => {
-        child.once("exit", (code, signal) => {
-          reject(new Error(`ssh exited (${code ?? "null"}${signal ? `/${signal}` : ""})`));
-        });
+      proc.exited.then((code) => {
+        const sig = proc.signalCode;
+        throw new Error(`ssh exited (${code ?? "null"}${sig ? `/${sig}` : ""})`);
       }),
     ]);
   } catch (err) {
@@ -203,7 +227,7 @@ export async function startSshPortForward(opts: {
     parsedTarget: parsed,
     localPort,
     remotePort: opts.remotePort,
-    pid: typeof child.pid === "number" ? child.pid : null,
+    pid: proc.pid,
     stderr,
     stop,
   };

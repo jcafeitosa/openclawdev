@@ -101,8 +101,10 @@ describe("selectModelForTask", () => {
       expect(result).not.toBeNull();
       expect(result?.downgraded).toBe(true);
       expect(result?.complexity).toBe("trivial");
-      // Both gpt-5-nano and gemini-3-flash are cheap; gpt-5-nano wins on version score
-      expect(result?.ref.model).toBe("gpt-5-nano");
+      // Both gpt-5-nano and gemini-3-flash are in the cheap tier.
+      // The sort order is: cost (cheapest first) → provider priority (free < google < anthropic < openai).
+      // Google (score=10) sorts before OpenAI (score=30), so gemini-3-flash wins.
+      expect(result?.ref.model).toBe("gemini-3-flash");
     });
 
     it("should mark downgraded=true when using cheaper tier than role default", () => {

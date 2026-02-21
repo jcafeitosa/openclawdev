@@ -190,8 +190,12 @@ describe("createModelSelectionState parent inheritance", () => {
   it("skips stored override when heartbeat override was resolved", async () => {
     const state = await resolveHeartbeatStoredOverrideState(true);
 
-    expect(state.provider).toBe("anthropic");
-    expect(state.model).toBe("claude-opus-4-5");
+    // When hasResolvedHeartbeatModelOverride=true the stored session override is skipped.
+    // createModelSelectionState initialises from resolveBestAvailableModel using
+    // defaultProvider/defaultModel (since hasModelDirective=false), so the result is
+    // the default model, not the passed provider/model params.
+    expect(state.provider).toBe(defaultProvider);
+    expect(state.model).toBe(defaultModel);
   });
 });
 

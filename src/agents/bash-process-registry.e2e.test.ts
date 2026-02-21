@@ -1,4 +1,3 @@
-import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProcessSession } from "./bash-process-registry.js";
 import {
@@ -20,7 +19,7 @@ describe("bash process registry", () => {
     const session: ProcessSession = {
       id: "sess",
       command: "echo test",
-      child: { pid: 123, removeAllListeners: vi.fn() } as unknown as ChildProcessWithoutNullStreams,
+      child: { pid: 123, removeAllListeners: vi.fn() },
       startedAt: Date.now(),
       cwd: "/tmp",
       maxOutputChars: 10,
@@ -51,7 +50,7 @@ describe("bash process registry", () => {
     const session: ProcessSession = {
       id: "sess",
       command: "echo test",
-      child: { pid: 123, removeAllListeners: vi.fn() } as unknown as ChildProcessWithoutNullStreams,
+      child: { pid: 123, removeAllListeners: vi.fn() },
       startedAt: Date.now(),
       cwd: "/tmp",
       maxOutputChars: 100_000,
@@ -85,7 +84,7 @@ describe("bash process registry", () => {
     const session: ProcessSession = {
       id: "sess",
       command: "echo test",
-      child: { pid: 123, removeAllListeners: vi.fn() } as unknown as ChildProcessWithoutNullStreams,
+      child: { pid: 123, removeAllListeners: vi.fn() },
       startedAt: Date.now(),
       cwd: "/tmp",
       maxOutputChars: 5_000,
@@ -116,7 +115,7 @@ describe("bash process registry", () => {
     const session: ProcessSession = {
       id: "sess",
       command: "echo test",
-      child: { pid: 123, removeAllListeners: vi.fn() } as unknown as ChildProcessWithoutNullStreams,
+      child: { pid: 123, removeAllListeners: vi.fn() },
       startedAt: Date.now(),
       cwd: "/tmp",
       maxOutputChars: 100,
@@ -150,7 +149,7 @@ describe("bash process registry", () => {
     const session: ProcessSession = {
       id: "sess",
       command: "echo test",
-      child: { pid: 123, removeAllListeners: vi.fn() } as unknown as ChildProcessWithoutNullStreams,
+      child: { pid: 123, removeAllListeners: vi.fn() },
       startedAt: Date.now(),
       cwd: "/tmp",
       maxOutputChars: 100,

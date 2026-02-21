@@ -11,6 +11,18 @@ vi.mock("./agent-paths.js", () => ({
   resolveOpenClawAgentDir: () => "/tmp/openclaw",
 }));
 
+vi.mock("./pi-auth-json.js", () => ({
+  ensurePiAuthJsonFromAuthProfiles: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("./supplemental-models.js", () => ({
+  discoverSupplementalModels: vi.fn().mockResolvedValue([]),
+}));
+
+vi.mock("./discovery/dynamic-catalog.js", () => ({
+  loadDiscoveredCatalog: vi.fn().mockResolvedValue(null),
+}));
+
 export function installModelCatalogTestHooks() {
   beforeEach(() => {
     resetModelCatalogCacheForTest();
@@ -31,7 +43,11 @@ export function mockCatalogImportFailThenRecover() {
       throw new Error("boom");
     }
     return {
-      AuthStorage: class {},
+      AuthStorage: class {
+        static create() {
+          return {};
+        }
+      },
       ModelRegistry: class {
         getAll() {
           return [{ id: "gpt-4.1", name: "GPT-4.1", provider: "openai" }];

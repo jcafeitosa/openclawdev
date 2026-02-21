@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const execFileMock = vi.hoisted(() => vi.fn());
+const execFileUtf8Mock = vi.hoisted(() => vi.fn());
 
-vi.mock("node:child_process", () => ({
-  execFile: execFileMock,
+vi.mock("./exec-file.js", () => ({
+  execFileUtf8: execFileUtf8Mock,
 }));
 
 import { splitArgsPreservingQuotes } from "./arg-split.js";
@@ -16,25 +16,19 @@ import {
 
 describe("systemd availability", () => {
   beforeEach(() => {
-    execFileMock.mockReset();
+    execFileUtf8Mock.mockReset();
   });
 
   it("returns true when systemctl --user succeeds", async () => {
-    execFileMock.mockImplementation((_cmd, _args, _opts, cb) => {
-      cb(null, "", "");
-    });
+    execFileUtf8Mock.mockResolvedValue({ stdout: "", stderr: "", code: 0 });
     await expect(isSystemdUserServiceAvailable()).resolves.toBe(true);
   });
 
   it("returns false when systemd user bus is unavailable", async () => {
-    execFileMock.mockImplementation((_cmd, _args, _opts, cb) => {
-      const err = new Error("Failed to connect to bus") as Error & {
-        stderr?: string;
-        code?: number;
-      };
-      err.stderr = "Failed to connect to bus";
-      err.code = 1;
-      cb(err, "", "");
+    execFileUtf8Mock.mockResolvedValue({
+      stdout: "",
+      stderr: "Failed to connect to bus",
+      code: 1,
     });
     await expect(isSystemdUserServiceAvailable()).resolves.toBe(false);
   });

@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -134,9 +133,11 @@ export async function runRestartScript(scriptPath: string): Promise<void> {
   const file = isWindows ? "cmd.exe" : "/bin/sh";
   const args = isWindows ? ["/c", scriptPath] : [scriptPath];
 
-  const child = spawn(file, args, {
+  const proc = Bun.spawn([file, ...args], {
     detached: true,
-    stdio: "ignore",
+    stdin: null,
+    stdout: null,
+    stderr: null,
   });
-  child.unref();
+  proc.unref();
 }

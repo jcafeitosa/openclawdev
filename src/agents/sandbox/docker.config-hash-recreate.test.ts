@@ -1,6 +1,4 @@
-import { EventEmitter } from "node:events";
-import { Readable } from "node:stream";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { computeSandboxConfigHash } from "./config-hash.js";
 import { ensureSandboxContainer } from "./docker.js";
 import type { SandboxConfig } from "./types.js";
@@ -26,62 +24,67 @@ vi.mock("./registry.js", () => ({
   updateRegistry: registryMocks.updateRegistry,
 }));
 
-vi.mock("node:child_process", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:child_process")>();
-  return {
-    ...actual,
-    spawn: (command: string, args: string[]) => {
-      spawnState.calls.push({ command, args });
-      const child = new EventEmitter() as EventEmitter & {
-        stdout: Readable;
-        stderr: Readable;
-        stdin: { end: (input?: string | Buffer) => void };
-        kill: (signal?: NodeJS.Signals) => void;
-      };
-      child.stdout = new Readable({ read() {} });
-      child.stderr = new Readable({ read() {} });
-      child.stdin = { end: () => undefined };
-      child.kill = () => undefined;
+type MockBunProcess = ReturnType<typeof Bun.spawn> & {
+  closeWith: (code?: number | null) => void;
+};
 
-      let code = 0;
-      let stdout = "";
-      let stderr = "";
-      if (command !== "docker") {
-        code = 1;
-        stderr = `unexpected command: ${command}`;
-      } else if (args[0] === "inspect" && args[1] === "-f" && args[2] === "{{.State.Running}}") {
-        stdout = spawnState.inspectRunning ? "true\n" : "false\n";
-      } else if (
-        args[0] === "inspect" &&
-        args[1] === "-f" &&
-        args[2]?.includes('index .Config.Labels "openclaw.configHash"')
-      ) {
-        stdout = `${spawnState.labelHash}\n`;
-      } else if (
-        (args[0] === "rm" && args[1] === "-f") ||
-        (args[0] === "image" && args[1] === "inspect") ||
-        args[0] === "create" ||
-        args[0] === "start"
-      ) {
-        code = 0;
-      } else {
-        code = 1;
-        stderr = `unexpected docker args: ${args.join(" ")}`;
-      }
+function createMockBunProcess(params?: {
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number;
+}): MockBunProcess {
+  const encoder = new TextEncoder();
+  let exitResolve: (code: number | null) => void = () => {};
+  const exited = new Promise<number | null>((resolve) => {
+    exitResolve = resolve;
+  });
 
-      queueMicrotask(() => {
-        if (stdout) {
-          child.stdout.emit("data", Buffer.from(stdout));
-        }
-        if (stderr) {
-          child.stderr.emit("data", Buffer.from(stderr));
-        }
-        child.emit("close", code);
-      });
-      return child;
+  let stdoutCtrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let stderrCtrl: ReadableStreamDefaultController<Uint8Array> | null = null;
+
+  const stdout = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      stdoutCtrl = ctrl;
     },
+  });
+  const stderr = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      stderrCtrl = ctrl;
+    },
+  });
+
+  if (params?.stdout) {
+    stdoutCtrl?.enqueue(encoder.encode(params.stdout));
+  }
+  if (params?.stderr) {
+    stderrCtrl?.enqueue(encoder.encode(params.stderr));
+  }
+
+  const exitCode = params?.exitCode ?? 0;
+  const closeWith = (code: number | null = exitCode) => {
+    stdoutCtrl?.close();
+    stderrCtrl?.close();
+    exitResolve(code);
   };
-});
+
+  queueMicrotask(() => closeWith());
+
+  return Object.assign(
+    {
+      stdout,
+      stderr,
+      exited,
+      exitCode: null,
+      signalCode: null,
+      pid: 1234,
+      kill: vi.fn(),
+      stdin: null,
+    } as unknown as ReturnType<typeof Bun.spawn>,
+    { closeWith },
+  );
+}
+
+let bunSpawnSpy: ReturnType<typeof vi.spyOn>;
 
 function createSandboxConfig(dns: string[]): SandboxConfig {
   return {
@@ -128,6 +131,44 @@ describe("ensureSandboxContainer config-hash recreation", () => {
     registryMocks.readRegistry.mockReset();
     registryMocks.updateRegistry.mockReset();
     registryMocks.updateRegistry.mockResolvedValue(undefined);
+
+    bunSpawnSpy = vi.spyOn(Bun, "spawn").mockImplementation((argv: unknown) => {
+      const [command, ...args] = argv as string[];
+      spawnState.calls.push({ command: command ?? "", args });
+
+      let stdout = "";
+      let stderr = "";
+      let exitCode = 0;
+
+      if (command !== "docker") {
+        exitCode = 1;
+        stderr = `unexpected command: ${command}`;
+      } else if (args[0] === "inspect" && args[1] === "-f" && args[2] === "{{.State.Running}}") {
+        stdout = spawnState.inspectRunning ? "true\n" : "false\n";
+      } else if (
+        args[0] === "inspect" &&
+        args[1] === "-f" &&
+        args[2]?.includes('index .Config.Labels "openclaw.configHash"')
+      ) {
+        stdout = `${spawnState.labelHash}\n`;
+      } else if (
+        (args[0] === "rm" && args[1] === "-f") ||
+        (args[0] === "image" && args[1] === "inspect") ||
+        args[0] === "create" ||
+        args[0] === "start"
+      ) {
+        exitCode = 0;
+      } else {
+        exitCode = 1;
+        stderr = `unexpected docker args: ${args.join(" ")}`;
+      }
+
+      return createMockBunProcess({ stdout, stderr, exitCode });
+    });
+  });
+
+  afterEach(() => {
+    bunSpawnSpy.mockRestore();
   });
 
   it("recreates shared container when array-order change alters hash", async () => {

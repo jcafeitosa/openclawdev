@@ -1,5 +1,3 @@
-import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-import { createInterface, type Interface } from "node:readline";
 import type { RuntimeEnv } from "../runtime.js";
 import { resolveUserPath } from "../utils.js";
 import { DEFAULT_IMESSAGE_PROBE_TIMEOUT_MS } from "./constants.js";
@@ -37,12 +35,59 @@ type PendingRequest = {
   timer?: NodeJS.Timeout;
 };
 
+// Minimal structural type for the imsg subprocess.
+type ImsgProcess = {
+  stdin: { write: (data: string) => unknown; end?: () => void } | null;
+  stdout: ReadableStream<Uint8Array> | null | number;
+  stderr: ReadableStream<Uint8Array> | null | number;
+  exited: Promise<number | null>;
+  exitCode: number | null;
+  signalCode: NodeJS.Signals | null;
+  kill: (signal?: NodeJS.Signals | number) => void;
+};
+
 function isTestEnv(): boolean {
   if (process.env.NODE_ENV === "test") {
     return true;
   }
   const vitest = process.env.VITEST?.trim().toLowerCase();
   return Boolean(vitest);
+}
+
+/**
+ * Read lines from a ReadableStream and call onLine for each non-empty line.
+ */
+async function readLines(
+  stream: ReadableStream<Uint8Array> | null | number,
+  onLine: (line: string) => void,
+): Promise<void> {
+  if (!(stream instanceof ReadableStream)) {
+    return;
+  }
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n");
+      buffer = parts.pop() ?? "";
+      for (const part of parts) {
+        onLine(part);
+      }
+    }
+    if (buffer) {
+      onLine(buffer);
+    }
+  } catch {
+    // Stream closed.
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 export class IMessageRpcClient {
@@ -53,8 +98,7 @@ export class IMessageRpcClient {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly closed: Promise<void>;
   private closedResolve: (() => void) | null = null;
-  private child: ChildProcessWithoutNullStreams | null = null;
-  private reader: Interface | null = null;
+  private child: ImsgProcess | null = null;
   private nextId = 1;
 
   constructor(opts: IMessageRpcClientOptions = {}) {
@@ -78,13 +122,15 @@ export class IMessageRpcClient {
     if (this.dbPath) {
       args.push("--db", this.dbPath);
     }
-    const child = spawn(this.cliPath, args, {
-      stdio: ["pipe", "pipe", "pipe"],
+    const proc = Bun.spawn([this.cliPath, ...args], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
     });
-    this.child = child;
-    this.reader = createInterface({ input: child.stdout });
+    this.child = proc;
 
-    this.reader.on("line", (line) => {
+    // Read stdout line by line (fire-and-forget).
+    void readLines(proc.stdout, (line) => {
       const trimmed = line.trim();
       if (!trimmed) {
         return;
@@ -92,22 +138,18 @@ export class IMessageRpcClient {
       this.handleLine(trimmed);
     });
 
-    child.stderr?.on("data", (chunk) => {
-      const lines = chunk.toString().split(/\r?\n/);
-      for (const line of lines) {
-        if (!line.trim()) {
-          continue;
-        }
-        this.runtime?.error?.(`imsg rpc: ${line.trim()}`);
+    // Log stderr lines (fire-and-forget).
+    void readLines(proc.stderr, (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        return;
       }
+      this.runtime?.error?.(`imsg rpc: ${trimmed}`);
     });
 
-    child.on("error", (err) => {
-      this.failAll(err instanceof Error ? err : new Error(String(err)));
-      this.closedResolve?.();
-    });
-
-    child.on("close", (code, signal) => {
+    // Handle process exit.
+    void proc.exited.then((code) => {
+      const signal = proc.signalCode;
       if (code !== 0 && code !== null) {
         const reason = signal ? `signal ${signal}` : `code ${code}`;
         this.failAll(new Error(`imsg rpc exited (${reason})`));
@@ -122,18 +164,23 @@ export class IMessageRpcClient {
     if (!this.child) {
       return;
     }
-    this.reader?.close();
-    this.reader = null;
-    this.child.stdin?.end();
-    const child = this.child;
+    const proc = this.child;
     this.child = null;
+
+    try {
+      proc.stdin?.end?.();
+    } catch {
+      // ignore
+    }
 
     await Promise.race([
       this.closed,
       new Promise<void>((resolve) => {
         setTimeout(() => {
-          if (!child.killed) {
-            child.kill("SIGTERM");
+          try {
+            proc.kill("SIGTERM");
+          } catch {
+            // ignore
           }
           resolve();
         }, 500);

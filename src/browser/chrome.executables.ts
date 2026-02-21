@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -98,15 +97,16 @@ function execText(
   command: string,
   args: string[],
   timeoutMs = 1200,
-  maxBuffer = 1024 * 1024,
+  _maxBuffer = 1024 * 1024,
 ): string | null {
   try {
-    const output = execFileSync(command, args, {
+    const proc = Bun.spawnSync([command, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
       timeout: timeoutMs,
-      encoding: "utf8",
-      maxBuffer,
     });
-    return String(output ?? "").trim() || null;
+    const output = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
+    return output || null;
   } catch {
     return null;
   }

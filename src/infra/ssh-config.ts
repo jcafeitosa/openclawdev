@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import type { SshParsedTarget } from "./ssh-tunnel.js";
 
 export type SshResolvedConfig = {
@@ -6,6 +5,15 @@ export type SshResolvedConfig = {
   host?: string;
   port?: number;
   identityFiles: string[];
+};
+
+type SshSpawnImpl = (
+  argv: string[],
+  opts: { stdin: null; stdout: "pipe"; stderr: null },
+) => {
+  stdout: ReadableStream<Uint8Array> | number | null;
+  exited: Promise<number | null>;
+  kill: (signal?: NodeJS.Signals | number) => void;
 };
 
 function parsePort(value: string | undefined): number | undefined {
@@ -57,6 +65,7 @@ export function parseSshConfigOutput(output: string): SshResolvedConfig {
 export async function resolveSshConfig(
   target: SshParsedTarget,
   opts: { identity?: string; timeoutMs?: number } = {},
+  spawnImpl: SshSpawnImpl = (argv, spawnOpts) => Bun.spawn(argv, spawnOpts),
 ): Promise<SshResolvedConfig | null> {
   const sshPath = "/usr/bin/ssh";
   const args = ["-G"];
@@ -70,36 +79,37 @@ export async function resolveSshConfig(
   // Use "--" so userHost can't be parsed as an ssh option.
   args.push("--", userHost);
 
-  return await new Promise<SshResolvedConfig | null>((resolve) => {
-    const child = spawn(sshPath, args, {
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    let stdout = "";
-    child.stdout?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
+  const timeoutMs = Math.max(200, opts.timeoutMs ?? 800);
+  let proc: ReturnType<SshSpawnImpl>;
+  try {
+    proc = spawnImpl([sshPath, ...args], { stdin: null, stdout: "pipe", stderr: null });
+  } catch {
+    return null;
+  }
 
-    const timeoutMs = Math.max(200, opts.timeoutMs ?? 800);
-    const timer = setTimeout(() => {
-      try {
-        child.kill("SIGKILL");
-      } finally {
-        resolve(null);
-      }
-    }, timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    try {
+      proc.kill("SIGKILL");
+    } catch {}
+  }, timeoutMs);
 
-    child.once("error", () => {
-      clearTimeout(timer);
-      resolve(null);
-    });
-    child.once("exit", (code) => {
-      clearTimeout(timer);
-      if (code !== 0 || !stdout.trim()) {
-        resolve(null);
-        return;
-      }
-      resolve(parseSshConfigOutput(stdout));
-    });
-  });
+  const stdoutP =
+    proc.stdout instanceof ReadableStream ? new Response(proc.stdout).text() : Promise.resolve("");
+
+  let exitCode: number | null = null;
+  let stdout = "";
+  try {
+    [exitCode, stdout] = await Promise.all([proc.exited, stdoutP]);
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (timedOut || exitCode !== 0 || !stdout.trim()) {
+    return null;
+  }
+  return parseSshConfigOutput(stdout);
 }

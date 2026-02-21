@@ -1,4 +1,8 @@
-import type { ChildProcess } from "node:child_process";
+// Minimal interface structurally compatible with Node.js ChildProcess (used by entry.ts).
+type ChildProcessLike = {
+  kill: (signal?: NodeJS.Signals | number) => void | boolean;
+  once: (event: string, listener: (...args: unknown[]) => void) => unknown;
+};
 
 export type ChildProcessBridgeOptions = {
   signals?: NodeJS.Signals[];
@@ -11,7 +15,7 @@ const defaultSignals: NodeJS.Signals[] =
     : ["SIGTERM", "SIGINT", "SIGHUP", "SIGQUIT"];
 
 export function attachChildProcessBridge(
-  child: ChildProcess,
+  child: ChildProcessLike,
   { signals = defaultSignals, onSignal }: ChildProcessBridgeOptions = {},
 ): { detach: () => void } {
   const listeners = new Map<NodeJS.Signals, () => void>();

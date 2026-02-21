@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -643,7 +642,9 @@ describe("runReplyAgent claude-cli routing", () => {
 
   it("uses claude-cli runner for claude-cli provider", async () => {
     const runId = "00000000-0000-0000-0000-000000000001";
-    const randomSpy = vi.spyOn(crypto, "randomUUID").mockReturnValue(runId);
+    // agent-runner-execution.ts uses the global crypto (not node:crypto import),
+    // so we must spy on globalThis.crypto.randomUUID to intercept the call.
+    const randomSpy = vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(runId);
     const lifecyclePhases: string[] = [];
     const unsubscribe = onAgentEvent((evt) => {
       if (evt.runId !== runId) {

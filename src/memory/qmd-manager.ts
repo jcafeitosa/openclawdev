@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -712,56 +711,52 @@ export class QmdMemoryManager implements MemorySearchManager {
     args: string[],
     opts?: { timeoutMs?: number },
   ): Promise<{ stdout: string; stderr: string }> {
-    return await new Promise((resolve, reject) => {
-      const child = spawn(this.qmd.command, args, {
-        env: this.env,
-        cwd: this.workspaceDir,
-      });
-      let stdout = "";
-      let stderr = "";
-      let stdoutTruncated = false;
-      let stderrTruncated = false;
-      const timer = opts?.timeoutMs
-        ? setTimeout(() => {
-            child.kill("SIGKILL");
-            reject(new Error(`qmd ${args.join(" ")} timed out after ${opts.timeoutMs}ms`));
-          }, opts.timeoutMs)
-        : null;
-      child.stdout.on("data", (data) => {
-        const next = appendOutputWithCap(stdout, data.toString("utf8"), this.maxQmdOutputChars);
-        stdout = next.text;
-        stdoutTruncated = stdoutTruncated || next.truncated;
-      });
-      child.stderr.on("data", (data) => {
-        const next = appendOutputWithCap(stderr, data.toString("utf8"), this.maxQmdOutputChars);
-        stderr = next.text;
-        stderrTruncated = stderrTruncated || next.truncated;
-      });
-      child.on("error", (err) => {
-        if (timer) {
-          clearTimeout(timer);
-        }
-        reject(err);
-      });
-      child.on("close", (code) => {
-        if (timer) {
-          clearTimeout(timer);
-        }
-        if (stdoutTruncated || stderrTruncated) {
-          reject(
-            new Error(
-              `qmd ${args.join(" ")} produced too much output (limit ${this.maxQmdOutputChars} chars)`,
-            ),
-          );
-          return;
-        }
-        if (code === 0) {
-          resolve({ stdout, stderr });
-        } else {
-          reject(new Error(`qmd ${args.join(" ")} failed (code ${code}): ${stderr || stdout}`));
-        }
-      });
+    const proc = Bun.spawn([this.qmd.command, ...args], {
+      env: this.env as Record<string, string>,
+      cwd: this.workspaceDir,
+      stdin: null,
+      stdout: "pipe",
+      stderr: "pipe",
     });
+
+    let timedOut = false;
+    const timer = opts?.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          proc.kill("SIGKILL");
+        }, opts.timeoutMs)
+      : null;
+
+    const stdoutP = proc.stdout ? new Response(proc.stdout).text() : Promise.resolve("");
+    const stderrP = proc.stderr ? new Response(proc.stderr).text() : Promise.resolve("");
+
+    const exitCode = await proc.exited;
+    if (timer) {
+      clearTimeout(timer);
+    }
+
+    const [stdoutRaw, stderrRaw] = await Promise.all([stdoutP, stderrP]);
+
+    if (timedOut) {
+      throw new Error(`qmd ${args.join(" ")} timed out after ${opts?.timeoutMs}ms`);
+    }
+
+    const outNext = appendOutputWithCap("", stdoutRaw, this.maxQmdOutputChars);
+    const errNext = appendOutputWithCap("", stderrRaw, this.maxQmdOutputChars);
+    if (outNext.truncated || errNext.truncated) {
+      throw new Error(
+        `qmd ${args.join(" ")} produced too much output (limit ${this.maxQmdOutputChars} chars)`,
+      );
+    }
+
+    const stdout = outNext.text;
+    const stderr = errNext.text;
+
+    if (exitCode !== 0) {
+      throw new Error(`qmd ${args.join(" ")} failed (code ${exitCode}): ${stderr || stdout}`);
+    }
+
+    return { stdout, stderr };
   }
 
   private async readPartialText(absPath: string, from?: number, lines?: number): Promise<string> {
