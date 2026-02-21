@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -330,9 +331,7 @@ export async function ensureChromeExtensionRelayServer(opts: {
     }
   };
 
-  const relayAuthToken = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
-    "base64url",
-  );
+  const relayAuthToken = randomBytes(32).toString("base64url");
 
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", info.baseUrl);

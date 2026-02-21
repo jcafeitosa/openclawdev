@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { startBrowserBridgeServer, stopBrowserBridgeServer } from "../../browser/bridge-server.js";
 import { type ResolvedBrowserConfig, resolveProfile } from "../../browser/config.js";
 import {
@@ -231,7 +232,7 @@ export async function ensureSandboxBrowser(params: {
     desiredAuthToken = existing?.authToken;
     desiredAuthPassword = existing?.authPassword;
     if (!desiredAuthToken && !desiredAuthPassword) {
-      desiredAuthToken = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("hex");
+      desiredAuthToken = crypto.randomBytes(24).toString("hex");
     }
   }
 

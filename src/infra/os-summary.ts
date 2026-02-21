@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 
 export type OsSummary = {
@@ -12,12 +13,9 @@ function safeTrim(value: unknown): string {
 }
 
 function macosVersion(): string {
-  if (typeof Bun !== "undefined") {
-    const proc = Bun.spawnSync(["sw_vers", "-productVersion"], { stdout: "pipe" });
-    const out = proc.stdout ? safeTrim(proc.stdout.toString("utf-8")) : "";
-    return out || os.release();
-  }
-  return os.release();
+  const res = spawnSync("sw_vers", ["-productVersion"], { encoding: "utf-8" });
+  const out = safeTrim(res.stdout);
+  return out || os.release();
 }
 
 export function resolveOsSummary(): OsSummary {

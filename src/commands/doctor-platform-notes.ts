@@ -1,9 +1,13 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { OpenClawConfig } from "../config/config.js";
 import { note } from "../terminal/note.js";
 import { shortenHomePath } from "../utils.js";
+
+const execFileAsync = promisify(execFile);
 
 function resolveHomeDir(): string {
   return process.env.HOME ?? os.homedir();
@@ -30,18 +34,9 @@ export async function noteMacLaunchAgentOverrides() {
 }
 
 async function launchctlGetenv(name: string): Promise<string | undefined> {
-  if (typeof Bun === "undefined") {
-    return undefined;
-  }
   try {
-    const proc = Bun.spawnSync(["/bin/launchctl", "getenv", name], {
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-    if (!proc.success) {
-      return undefined;
-    }
-    const value = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
+    const result = await execFileAsync("/bin/launchctl", ["getenv", name], { encoding: "utf8" });
+    const value = String(result.stdout ?? "").trim();
     return value.length > 0 ? value : undefined;
   } catch {
     return undefined;

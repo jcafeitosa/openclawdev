@@ -1,10 +1,14 @@
+import { execFile } from "node:child_process";
 import { X509Certificate } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import tls from "node:tls";
+import { promisify } from "node:util";
 import type { GatewayTlsConfig } from "../../config/types.gateway.js";
 import { CONFIG_DIR, ensureDir, resolveUserPath, shortenHomeInString } from "../../utils.js";
 import { normalizeFingerprint } from "./fingerprint.js";
+
+const execFileAsync = promisify(execFile);
 
 export type GatewayTlsRuntime = {
   enabled: boolean;
@@ -37,30 +41,22 @@ async function generateSelfSignedCert(params: {
   if (keyDir !== certDir) {
     await ensureDir(keyDir);
   }
-  const opensslProc = Bun.spawnSync(
-    [
-      "openssl",
-      "req",
-      "-x509",
-      "-newkey",
-      "rsa:2048",
-      "-sha256",
-      "-days",
-      "3650",
-      "-nodes",
-      "-keyout",
-      params.keyPath,
-      "-out",
-      params.certPath,
-      "-subj",
-      "/CN=openclaw-gateway",
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
-  if (!opensslProc.success) {
-    const stderr = opensslProc.stderr ? opensslProc.stderr.toString("utf-8").trim() : "";
-    throw new Error(`openssl failed${stderr ? `: ${stderr}` : ""}`);
-  }
+  await execFileAsync("openssl", [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-sha256",
+    "-days",
+    "3650",
+    "-nodes",
+    "-keyout",
+    params.keyPath,
+    "-out",
+    params.certPath,
+    "-subj",
+    "/CN=openclaw-gateway",
+  ]);
   await fs.chmod(params.keyPath, 0o600).catch(() => {});
   await fs.chmod(params.certPath, 0o600).catch(() => {});
   params.log?.info?.(

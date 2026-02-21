@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { resolveCliName } from "../cli/cli-name.js";
 import {
@@ -27,17 +28,13 @@ async function generateCompletionCache(): Promise<boolean> {
   }
 
   const binPath = path.join(root, "openclaw.mjs");
-  if (typeof Bun === "undefined") {
-    return false;
-  }
-  const result = Bun.spawnSync([process.execPath, binPath, "completion", "--write-state"], {
+  const result = spawnSync(process.execPath, [binPath, "completion", "--write-state"], {
     cwd: root,
-    env: process.env as Record<string, string>,
-    stdout: "pipe",
-    stderr: "pipe",
+    env: process.env,
+    encoding: "utf-8",
   });
 
-  return result.success;
+  return result.status === 0;
 }
 
 export type ShellCompletionStatus = {

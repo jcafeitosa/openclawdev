@@ -15,9 +15,13 @@ export function twitterRoutes() {
         const data = await getTwitterDashboardData();
         set.headers["cache-control"] = "public, max-age=900";
         return data;
-      } catch {
+      } catch (error) {
+        const err = error as { message?: string };
         set.status = 500;
-        return { error: "Failed to fetch Twitter data" };
+        return {
+          error: "Failed to fetch Twitter data",
+          message: err.message ?? String(error),
+        };
       }
     })
     .get("/relationships", async ({ query, set }) => {
@@ -26,9 +30,13 @@ export function twitterRoutes() {
         const data = await getTwitterRelationships(limit);
         set.headers["cache-control"] = "public, max-age=1800";
         return data;
-      } catch {
+      } catch (error) {
+        const err = error as { message?: string };
         set.status = 500;
-        return { error: "Failed to fetch Twitter relationships" };
+        return {
+          error: "Failed to fetch Twitter relationships",
+          message: err.message ?? String(error),
+        };
       }
     });
 }

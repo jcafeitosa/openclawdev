@@ -477,7 +477,8 @@ export async function connectReq(
     } | null;
   },
 ): Promise<ConnectResponse> {
-  const id = crypto.randomUUID();
+  const { randomUUID } = await import("node:crypto");
+  const id = randomUUID();
   const client = opts?.client ?? {
     id: GATEWAY_CLIENT_NAMES.TEST,
     version: "1.0.0",
@@ -578,7 +579,8 @@ export async function rpcReq<T extends Record<string, unknown>>(
   params?: unknown,
   timeoutMs?: number,
 ) {
-  const id = crypto.randomUUID();
+  const { randomUUID } = await import("node:crypto");
+  const id = randomUUID();
   ws.send(JSON.stringify({ type: "req", id, method, params }));
   return await onceMessage<{
     type: "res";

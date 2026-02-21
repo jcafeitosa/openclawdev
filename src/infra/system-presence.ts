@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import { pickPrimaryLanIPv4 } from "../gateway/net.js";
 
@@ -56,20 +57,21 @@ function initSelfPresence() {
     "unknown";
   const modelIdentifier = (() => {
     const p = os.platform();
-    if (p === "darwin" && typeof Bun !== "undefined") {
-      const proc = Bun.spawnSync(["sysctl", "-n", "hw.model"], { stdout: "pipe" });
-      const out = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
+    if (p === "darwin") {
+      const res = spawnSync("sysctl", ["-n", "hw.model"], {
+        encoding: "utf-8",
+      });
+      const out = typeof res.stdout === "string" ? res.stdout.trim() : "";
       return out.length > 0 ? out : undefined;
     }
     return os.arch();
   })();
   const macOSVersion = () => {
-    if (typeof Bun !== "undefined") {
-      const proc = Bun.spawnSync(["sw_vers", "-productVersion"], { stdout: "pipe" });
-      const out = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
-      return out.length > 0 ? out : os.release();
-    }
-    return os.release();
+    const res = spawnSync("sw_vers", ["-productVersion"], {
+      encoding: "utf-8",
+    });
+    const out = typeof res.stdout === "string" ? res.stdout.trim() : "";
+    return out.length > 0 ? out : os.release();
   };
   const platform = (() => {
     const p = os.platform();

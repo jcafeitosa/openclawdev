@@ -1,10 +1,14 @@
+import { exec } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import { getChildLogger } from "../../logging.js";
 import { HooksFileSchema, type HookConfig, type HookAction } from "./types.js";
 
 const log = getChildLogger({ module: "hook-runner" });
+
+const execAsync = promisify(exec);
 
 export class HookRunner {
   private hooks: HookConfig[] = [];
@@ -46,13 +50,7 @@ export class HookRunner {
       if (this.matches(hook, toolName, args)) {
         if (hook.command) {
           try {
-            if (typeof Bun !== "undefined") {
-              const proc = Bun.spawn(["sh", "-c", hook.command], {
-                stdout: "pipe",
-                stderr: "pipe",
-              });
-              await proc.exited;
-            }
+            await execAsync(hook.command);
           } catch (e) {
             log.error(
               `Hook command failed: ${hook.command} ${e instanceof Error ? e.message : String(e)}`,

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -249,18 +250,21 @@ export async function tryWriteCompletionCache(root: string, jsonMode: boolean): 
     return;
   }
 
-  if (typeof Bun === "undefined") {
-    return;
-  }
-  const result = Bun.spawnSync([resolveNodeRunner(), binPath, "completion", "--write-state"], {
+  const result = spawnSync(resolveNodeRunner(), [binPath, "completion", "--write-state"], {
     cwd: root,
-    env: process.env as Record<string, string>,
-    stdout: "pipe",
-    stderr: "pipe",
+    env: process.env,
+    encoding: "utf-8",
   });
 
-  if (!result.success && !jsonMode) {
-    const stderr = result.stderr ? result.stderr.toString("utf-8").trim() : "";
+  if (result.error) {
+    if (!jsonMode) {
+      defaultRuntime.log(theme.warn(`Completion cache update failed: ${String(result.error)}`));
+    }
+    return;
+  }
+
+  if (result.status !== 0 && !jsonMode) {
+    const stderr = (result.stderr ?? "").toString().trim();
     const detail = stderr ? ` (${stderr})` : "";
     defaultRuntime.log(theme.warn(`Completion cache update failed${detail}.`));
   }

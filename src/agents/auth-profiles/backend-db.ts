@@ -126,19 +126,31 @@ export class DbAuthStoreBackend implements AuthStoreBackend {
     const { getDrizzle, authCredentials, authUsageStats, authStoreMeta } = await lazyDb();
     const db = getDrizzle();
 
-    // Upsert credentials — all in parallel (independent rows keyed by profileId)
-    await Promise.all(
-      Object.entries(store.profiles).map(([profileId, credential]) => {
-        const encrypted = encryptJson(credential, this.encryptionKey);
-        const expiresAt =
-          "expires" in credential && typeof credential.expires === "number"
-            ? new Date(credential.expires)
-            : null;
+    // Upsert credentials
+    for (const [profileId, credential] of Object.entries(store.profiles)) {
+      const encrypted = encryptJson(credential, this.encryptionKey);
+      const expiresAt =
+        "expires" in credential && typeof credential.expires === "number"
+          ? new Date(credential.expires)
+          : null;
 
-        return db
-          .insert(authCredentials)
-          .values({
-            profileId,
+      await db
+        .insert(authCredentials)
+        .values({
+          profileId,
+          provider: credential.provider,
+          credentialType: credential.type,
+          encryptedData: encrypted.ciphertext,
+          iv: encrypted.iv,
+          authTag: encrypted.tag,
+          keyVersion: this.keyVersion,
+          email: "email" in credential ? (credential.email ?? null) : null,
+          expiresAt,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: authCredentials.profileId,
+          set: {
             provider: credential.provider,
             credentialType: credential.type,
             encryptedData: encrypted.ciphertext,
@@ -148,32 +160,28 @@ export class DbAuthStoreBackend implements AuthStoreBackend {
             email: "email" in credential ? (credential.email ?? null) : null,
             expiresAt,
             updatedAt: new Date(),
+          },
+        });
+    }
+
+    // Upsert usage stats
+    if (store.usageStats) {
+      for (const [profileId, stats] of Object.entries(store.usageStats)) {
+        await db
+          .insert(authUsageStats)
+          .values({
+            profileId,
+            lastUsed: stats.lastUsed ? new Date(stats.lastUsed) : null,
+            errorCount: stats.errorCount ?? 0,
+            lastFailureAt: stats.lastFailureAt ? new Date(stats.lastFailureAt) : null,
+            failureCounts: stats.failureCounts ?? {},
+            cooldownUntil: stats.cooldownUntil ? new Date(stats.cooldownUntil) : null,
+            disabledUntil: stats.disabledUntil ? new Date(stats.disabledUntil) : null,
+            disabledReason: stats.disabledReason ?? null,
           })
           .onConflictDoUpdate({
-            target: authCredentials.profileId,
+            target: authUsageStats.profileId,
             set: {
-              provider: credential.provider,
-              credentialType: credential.type,
-              encryptedData: encrypted.ciphertext,
-              iv: encrypted.iv,
-              authTag: encrypted.tag,
-              keyVersion: this.keyVersion,
-              email: "email" in credential ? (credential.email ?? null) : null,
-              expiresAt,
-              updatedAt: new Date(),
-            },
-          });
-      }),
-    );
-
-    // Upsert usage stats — all in parallel (independent rows keyed by profileId)
-    if (store.usageStats) {
-      await Promise.all(
-        Object.entries(store.usageStats).map(([profileId, stats]) =>
-          db
-            .insert(authUsageStats)
-            .values({
-              profileId,
               lastUsed: stats.lastUsed ? new Date(stats.lastUsed) : null,
               errorCount: stats.errorCount ?? 0,
               lastFailureAt: stats.lastFailureAt ? new Date(stats.lastFailureAt) : null,
@@ -181,46 +189,30 @@ export class DbAuthStoreBackend implements AuthStoreBackend {
               cooldownUntil: stats.cooldownUntil ? new Date(stats.cooldownUntil) : null,
               disabledUntil: stats.disabledUntil ? new Date(stats.disabledUntil) : null,
               disabledReason: stats.disabledReason ?? null,
-            })
-            .onConflictDoUpdate({
-              target: authUsageStats.profileId,
-              set: {
-                lastUsed: stats.lastUsed ? new Date(stats.lastUsed) : null,
-                errorCount: stats.errorCount ?? 0,
-                lastFailureAt: stats.lastFailureAt ? new Date(stats.lastFailureAt) : null,
-                failureCounts: stats.failureCounts ?? {},
-                cooldownUntil: stats.cooldownUntil ? new Date(stats.cooldownUntil) : null,
-                disabledUntil: stats.disabledUntil ? new Date(stats.disabledUntil) : null,
-                disabledReason: stats.disabledReason ?? null,
-              },
-            }),
-        ),
-      );
+            },
+          });
+      }
     }
 
-    // Upsert metadata (order, lastGood) — independent keys, run in parallel
-    await Promise.all(
-      [
-        store.order
-          ? db
-              .insert(authStoreMeta)
-              .values({ key: "order", value: store.order, updatedAt: new Date() })
-              .onConflictDoUpdate({
-                target: authStoreMeta.key,
-                set: { value: store.order, updatedAt: new Date() },
-              })
-          : null,
-        store.lastGood
-          ? db
-              .insert(authStoreMeta)
-              .values({ key: "lastGood", value: store.lastGood, updatedAt: new Date() })
-              .onConflictDoUpdate({
-                target: authStoreMeta.key,
-                set: { value: store.lastGood, updatedAt: new Date() },
-              })
-          : null,
-      ].filter((p) => p !== null),
-    );
+    // Upsert metadata (order, lastGood)
+    if (store.order) {
+      await db
+        .insert(authStoreMeta)
+        .values({ key: "order", value: store.order, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: authStoreMeta.key,
+          set: { value: store.order, updatedAt: new Date() },
+        });
+    }
+    if (store.lastGood) {
+      await db
+        .insert(authStoreMeta)
+        .values({ key: "lastGood", value: store.lastGood, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: authStoreMeta.key,
+          set: { value: store.lastGood, updatedAt: new Date() },
+        });
+    }
   }
 
   /**

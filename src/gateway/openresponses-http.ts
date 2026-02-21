@@ -6,6 +6,7 @@
  * @see https://www.open-responses.com/
  */
 
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ClientToolDefinition } from "../agents/pi-embedded-runner/run/params.js";
 import { createDefaultDeps } from "../cli/deps.js";
@@ -506,8 +507,8 @@ export async function handleOpenResponsesHttpRequest(
     return true;
   }
 
-  const responseId = `resp_${crypto.randomUUID()}`;
-  const outputItemId = `msg_${crypto.randomUUID()}`;
+  const responseId = `resp_${randomUUID()}`;
+  const outputItemId = `msg_${randomUUID()}`;
   const deps = createDefaultDeps();
   const streamParams =
     typeof payload.max_output_tokens === "number"
@@ -541,7 +542,7 @@ export async function handleOpenResponsesHttpRequest(
       // If agent called a client tool, return function_call instead of text
       if (stopReason === "tool_calls" && pendingToolCalls && pendingToolCalls.length > 0) {
         const functionCall = pendingToolCalls[0];
-        const functionCallItemId = `call_${crypto.randomUUID()}`;
+        const functionCallItemId = `call_${randomUUID()}`;
         const response = createResponseResource({
           id: responseId,
           model,
@@ -815,7 +816,7 @@ export async function handleOpenResponsesHttpRequest(
             item: completedItem,
           });
 
-          const functionCallItemId = `call_${crypto.randomUUID()}`;
+          const functionCallItemId = `call_${randomUUID()}`;
           const functionCallItem = {
             type: "function_call" as const,
             id: functionCallItemId,

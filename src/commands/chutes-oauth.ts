@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { OAuthCredentials } from "@mariozechner/pi-ai";
 import type { ChutesOAuthAppConfig } from "../agents/chutes-oauth.js";
@@ -164,9 +165,7 @@ export async function loginChutes(params: {
   fetchFn?: typeof fetch;
 }): Promise<OAuthCredentials> {
   const createPkce = params.createPkce ?? generateChutesPkce;
-  const createState =
-    params.createState ??
-    (() => Buffer.from(crypto.getRandomValues(new Uint8Array(16))).toString("hex"));
+  const createState = params.createState ?? (() => randomBytes(16).toString("hex"));
 
   const { verifier, challenge } = createPkce();
   const state = createState();

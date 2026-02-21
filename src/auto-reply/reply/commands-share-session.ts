@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,15 +7,9 @@ import { buildExportSessionReply } from "./commands-export-session.js";
 import type { CommandHandler } from "./commands-types.js";
 
 function resolveGhBinary(): string | null {
-  if (typeof Bun === "undefined") {
-    return null;
-  }
   try {
-    const proc = Bun.spawnSync(["which", "gh"], { stdout: "pipe", stderr: "pipe" });
-    if (!proc.success) {
-      return null;
-    }
-    return proc.stdout ? proc.stdout.toString("utf-8").trim() || null : null;
+    const result = execSync("which gh", { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    return result.trim() || null;
   } catch {
     return null;
   }
@@ -22,8 +17,8 @@ function resolveGhBinary(): string | null {
 
 function isGhAuthenticated(ghBin: string): boolean {
   try {
-    const proc = Bun.spawnSync([ghBin, "auth", "status"], { stdout: "pipe", stderr: "pipe" });
-    return proc.success;
+    execSync(`"${ghBin}" auth status`, { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+    return true;
   } catch {
     return false;
   }
@@ -126,15 +121,10 @@ export const handleShareSessionCommand: CommandHandler = async (params, allowTex
   // Upload to GitHub Gist
   let gistUrl: string;
   try {
-    const proc = Bun.spawnSync(
-      [ghBin, "gist", "create", "--filename", "openclaw-session.html", fileToUpload],
-      { stdout: "pipe", stderr: "pipe" },
+    const output = execSync(
+      `"${ghBin}" gist create --filename "openclaw-session.html" "${fileToUpload}"`,
+      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
     );
-    if (!proc.success) {
-      const errMsg = proc.stderr ? proc.stderr.toString("utf-8").trim() : `exit ${proc.exitCode}`;
-      throw new Error(`gh gist create failed: ${errMsg}`);
-    }
-    const output = proc.stdout ? proc.stdout.toString("utf-8") : "";
     const url = output.trim().split("\n").at(-1)?.trim() ?? "";
     if (!url.startsWith("http")) {
       throw new Error(`Unexpected gh output: ${output.trim()}`);

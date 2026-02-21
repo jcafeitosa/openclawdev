@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
@@ -13,26 +14,14 @@ import type { CommandHandler } from "./commands-types.js";
  * Supports macOS (pbcopy) and Linux (xclip / xsel).
  */
 function copyToClipboard(text: string): void {
-  if (typeof Bun === "undefined") {
-    return;
-  }
-  const stdin = Buffer.from(text, "utf-8");
   if (process.platform === "darwin") {
-    Bun.spawnSync(["pbcopy"], { stdin, stdout: "ignore", stderr: "ignore" });
+    execSync("pbcopy", { input: text, stdio: ["pipe", "ignore", "ignore"] });
   } else {
     // Linux — try xclip first, then xsel
     try {
-      Bun.spawnSync(["xclip", "-selection", "clipboard"], {
-        stdin,
-        stdout: "ignore",
-        stderr: "ignore",
-      });
+      execSync("xclip -selection clipboard", { input: text, stdio: ["pipe", "ignore", "ignore"] });
     } catch {
-      Bun.spawnSync(["xsel", "--clipboard", "--input"], {
-        stdin,
-        stdout: "ignore",
-        stderr: "ignore",
-      });
+      execSync("xsel --clipboard --input", { input: text, stdio: ["pipe", "ignore", "ignore"] });
     }
   }
 }

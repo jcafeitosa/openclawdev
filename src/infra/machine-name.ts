@@ -1,20 +1,18 @@
+import { execFile } from "node:child_process";
 import os from "node:os";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 let cachedPromise: Promise<string> | null = null;
 
-function tryScutil(key: "ComputerName" | "LocalHostName"): string | null {
-  if (typeof Bun === "undefined") {
-    return null;
-  }
+async function tryScutil(key: "ComputerName" | "LocalHostName") {
   try {
-    const proc = Bun.spawnSync(["/usr/sbin/scutil", "--get", key], {
-      stdout: "pipe",
-      stderr: "pipe",
+    const { stdout } = await execFileAsync("/usr/sbin/scutil", ["--get", key], {
+      timeout: 1000,
+      windowsHide: true,
     });
-    if (!proc.success) {
-      return null;
-    }
-    const value = proc.stdout ? proc.stdout.toString("utf-8").trim() : "";
+    const value = String(stdout ?? "").trim();
     return value.length > 0 ? value : null;
   } catch {
     return null;
@@ -39,11 +37,11 @@ export async function getMachineDisplayName(): Promise<string> {
       return fallbackHostName();
     }
     if (process.platform === "darwin") {
-      const computerName = tryScutil("ComputerName");
+      const computerName = await tryScutil("ComputerName");
       if (computerName) {
         return computerName;
       }
-      const localHostName = tryScutil("LocalHostName");
+      const localHostName = await tryScutil("LocalHostName");
       if (localHostName) {
         return localHostName;
       }

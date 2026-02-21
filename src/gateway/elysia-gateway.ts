@@ -78,15 +78,7 @@ export interface GatewayElysiaOptions {
 export function createGatewayElysiaApp(opts: GatewayElysiaOptions) {
   const app = new Elysia()
     // CSRF origin guard for state-changing requests
-    .use(csrfGuard({ port: opts.port }))
-    // Security response headers (all routes)
-    .onBeforeHandle(({ set }) => {
-      set.headers["x-frame-options"] = "DENY";
-      set.headers["x-content-type-options"] = "nosniff";
-      set.headers["referrer-policy"] = "strict-origin-when-cross-origin";
-      set.headers["x-xss-protection"] = "0";
-      set.headers["permissions-policy"] = "geolocation=(), microphone=(), camera=()";
-    });
+    .use(csrfGuard({ port: opts.port }));
 
   // Control UI SPA serving (top priority to avoid wildcard conflicts)
   if (opts.controlUiEnabled) {

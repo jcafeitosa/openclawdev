@@ -11,23 +11,9 @@ import { setAuthStoreBackend } from "./store.js";
  * Should be called once during gateway startup, after DB connection is established.
  */
 export async function initAuthStoreBackend(): Promise<"db" | "file"> {
-  const rawKey = process.env.AUTH_ENCRYPTION_KEY;
-
-  // If the env var is not set at all, use the unencrypted file backend (default behaviour).
-  if (!rawKey || !rawKey.trim()) {
-    return "file";
-  }
-
-  // The env var IS set — it must be a valid key. Silently falling back to the
-  // file backend when the key is misconfigured would store credentials in plain
-  // text without any indication to the operator.
-  const encryptionKey = parseEncryptionKey(rawKey);
+  const encryptionKey = parseEncryptionKey(process.env.AUTH_ENCRYPTION_KEY);
   if (!encryptionKey) {
-    throw new Error(
-      "AUTH_ENCRYPTION_KEY is set but is not a valid encryption key. " +
-        "Expected a 64-character hex string or a 44-character base64 string (32 bytes). " +
-        "Fix or unset AUTH_ENCRYPTION_KEY before starting the gateway.",
-    );
+    return "file";
   }
 
   // Only import DB dependencies when actually needed (avoids import cost when using file backend)

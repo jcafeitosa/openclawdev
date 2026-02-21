@@ -260,7 +260,7 @@ export function mergeExecApprovalsSocketDefaults(params: {
 }
 
 function generateToken(): string {
-  return Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
+  return crypto.randomBytes(24).toString("base64url");
 }
 
 export function readExecApprovalsSnapshot(): ExecApprovalsSnapshot {

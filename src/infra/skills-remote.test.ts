@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   getRemoteSkillEligibility,
@@ -8,8 +9,8 @@ import {
 
 describe("skills-remote", () => {
   it("removes disconnected nodes from remote skill eligibility", () => {
-    const nodeId = `node-${crypto.randomUUID()}`;
-    const bin = `bin-${crypto.randomUUID()}`;
+    const nodeId = `node-${randomUUID()}`;
+    const bin = `bin-${randomUUID()}`;
     recordRemoteNodeInfo({
       nodeId,
       displayName: "Remote Mac",
@@ -26,7 +27,7 @@ describe("skills-remote", () => {
   });
 
   it("supports idempotent remote node removal", () => {
-    const nodeId = `node-${crypto.randomUUID()}`;
+    const nodeId = `node-${randomUUID()}`;
     expect(() => {
       removeRemoteNodeInfo(nodeId);
       removeRemoteNodeInfo(nodeId);

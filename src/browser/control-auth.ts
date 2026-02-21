@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { OpenClawConfig } from "../config/config.js";
 import { loadConfig, writeConfigFile } from "../config/config.js";
 import { resolveGatewayAuth } from "../gateway/auth.js";
@@ -74,7 +75,7 @@ export async function ensureBrowserControlAuth(params: {
     return { auth: latestAuth };
   }
 
-  const generatedToken = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("hex");
+  const generatedToken = crypto.randomBytes(24).toString("hex");
   const nextCfg: OpenClawConfig = {
     ...latestCfg,
     gateway: {
