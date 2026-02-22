@@ -93,6 +93,13 @@ export type ChatProps = {
   onCloseSidebar?: () => void;
   onSplitRatioChange?: (ratio: number) => void;
   onChatScroll?: (event: Event) => void;
+  // Model selector
+  availableModels?: Array<{ id: string; name: string; provider: string }>;
+  modelDropdownOpen?: boolean;
+  modelFilter?: string;
+  onModelSelect?: (modelId: string) => void;
+  onToggleModelDropdown?: () => void;
+  onModelFilterChange?: (value: string) => void;
 };
 
 const COMPACTION_TOAST_DURATION_MS = 5000;
@@ -695,25 +702,78 @@ export function renderChat(props: ChatProps) {
               </button>
             </div>
             <div class="chat-compose__controls-right">
-              <button
-                class="compose-pill compose-pill--model"
-                type="button"
-                aria-label="Select model"
-                title="Select model"
+              <details
+                class="compose-dd compose-dd--right"
+                ?open=${props.modelDropdownOpen}
+                @toggle=${(e: Event) => {
+                  const open = (e.target as HTMLDetailsElement).open;
+                  if (open !== Boolean(props.modelDropdownOpen)) {
+                    props.onToggleModelDropdown?.();
+                  }
+                }}
               >
-                <span class="compose-pill__label">${
-                  activeSession?.model
-                    ? activeSession.model
-                        .replace(/^claude-/, "")
-                        .replace(/-\d{8}$/, "")
-                        .replace(/-/g, " ")
-                        .replace(/\b\w/g, (c) => c.toUpperCase())
-                    : props.thinkingLevel
-                      ? "Opus 4.6"
-                      : "Sonnet 4.5"
-                }</span>
-                ${icons.chevronDown}
-              </button>
+                <summary>
+                  <button
+                    class="compose-pill compose-pill--model"
+                    type="button"
+                    aria-label="Select model"
+                    title="Select model"
+                  >
+                    <span class="compose-pill__label">${
+                      activeSession?.model
+                        ? activeSession.model
+                            .replace(/^claude-/, "")
+                            .replace(/-\d{8}$/, "")
+                            .replace(/-/g, " ")
+                            .replace(/\b\w/g, (c) => c.toUpperCase())
+                        : props.thinkingLevel
+                          ? "Opus 4.6"
+                          : "Sonnet 4.5"
+                    }</span>
+                    ${icons.chevronDown}
+                  </button>
+                </summary>
+                <div class="compose-dd__panel compose-dd__panel--models">
+                  <div class="compose-dd__search">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input
+                      type="text"
+                      placeholder="Search models…"
+                      .value=${props.modelFilter ?? ""}
+                      @input=${(e: Event) => props.onModelFilterChange?.((e.target as HTMLInputElement).value)}
+                    />
+                  </div>
+                  <div class="compose-dd__list">
+                    ${(() => {
+                      const filter = (props.modelFilter ?? "").toLowerCase();
+                      const filtered = (props.availableModels ?? []).filter(
+                        (m) =>
+                          !filter ||
+                          m.name.toLowerCase().includes(filter) ||
+                          m.id.toLowerCase().includes(filter) ||
+                          m.provider.toLowerCase().includes(filter),
+                      );
+                      if (filtered.length === 0) {
+                        return html`
+                          <div class="compose-dd__empty">No models found</div>
+                        `;
+                      }
+                      return filtered.map(
+                        (m) => html`
+                          <button
+                            class="compose-dd__item ${activeSession?.model === m.id ? "is-selected" : ""}"
+                            type="button"
+                            @click=${() => props.onModelSelect?.(m.id)}
+                          >
+                            <span class="compose-dd__item-title">${m.name || m.id}</span>
+                            <span class="compose-dd__item-sub">${m.provider} / ${m.id}</span>
+                          </button>
+                        `,
+                      );
+                    })()}
+                  </div>
+                </div>
+              </details>
               ${
                 isBusy && canAbort
                   ? html`

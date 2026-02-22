@@ -57,6 +57,9 @@ export class ChatIsland extends LitElement {
   @state() private hubUsers: HubUser[] = [];
 
   @state() private showNewMessages = false;
+  @state() private availableModels: Array<{ id: string; name: string; provider: string }> = [];
+  @state() private modelDropdownOpen = false;
+  @state() private modelFilter = "";
   private isAtBottom = true;
 
   private gatewayEventUnsub: (() => void) | null = null;
@@ -150,6 +153,7 @@ export class ChatIsland extends LitElement {
     });
     void this.refreshSessions();
     void this.refreshHub();
+    void this.loadAvailableModels();
 
     // Keyboard shortcuts
     this.keyboardHandler = (e: KeyboardEvent) => {
@@ -287,6 +291,19 @@ export class ChatIsland extends LitElement {
       onScrollToBottom: () => this.scrollToBottom(),
       onAbort: () => void this.abortRun(),
       showNewMessages: this.showNewMessages,
+      availableModels: this.availableModels,
+      modelDropdownOpen: this.modelDropdownOpen,
+      modelFilter: this.modelFilter,
+      onModelSelect: (modelId: string) => void this.selectModel(modelId),
+      onToggleModelDropdown: () => {
+        this.modelDropdownOpen = !this.modelDropdownOpen;
+        if (!this.modelDropdownOpen) {
+          this.modelFilter = "";
+        }
+      },
+      onModelFilterChange: (value: string) => {
+        this.modelFilter = value;
+      },
     };
 
     return html`${renderChat(props)}`;
@@ -363,13 +380,18 @@ export class ChatIsland extends LitElement {
 
     try {
       const sessionKey = this.activeSession.value || "main";
-      await gateway.call("chat.send", {
+      const sendResult = await gateway.call<{ runId?: string; sessionKey?: string }>("chat.send", {
         sessionKey,
         message,
         deliver: false,
         idempotencyKey: runId,
         attachments,
       });
+      // Server returns the canonical sessionKey (e.g. "agent:default:main").
+      // Update $activeSession so event filtering matches broadcast events.
+      if (sendResult.sessionKey && sendResult.sessionKey !== $activeSession.get()) {
+        $activeSession.set(sendResult.sessionKey);
+      }
       // Clear input on successful send — $chatSending will be reset by
       // the "chat" event (state: "final") when the agent finishes its response.
       $chatMessage.set("");
@@ -426,6 +448,33 @@ export class ChatIsland extends LitElement {
       $sessions.set(result);
     } catch {
       // Non-critical — silently ignore
+    }
+  }
+
+  private async loadAvailableModels() {
+    try {
+      const result = await gateway.call<{
+        models?: Array<{ id: string; name?: string; provider?: string }>;
+      }>("models.list");
+      this.availableModels = (result.models ?? []).map((m) => ({
+        id: m.id,
+        name: m.name ?? m.id,
+        provider: m.provider ?? "",
+      }));
+    } catch {
+      // Non-critical — models selector will be empty
+    }
+  }
+
+  private async selectModel(modelId: string) {
+    this.modelDropdownOpen = false;
+    this.modelFilter = "";
+    const sessionKey = this.activeSession.value || "main";
+    try {
+      await gateway.call("sessions.patch", { key: sessionKey, model: modelId });
+      void this.refreshSessions();
+    } catch (err) {
+      console.error("Failed to set model:", err);
     }
   }
 
