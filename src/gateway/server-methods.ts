@@ -4,6 +4,7 @@ import { agentsHandlers } from "./server-methods/agents.js";
 import { authHandlers } from "./server-methods/auth.js";
 import { browserHandlers } from "./server-methods/browser.js";
 import { channelsHandlers } from "./server-methods/channels.js";
+import { chatHubHandlers } from "./server-methods/chat-hub.js";
 import { chatHandlers } from "./server-methods/chat.js";
 import { configHandlers } from "./server-methods/config.js";
 import { connectHandlers } from "./server-methods/connect.js";
@@ -117,6 +118,12 @@ const READ_METHODS = new Set([
   "auth.listProviders",
   "auth.checkOAuth",
   "config.schema",
+  // Chat Hub
+  "hub.channels.list",
+  "hub.channels.get",
+  "hub.users.list",
+  "hub.users.get",
+  "hub.messages.list",
 ]);
 const WRITE_METHODS = new Set([
   "send",
@@ -145,6 +152,13 @@ const WRITE_METHODS = new Set([
   "auth.startOAuth",
   "auth.submitOAuthCode",
   "auth.removeCredential",
+  // Chat Hub
+  "hub.message.send",
+  "hub.reaction.add",
+  "hub.reaction.remove",
+  "hub.presence.update",
+  "hub.typing.start",
+  "hub.typing.stop",
 ]);
 
 function authorizeGatewayMethod(method: string, client: GatewayRequestOptions["client"]) {
@@ -252,6 +266,7 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...authHandlers,
   ...twitterHandlers,
   ...uiBridgeHandlers,
+  ...chatHubHandlers,
 };
 
 export async function handleGatewayRequest(

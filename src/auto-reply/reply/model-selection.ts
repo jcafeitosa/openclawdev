@@ -294,9 +294,10 @@ export async function createModelSelectionState(params: {
   // before we even start evaluating overrides.
   const initialBest = resolveBestAvailableModel({
     cfg,
-    primary: params.hasModelDirective
-      ? `${params.provider}/${params.model}`
-      : `${defaultProvider}/${defaultModel}`,
+    primary:
+      params.hasModelDirective || params.hasResolvedHeartbeatModelOverride
+        ? `${params.provider}/${params.model}`
+        : `${defaultProvider}/${defaultModel}`,
     fallbacks: cfg.agents?.defaults?.model?.fallbacks,
     agentDir,
   });

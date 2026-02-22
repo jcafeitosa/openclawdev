@@ -4,6 +4,7 @@ import { initCapabilitiesRegistry } from "../agents/capabilities-registry.js";
 import { DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { initDelegationRegistry } from "../agents/delegation-registry.js";
 import { initAutoModelSelection } from "../agents/model-auto-select.js";
+import { invalidateModelCatalogCache } from "../agents/model-catalog.js";
 import { buildConfiguredAllowlistKeys } from "../agents/model-selection.js";
 import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
@@ -108,6 +109,7 @@ const logCron = log.child("cron");
 const logReload = log.child("reload");
 const logHooks = log.child("hooks");
 const logPlugins = log.child("plugins");
+const logModels = log.child("models");
 const logWsControl = log.child("ws");
 const gatewayRuntime = runtimeForLogger(log);
 const canvasRuntime = runtimeForLogger(logCanvas);
@@ -479,23 +481,37 @@ export async function startGatewayServer(
   let tickInterval = noopInterval();
   let healthInterval = noopInterval();
   let dedupeCleanup = noopInterval();
+  let modelCatalogRefresh: ReturnType<typeof setInterval> | null = null;
   if (!minimalTestGateway) {
-    ({ tickInterval, healthInterval, dedupeCleanup } = startGatewayMaintenanceTimers({
-      broadcast,
-      nodeSendToAllSubscribed,
-      getPresenceVersion,
-      getHealthVersion,
-      refreshGatewayHealthSnapshot,
-      logHealth,
-      dedupe,
-      chatAbortControllers,
-      chatRunState,
-      chatRunBuffers,
-      chatDeltaSentAt,
-      removeChatRun,
-      agentRunSeq,
-      nodeSendToSession,
-    }));
+    const refreshModelCatalog = async (): Promise<{ wrote: boolean; count: number }> => {
+      invalidateModelCatalogCache();
+      const freshCatalog = await loadGatewayModelCatalog();
+      const allowedKeys = buildConfiguredAllowlistKeys({
+        cfg: cfgAtStart,
+        defaultProvider: DEFAULT_PROVIDER,
+      });
+      initAutoModelSelection(freshCatalog, allowedKeys ?? undefined, cfgAtStart);
+      return { wrote: false, count: freshCatalog.length };
+    };
+    ({ tickInterval, healthInterval, dedupeCleanup, modelCatalogRefresh } =
+      startGatewayMaintenanceTimers({
+        broadcast,
+        nodeSendToAllSubscribed,
+        getPresenceVersion,
+        getHealthVersion,
+        refreshGatewayHealthSnapshot,
+        logHealth,
+        logModelCatalog: logModels,
+        refreshModelCatalog,
+        dedupe,
+        chatAbortControllers,
+        chatRunState,
+        chatRunBuffers,
+        chatDeltaSentAt,
+        removeChatRun,
+        agentRunSeq,
+        nodeSendToSession,
+      }));
     initHierarchyEventBroadcaster(broadcast);
   }
 
@@ -753,7 +769,7 @@ export async function startGatewayServer(
     tickInterval,
     healthInterval,
     dedupeCleanup,
-    modelCatalogRefresh: null,
+    modelCatalogRefresh,
     agentUnsub,
     heartbeatUnsub,
     chatRunState,

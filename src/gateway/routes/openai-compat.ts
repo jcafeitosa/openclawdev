@@ -152,7 +152,7 @@ function coerceRequest(val: unknown): OpenAiChatCompletionRequest {
   return val as OpenAiChatCompletionRequest;
 }
 
-export function openAiRouter(params: { auth: ResolvedGatewayAuth }) {
+export function openAiRouter(params: { auth: ResolvedGatewayAuth }): Router {
   const { auth } = params;
   const router = Router();
 

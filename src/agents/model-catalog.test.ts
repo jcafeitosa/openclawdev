@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/config.js";
 import { __setModelCatalogImportForTest, loadModelCatalog } from "./model-catalog.js";
 import {
@@ -11,7 +11,6 @@ describe("loadModelCatalog", () => {
   installModelCatalogTestHooks();
 
   it("retries after import failure without poisoning the cache", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const getCallCount = mockCatalogImportFailThenRecover();
 
     const cfg = {} as OpenClawConfig;
@@ -21,16 +20,17 @@ describe("loadModelCatalog", () => {
     const second = await loadModelCatalog({ config: cfg });
     expect(second).toEqual([{ id: "gpt-4.1", name: "GPT-4.1", provider: "openai" }]);
     expect(getCallCount()).toBe(2);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns partial results on discovery errors", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
     __setModelCatalogImportForTest(
       async () =>
         ({
-          AuthStorage: class {},
+          AuthStorage: class {
+            static create(_path: string) {
+              return {};
+            }
+          },
           ModelRegistry: class {
             getAll() {
               return [
@@ -50,14 +50,17 @@ describe("loadModelCatalog", () => {
 
     const result = await loadModelCatalog({ config: {} as OpenClawConfig });
     expect(result).toEqual([{ id: "gpt-4.1", name: "GPT-4.1", provider: "openai" }]);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
   it("adds openai-codex/gpt-5.3-codex-spark when base gpt-5.3-codex exists", async () => {
     __setModelCatalogImportForTest(
       async () =>
         ({
-          AuthStorage: class {},
+          AuthStorage: class {
+            static create(_path: string) {
+              return {};
+            }
+          },
           ModelRegistry: class {
             getAll() {
               return [

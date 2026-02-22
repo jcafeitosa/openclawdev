@@ -55,8 +55,8 @@ export function selectModelForTask(params: {
   if (complexity === "complex") {
     const ranked = rankModelsForRole(catalog, ROLE_REQUIREMENTS[role], allowedKeys, cfg, authStore);
     if (ranked.length > 0) {
-      // ranked is sorted cheapest-first; pick last for most capable
-      const best = ranked[ranked.length - 1];
+      // ranked is sorted newest-first; pick first for most capable/recent
+      const best = ranked[0];
       return {
         ref: { provider: best.entry.provider, model: best.entry.id },
         complexity,

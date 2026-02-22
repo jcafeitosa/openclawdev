@@ -459,6 +459,23 @@ export async function runWithModelFallback<T>(params: {
 
   const hasFallbackCandidates = allCandidates.length > 1;
 
+  // Fallbacks may have been filtered out of allCandidates if all their profiles
+  // are in cooldown. We still want to probe the primary when fallbacks exist in
+  // config but are temporarily unavailable.
+  const hasConfiguredFallbacks = (() => {
+    if (params.fallbacksOverride !== undefined) {
+      return params.fallbacksOverride.length > 0;
+    }
+    const model = params.cfg?.agents?.defaults?.model as
+      | { fallbacks?: string[] }
+      | string
+      | undefined;
+    if (model && typeof model === "object") {
+      return (model.fallbacks ?? []).length > 0;
+    }
+    return false;
+  })();
+
   for (let i = 0; i < allCandidates.length; i += 1) {
     const candidate = allCandidates[i];
     if (authStore) {
@@ -478,7 +495,7 @@ export async function runWithModelFallback<T>(params: {
         const probeThrottleKey = resolveProbeThrottleKey(candidate.provider, params.agentDir);
         const shouldProbe = shouldProbePrimaryDuringCooldown({
           isPrimary: i === 0,
-          hasFallbackCandidates,
+          hasFallbackCandidates: hasFallbackCandidates || hasConfiguredFallbacks,
           now,
           throttleKey: probeThrottleKey,
           authStore,

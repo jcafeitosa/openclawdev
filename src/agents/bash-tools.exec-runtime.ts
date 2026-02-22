@@ -101,7 +101,7 @@ const APPROVAL_SLUG_LENGTH = 8;
 export const execSchema = Type.Object({
   command: Type.String({ description: "Shell command to execute" }),
   workdir: Type.Optional(Type.String({ description: "Working directory (defaults to cwd)" })),
-  env: Type.Optional(Type.Record(Type.String(), Type.String())),
+  env: Type.Optional(Type.Object({}, { additionalProperties: Type.String() })),
   yieldMs: Type.Optional(
     Type.Number({
       description: "Milliseconds to wait before backgrounding (default 10000)",

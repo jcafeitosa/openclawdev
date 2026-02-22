@@ -189,8 +189,8 @@ async function handleA2uiRequest(req: Request, res: Response, _next: NextFunctio
   res.type(mime).send(await fs.readFile(filePath));
 }
 
-export function a2uiRouter() {
+export function a2uiRouter(): Router {
   const router = Router();
-  router.all(`${A2UI_PATH}/*`, handleA2uiRequest);
+  router.all(`${A2UI_PATH}/*splat`, handleA2uiRequest);
   return router;
 }

@@ -9,7 +9,7 @@
 import { Router } from "express";
 import { getTwitterDashboardData, getTwitterRelationships } from "../twitter-api.js";
 
-export function twitterRouter() {
+export function twitterRouter(): Router {
   const router = Router();
 
   router.get("/dashboard", async (_req, res) => {

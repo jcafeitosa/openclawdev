@@ -638,6 +638,8 @@ const ERROR_PATTERNS = {
     "messages.1.content.1.tool_use.id",
     "invalid request format",
     "unknown model",
+    "invalid json payload",
+    "unknown name",
   ],
 } as const;
 

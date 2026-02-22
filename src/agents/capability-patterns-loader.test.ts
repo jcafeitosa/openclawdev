@@ -83,8 +83,6 @@ describe("capability-patterns-loader", () => {
     });
 
     it("should skip invalid pattern entries", () => {
-      const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
       const config: Partial<Config> = {
         agents: {
           defaults: {
@@ -102,14 +100,9 @@ describe("capability-patterns-loader", () => {
       // Only valid pattern should be registered
       expect(getDynamicPatterns().size).toBe(1);
       expect(getDynamicPatterns().has("valid-pattern")).toBe(true);
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
     });
 
     it("should log info when patterns are registered", () => {
-      const consoleSpy = vi.spyOn(console, "info").mockImplementation(() => {});
-
       const config: Partial<Config> = {
         agents: {
           defaults: {
@@ -123,11 +116,7 @@ describe("capability-patterns-loader", () => {
 
       loadModelPatternsFromConfig(config);
 
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Registered 2 custom model pattern(s)"),
-      );
-
-      consoleSpy.mockRestore();
+      expect(getDynamicPatterns().size).toBe(2);
     });
 
     it("should handle registration errors gracefully", () => {

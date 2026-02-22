@@ -164,9 +164,13 @@ export class DbAuthStoreBackend implements AuthStoreBackend {
         });
     }
 
-    // Upsert usage stats
+    // Upsert usage stats (only for profiles that exist in credentials)
     if (store.usageStats) {
       for (const [profileId, stats] of Object.entries(store.usageStats)) {
+        // Skip usage stats for profiles that don't exist in credentials (FK constraint)
+        if (!store.profiles[profileId]) {
+          continue;
+        }
         await db
           .insert(authUsageStats)
           .values({

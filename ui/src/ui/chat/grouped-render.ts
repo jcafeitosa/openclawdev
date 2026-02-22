@@ -111,6 +111,7 @@ export function renderMessageGroup(
     showReasoning: boolean;
     assistantName?: string;
     assistantAvatar?: string | null;
+    userAvatar?: string | null;
   },
 ) {
   const normalizedRole = normalizeRoleForGrouping(group.role);
@@ -133,6 +134,7 @@ export function renderMessageGroup(
       ${renderAvatar(group.role, {
         name: assistantName,
         avatar: opts.assistantAvatar ?? null,
+        userAvatar: opts.userAvatar ?? null,
       })}
       <div class="chat-group-messages">
         ${group.messages.map((item, index) =>
@@ -154,18 +156,14 @@ export function renderMessageGroup(
   `;
 }
 
-function renderAvatar(role: string, assistant?: Pick<AssistantIdentity, "name" | "avatar">) {
+function renderAvatar(
+  role: string,
+  opts?: Pick<AssistantIdentity, "name" | "avatar"> & { userAvatar?: string | null },
+) {
   const normalized = normalizeRoleForGrouping(role);
-  const assistantName = assistant?.name?.trim() || "Assistant";
-  const assistantAvatar = assistant?.avatar?.trim() || "";
-  const initial =
-    normalized === "user"
-      ? "U"
-      : normalized === "assistant"
-        ? assistantName.charAt(0).toUpperCase() || "A"
-        : normalized === "tool"
-          ? "⚙"
-          : "?";
+  const assistantName = opts?.name?.trim() || "Assistant";
+  const assistantAvatar = opts?.avatar?.trim() || "";
+  const userAvatar = opts?.userAvatar?.trim() || "";
   const className =
     normalized === "user"
       ? "user"
@@ -175,17 +173,35 @@ function renderAvatar(role: string, assistant?: Pick<AssistantIdentity, "name" |
           ? "tool"
           : "other";
 
-  if (assistantAvatar && normalized === "assistant") {
-    if (isAvatarUrl(assistantAvatar)) {
-      return html`<img
-        class="chat-avatar ${className}"
-        src="${assistantAvatar}"
-        alt="${assistantName}"
-      />`;
+  // User avatar: emoji or URL if configured, otherwise default person emoji
+  if (normalized === "user") {
+    if (userAvatar) {
+      if (isAvatarUrl(userAvatar)) {
+        return html`<img class="chat-avatar ${className}" src="${userAvatar}" alt="You" />`;
+      }
+      return html`<div class="chat-avatar ${className}">${userAvatar}</div>`;
     }
-    return html`<div class="chat-avatar ${className}">${assistantAvatar}</div>`;
+    return html`<div class="chat-avatar ${className}">👤</div>`;
   }
 
+  // Assistant avatar: emoji or URL if configured, otherwise first letter
+  if (normalized === "assistant") {
+    if (assistantAvatar) {
+      if (isAvatarUrl(assistantAvatar)) {
+        return html`<img
+          class="chat-avatar ${className}"
+          src="${assistantAvatar}"
+          alt="${assistantName}"
+        />`;
+      }
+      return html`<div class="chat-avatar ${className}">${assistantAvatar}</div>`;
+    }
+    const initial = assistantName.charAt(0).toUpperCase() || "A";
+    return html`<div class="chat-avatar ${className}">${initial}</div>`;
+  }
+
+  // Tool / other
+  const initial = normalized === "tool" ? "⚙" : "?";
   return html`<div class="chat-avatar ${className}">${initial}</div>`;
 }
 

@@ -17,7 +17,7 @@ import {
   resolveAuthProfileOrder,
   type AuthProfileStore,
 } from "./auth-profiles.js";
-import { getProviderPriorityScore } from "./model-budget-manager.js";
+import { getProviderPriorityScore, resolveProviderCategory } from "./model-budget-manager.js";
 import type {
   CostTier,
   ModelCapabilities,
@@ -35,7 +35,7 @@ import {
   getModelSelectionCache,
 } from "./model-selection-cache.js";
 import type { ModelRef } from "./model-selection.js";
-import { modelKey } from "./model-selection.js";
+import { modelKey, normalizeProviderId } from "./model-selection.js";
 import { classifyComplexity } from "./task-classifier.js";
 
 // ── Cost/performance tier ordinals for comparison ──
@@ -301,28 +301,58 @@ export function rankModelsForRole(
     scored.push(scoredModel);
   }
 
-  // Sort: cheapest first → then by provider priority (free→google→anthropic→openai) → then newest
+  // Sort: newest first → cheapest tiebreaker → then by provider priority (free→google→anthropic→openai)
+  // Primary: highest version score = most recent model (always select the newest generation)
+  // Secondary: cheapest within same generation (minimize cost)
+  // Tertiary: provider priority score (lower = more preferred)
   scored.sort((a, b) => {
+    const versionDiff = b.versionScore - a.versionScore;
+    if (versionDiff !== 0) {
+      return versionDiff;
+    }
     const costDiff = a.costScore - b.costScore;
     if (costDiff !== 0) {
       return costDiff;
     }
-    const providerDiff = a.providerScore - b.providerScore;
-    if (providerDiff !== 0) {
-      return providerDiff;
-    }
-    return b.versionScore - a.versionScore;
+    return a.providerScore - b.providerScore;
   });
 
   return scored;
 }
 
+// ── Provider preference policy ──
+
 /**
- * Select the optimal model for a given agent role from the catalog.
- * Returns the cheapest + newest model that meets the role's requirements.
- * If no model qualifies, relaxes cost constraint and tries again.
+ * Returns true if the provider is Anthropic (Claude models).
  */
-export function selectModelForRole(
+function isAnthropicProvider(provider: string): boolean {
+  return resolveProviderCategory(provider) === "anthropic";
+}
+
+/**
+ * Returns true if the provider belongs to the OpenAI family (openai, openai-codex, etc.).
+ * OpenAI models without OAuth are used as a last resort.
+ */
+function isOpenAIProvider(provider: string): boolean {
+  return resolveProviderCategory(provider) === "openai";
+}
+
+/**
+ * Returns true if the auth store contains at least one active OAuth credential for the provider.
+ * OAuth-authenticated providers are prioritized over API-key-based ones.
+ */
+function hasActiveOAuthCredential(provider: string, authStore: AuthProfileStore): boolean {
+  const normalized = normalizeProviderId(provider);
+  return Object.values(authStore.profiles).some(
+    (cred) => normalizeProviderId(cred.provider) === normalized && cred.type === "oauth",
+  );
+}
+
+/**
+ * Core model selection logic: three relaxation passes.
+ * Operates on the provided catalog slice (caller is responsible for provider filtering).
+ */
+function selectModelCore(
   catalog: ModelCatalogEntry[],
   role: AgentRole,
   allowedKeys?: Set<string>,
@@ -340,10 +370,7 @@ export function selectModelForRole(
 
   // Second pass: relax cost constraint to "expensive" (allow any cost)
   if (requirements.maxCostTier !== "expensive") {
-    const relaxed: RoleRequirements = {
-      ...requirements,
-      maxCostTier: "expensive",
-    };
+    const relaxed: RoleRequirements = { ...requirements, maxCostTier: "expensive" };
     const relaxedRanked = rankModelsForRole(catalog, relaxed, allowedKeys, cfg, authStore);
     if (relaxedRanked.length > 0) {
       const best = relaxedRanked[0];
@@ -351,7 +378,7 @@ export function selectModelForRole(
     }
   }
 
-  // Third pass: relax performance tier to "fast" (allow any performance)
+  // Third pass: relax performance tier and capabilities (allow any model)
   const fullyRelaxed: RoleRequirements = {
     minPerformanceTier: "fast",
     requiredCapabilities: [],
@@ -364,6 +391,56 @@ export function selectModelForRole(
   }
 
   return null;
+}
+
+/**
+ * Select the optimal model for a given agent role from the catalog.
+ *
+ * Provider preference order (when auth store is available):
+ *   1. Anthropic with OAuth credentials (Claude via OAuth) — highest priority
+ *   2. Other OAuth-authenticated providers (Google, OpenAI Codex, etc. via OAuth)
+ *   3. Non-OAuth, non-OpenAI providers (Groq, Cerebras, API-key Google, etc.)
+ *   4. OpenAI without OAuth — last resort
+ *
+ * When no auth store is available, falls back to: Anthropic → other → OpenAI last.
+ */
+export function selectModelForRole(
+  catalog: ModelCatalogEntry[],
+  role: AgentRole,
+  allowedKeys?: Set<string>,
+  cfg?: OpenClawConfig,
+  authStore?: AuthProfileStore,
+): ModelRef | null {
+  // Helper to run selectModelCore and return early if a result is found.
+  const tryCore = (slice: ModelCatalogEntry[]): ModelRef | null => {
+    if (slice.length === 0) {
+      return null;
+    }
+    return selectModelCore(slice, role, allowedKeys, cfg, authStore);
+  };
+
+  const hasOAuth = (provider: string): boolean =>
+    authStore != null && hasActiveOAuthCredential(provider, authStore);
+
+  return (
+    // Pass 1: Anthropic with OAuth (Claude via OAuth tokens — highest trust).
+    tryCore(catalog.filter((e) => isAnthropicProvider(e.provider) && hasOAuth(e.provider))) ??
+    // Pass 2: Other OAuth-authenticated providers (Google Gemini CLI, OpenAI Codex, etc.).
+    tryCore(catalog.filter((e) => !isAnthropicProvider(e.provider) && hasOAuth(e.provider))) ??
+    // Pass 3: Anthropic without OAuth (API-key auth).
+    tryCore(catalog.filter((e) => isAnthropicProvider(e.provider) && !hasOAuth(e.provider))) ??
+    // Pass 4: Other non-OAuth, non-OpenAI providers (Groq, Cerebras, API-key Google, etc.).
+    tryCore(
+      catalog.filter(
+        (e) =>
+          !isAnthropicProvider(e.provider) &&
+          !isOpenAIProvider(e.provider) &&
+          !hasOAuth(e.provider),
+      ),
+    ) ??
+    // Pass 5: OpenAI — last resort.
+    selectModelCore(catalog, role, allowedKeys, cfg, authStore)
+  );
 }
 
 /**
@@ -494,8 +571,10 @@ export function getAutoSelectedModelForTask(
  * Internal: select model for task using the catalog directly.
  * Inlined to avoid circular dependency with adaptive-routing.ts
  * (which imports ROLE_REQUIREMENTS and rankModelsForRole from this module).
+ *
+ * Operates on the provided catalog slice — caller handles provider filtering.
  */
-function selectModelForTaskFromCatalog(params: {
+function _selectModelForTaskCore(params: {
   task: string;
   role: AgentRole;
   catalog: ModelCatalogEntry[];
@@ -620,6 +699,46 @@ function selectModelForTaskFromCatalog(params: {
   }
 
   return null;
+}
+
+/**
+ * Select model for a task using the same provider preference order as selectModelForRole.
+ * See selectModelForRole for the full priority chain.
+ */
+function selectModelForTaskFromCatalog(params: {
+  task: string;
+  role: AgentRole;
+  catalog: ModelCatalogEntry[];
+  allowedKeys?: Set<string>;
+  cfg?: OpenClawConfig;
+  authStore?: AuthProfileStore;
+}): { ref: ModelRef; complexity: string; downgraded: boolean } | null {
+  const tryTask = (slice: ModelCatalogEntry[]) =>
+    slice.length > 0 ? _selectModelForTaskCore({ ...params, catalog: slice }) : null;
+
+  const hasOAuth = (provider: string): boolean =>
+    params.authStore != null && hasActiveOAuthCredential(provider, params.authStore);
+
+  return (
+    tryTask(
+      params.catalog.filter((e) => isAnthropicProvider(e.provider) && hasOAuth(e.provider)),
+    ) ??
+    tryTask(
+      params.catalog.filter((e) => !isAnthropicProvider(e.provider) && hasOAuth(e.provider)),
+    ) ??
+    tryTask(
+      params.catalog.filter((e) => isAnthropicProvider(e.provider) && !hasOAuth(e.provider)),
+    ) ??
+    tryTask(
+      params.catalog.filter(
+        (e) =>
+          !isAnthropicProvider(e.provider) &&
+          !isOpenAIProvider(e.provider) &&
+          !hasOAuth(e.provider),
+      ),
+    ) ??
+    _selectModelForTaskCore(params)
+  );
 }
 
 /** Get the cached model catalog. Exported for modules that need direct catalog access. */

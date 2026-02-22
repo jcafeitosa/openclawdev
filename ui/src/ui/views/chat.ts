@@ -21,6 +21,22 @@ export type CompactionIndicatorStatus = {
   completedAt: number | null;
 };
 
+export type HubChannel = {
+  id: string;
+  name: string;
+  description?: string;
+  isPrivate?: boolean;
+  unreadCount?: number;
+};
+
+export type HubUser = {
+  id: string;
+  displayName: string;
+  avatar?: string;
+  type?: string;
+  status?: "online" | "away" | "dnd" | "offline";
+};
+
 export type ChatProps = {
   sessionKey: string;
   onSessionKeyChange: (next: string) => void;
@@ -49,8 +65,14 @@ export type ChatProps = {
   sidebarContent?: string | null;
   sidebarError?: string | null;
   splitRatio?: number;
+  // Contacts panel (channels + agents)
+  hubChannels?: HubChannel[];
+  hubUsers?: HubUser[];
+  contactsOpen?: boolean;
+  onToggleContacts?: () => void;
   assistantName: string;
   assistantAvatar: string | null;
+  userAvatar?: string | null;
   // Image attachments
   attachments?: ChatAttachment[];
   onAttachmentsChange?: (attachments: ChatAttachment[]) => void;
@@ -188,6 +210,82 @@ function renderAttachmentPreview(props: ChatProps) {
   `;
 }
 
+function renderContactsPanel(props: ChatProps) {
+  const channels = props.hubChannels ?? [];
+  const users = props.hubUsers ?? [];
+  const onlineUsers = users.filter((u) => u.status === "online" || u.status === "away");
+
+  return html`
+    <aside class="chat-contacts ${props.contactsOpen ? "is-open" : "is-closed"}" aria-label="Contacts">
+      ${
+        channels.length > 0
+          ? html`
+              <div class="chat-contacts__section">
+                <div class="chat-contacts__section-title">Channels</div>
+                <ul class="chat-contacts__list" role="list">
+                  ${channels.map(
+                    (ch) => html`
+                      <li class="chat-contacts__item" role="listitem">
+                        <span class="chat-contacts__channel-hash">#</span>
+                        <span class="chat-contacts__name">${ch.name}</span>
+                        ${
+                          onlineUsers.length > 0
+                            ? html`
+                                <div class="avatar-stack" aria-label="${onlineUsers.length} agents">
+                                  ${onlineUsers.slice(0, 4).map(
+                                    (u) => html`
+                                      <span class="avatar-stack__item" title=${u.displayName}>${u.avatar ?? "👤"}</span>
+                                    `,
+                                  )}
+                                  ${
+                                    onlineUsers.length > 4
+                                      ? html`<span class="avatar-stack__item avatar-stack__item--more">+${onlineUsers.length - 4}</span>`
+                                      : nothing
+                                  }
+                                </div>
+                              `
+                            : nothing
+                        }
+                        ${ch.unreadCount ? html`<span class="chat-contacts__badge">${ch.unreadCount}</span>` : nothing}
+                      </li>
+                    `,
+                  )}
+                </ul>
+              </div>
+            `
+          : nothing
+      }
+      ${
+        users.length > 0
+          ? html`
+              <div class="chat-contacts__divider"></div>
+              <div class="chat-contacts__section">
+                <div class="chat-contacts__section-title">
+                  <span>Agents</span>
+                  <span class="chat-contacts__count">${onlineUsers.length} online</span>
+                </div>
+                <ul class="chat-contacts__list" role="list">
+                  ${users.map(
+                    (u) => html`
+                      <li class="chat-contacts__item" role="listitem">
+                        <span class="chat-contacts__avatar" aria-hidden="true">${u.avatar ?? "👤"}</span>
+                        <span class="chat-contacts__name">${u.displayName}</span>
+                        <span
+                          class="chat-contacts__status-dot chat-contacts__status-dot--${u.status ?? "offline"}"
+                          aria-label=${u.status ?? "offline"}
+                        ></span>
+                      </li>
+                    `,
+                  )}
+                </ul>
+              </div>
+            `
+          : nothing
+      }
+    </aside>
+  `;
+}
+
 export function renderChat(props: ChatProps) {
   const canCompose = props.connected;
   const isBusy = props.sending || props.stream !== null;
@@ -212,10 +310,15 @@ export function renderChat(props: ChatProps) {
   const contextTokens = activeSession?.contextTokens ?? 0;
   const tokenPercent =
     contextTokens > 0 ? Math.min(100, Math.round((totalTokens / contextTokens) * 100)) : 0;
-  const sessionLabel = activeSession?.label || activeSession?.displayName || props.sessionKey;
+  const sessionLabel =
+    activeSession?.label ||
+    activeSession?.displayName ||
+    (props.sessionKey === "main" ? "Main" : props.sessionKey);
 
   const splitRatio = props.splitRatio ?? 0.6;
   const sidebarOpen = Boolean(props.sidebarOpen && props.onCloseSidebar);
+  const showSkeleton = props.loading && messageCount === 0;
+
   const thread = html`
     <div
       class="chat-thread"
@@ -224,9 +327,31 @@ export function renderChat(props: ChatProps) {
       @scroll=${props.onChatScroll}
     >
       ${
-        props.loading
+        showSkeleton
           ? html`
-              <div class="muted">Loading chat…</div>
+              <div class="chat-skeleton" aria-label="Loading messages…" aria-busy="true">
+                <div class="chat-skeleton__row chat-skeleton__row--ai">
+                  <div class="chat-skeleton__avatar"></div>
+                  <div class="chat-skeleton__bubbles">
+                    <div class="bubble-skeleton" style="width: 60%"></div>
+                    <div class="bubble-skeleton" style="width: 80%"></div>
+                  </div>
+                </div>
+                <div class="chat-skeleton__row chat-skeleton__row--user">
+                  <div class="chat-skeleton__bubbles">
+                    <div class="bubble-skeleton" style="width: 45%"></div>
+                  </div>
+                  <div class="chat-skeleton__avatar"></div>
+                </div>
+                <div class="chat-skeleton__row chat-skeleton__row--ai">
+                  <div class="chat-skeleton__avatar"></div>
+                  <div class="chat-skeleton__bubbles">
+                    <div class="bubble-skeleton" style="width: 75%"></div>
+                    <div class="bubble-skeleton" style="width: 55%"></div>
+                    <div class="bubble-skeleton" style="width: 40%"></div>
+                  </div>
+                </div>
+              </div>
             `
           : nothing
       }
@@ -263,6 +388,7 @@ export function renderChat(props: ChatProps) {
               showReasoning,
               assistantName: props.assistantName,
               assistantAvatar: assistantIdentity.avatar,
+              userAvatar: props.userAvatar ?? null,
             });
           }
 
@@ -317,7 +443,7 @@ export function renderChat(props: ChatProps) {
             <span class="chat-session-bar__label" title=${props.sessionKey}>${sessionLabel}</span>
             ${
               messageCount > 0
-                ? html`<span class="chat-session-bar__badge">${messageCount} msgs</span>`
+                ? html`<span class="chat-session-bar__badge">${messageCount} ${messageCount === 1 ? "msg" : "msgs"}</span>`
                 : nothing
             }
             ${
@@ -349,6 +475,26 @@ export function renderChat(props: ChatProps) {
                   ${icons.code}
                 </button>
               `
+                : nothing
+            }
+            ${
+              props.onToggleContacts
+                ? html`
+                    <button
+                      class="chat-toolbar__btn ${props.contactsOpen ? "chat-toolbar__btn--active" : ""}"
+                      type="button"
+                      @click=${props.onToggleContacts}
+                      aria-label=${props.contactsOpen ? "Hide contacts" : "Show contacts"}
+                      title=${props.contactsOpen ? "Hide contacts" : "Show contacts"}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                      </svg>
+                    </button>
+                  `
                 : nothing
             }
             <button
@@ -403,6 +549,9 @@ export function renderChat(props: ChatProps) {
         </div>
       </div>
 
+      <div class="chat-body">
+        ${renderContactsPanel(props)}
+        <div class="chat-center">
       <div
         class="chat-split-container ${sidebarOpen ? "chat-split-container--open" : ""}"
       >
@@ -594,15 +743,33 @@ export function renderChat(props: ChatProps) {
           </div>
         </div>
       </div>
+      </div>
+      </div>
     </section>
   `;
 }
 
 const CHAT_HISTORY_RENDER_LIMIT = 200;
+const GROUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+
+function formatDateLabel(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) {
+    return "Today";
+  }
+  if (d.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 
 function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
   const result: Array<ChatItem | MessageGroup> = [];
   let currentGroup: MessageGroup | null = null;
+  let lastGroupTimestamp = 0;
 
   for (const item of items) {
     if (item.kind !== "message") {
@@ -618,7 +785,11 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
     const role = normalizeRoleForGrouping(normalized.role);
     const timestamp = normalized.timestamp || Date.now();
 
-    if (!currentGroup || currentGroup.role !== role) {
+    if (
+      !currentGroup ||
+      currentGroup.role !== role ||
+      timestamp - lastGroupTimestamp > GROUP_WINDOW_MS
+    ) {
       if (currentGroup) {
         result.push(currentGroup);
       }
@@ -633,6 +804,7 @@ function groupMessages(items: ChatItem[]): Array<ChatItem | MessageGroup> {
     } else {
       currentGroup.messages.push({ message: item.message, key: item.key });
     }
+    lastGroupTimestamp = timestamp;
   }
 
   if (currentGroup) {
@@ -657,6 +829,7 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
       },
     });
   }
+  let lastDateLabel = "";
   for (let i = historyStart; i < history.length; i++) {
     const msg = history[i];
     const normalized = normalizeMessage(msg);
@@ -672,11 +845,27 @@ function buildChatItems(props: ChatProps): Array<ChatItem | MessageGroup> {
         label: "Compaction",
         timestamp: normalized.timestamp ?? Date.now(),
       });
+      lastDateLabel = ""; // reset so next message re-emits date header
       continue;
     }
 
     if (!props.showThinking && normalized.role.toLowerCase() === "toolresult") {
       continue;
+    }
+
+    // Insert date separator when day changes between messages
+    const msgTs = normalized.timestamp;
+    if (msgTs) {
+      const dateLabel = formatDateLabel(msgTs);
+      if (dateLabel !== lastDateLabel) {
+        items.push({
+          kind: "divider",
+          key: `divider:date:${dateLabel.replace(/\s/g, "-")}:${i}`,
+          label: dateLabel,
+          timestamp: msgTs,
+        });
+        lastDateLabel = dateLabel;
+      }
     }
 
     items.push({

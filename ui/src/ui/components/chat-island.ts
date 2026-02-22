@@ -16,6 +16,7 @@ import {
   $chatToolMessages,
   $chatStream,
   $chatStreamStartedAt,
+  $chatRunId,
   $chatQueue,
   $chatAttachments,
   $sidebarOpen,
@@ -23,7 +24,12 @@ import {
   $sidebarError,
   $splitRatio,
 } from "../../stores/chat.ts";
-import { renderChat, type ChatProps } from "../views/chat.ts";
+import { resolveInjectedAssistantIdentity } from "../assistant-identity.ts";
+import { extractText } from "../chat/message-extract.ts";
+import { initMermaidRenderer, initCodeCopyButtons } from "../markdown.ts";
+import type { SessionsListResult } from "../types.ts";
+import { generateUUID } from "../uuid.ts";
+import { renderChat, type ChatProps, type HubChannel, type HubUser } from "../views/chat.ts";
 
 @customElement("chat-island")
 export class ChatIsland extends LitElement {
@@ -46,6 +52,9 @@ export class ChatIsland extends LitElement {
 
   @state() private focusMode = false;
   @state() private showThinking = false;
+  @state() private contactsOpen = false;
+  @state() private hubChannels: HubChannel[] = [];
+  @state() private hubUsers: HubUser[] = [];
 
   @state() private showNewMessages = false;
   private isAtBottom = true;
@@ -61,6 +70,8 @@ export class ChatIsland extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    initMermaidRenderer();
+    initCodeCopyButtons();
     // Listen for chat events from gateway — filter by active session to prevent
     // cross-session message leakage (Issue #5).
     this.gatewayEventUnsub = $gatewayEvent.subscribe((evt) => {
@@ -74,33 +85,71 @@ export class ChatIsland extends LitElement {
         return;
       }
 
-      if (evt.event === "chat.stream") {
-        const payload = evt.payload as { text?: string; startedAt?: number } | undefined;
-        if (payload?.text !== undefined) {
-          $chatStream.set(payload.text);
+      if (evt.event === "chat") {
+        const payload = evt.payload as
+          | {
+              runId?: string;
+              sessionKey?: string;
+              state?: string;
+              message?: unknown;
+              errorMessage?: string;
+            }
+          | undefined;
+
+        if (!payload) {
+          return;
         }
-        if (payload?.startedAt) {
-          $chatStreamStartedAt.set(payload.startedAt);
+
+        // Final from a different run (e.g. sub-agent announce): refresh history.
+        const currentRunId = $chatRunId.get();
+        if (payload.runId && currentRunId && payload.runId !== currentRunId) {
+          if (payload.state === "final") {
+            void this.refreshChat().then(() => {
+              if (this.isAtBottom) {
+                this.scrollToBottom(true);
+              }
+            });
+          }
+          return;
         }
-        // Auto-scroll while streaming if we were at the bottom
-        if (this.isAtBottom) {
-          this.scrollToBottom();
-        }
-      }
-      if (evt.event === "chat.done") {
-        $chatStream.set(null);
-        $chatStreamStartedAt.set(null);
-        $chatSending.set(false);
-        void this.refreshChat().then(() => {
+
+        if (payload.state === "delta") {
+          const next = extractText(payload.message);
+          if (typeof next === "string") {
+            $chatStream.set(next);
+          }
           if (this.isAtBottom) {
             this.scrollToBottom();
           }
-        });
+        } else if (payload.state === "final") {
+          $chatStream.set(null);
+          $chatStreamStartedAt.set(null);
+          $chatRunId.set(null);
+          $chatSending.set(false);
+          void this.refreshChat().then(() => {
+            if (this.isAtBottom) {
+              this.scrollToBottom(true);
+            }
+          });
+        } else if (payload.state === "aborted" || payload.state === "error") {
+          $chatStream.set(null);
+          $chatStreamStartedAt.set(null);
+          $chatRunId.set(null);
+          $chatSending.set(false);
+          // Refresh history so any error message from the agent appears in chat
+          void this.refreshChat().then(() => {
+            if (this.isAtBottom) {
+              this.scrollToBottom(true);
+            }
+          });
+        }
       }
     });
     void this.refreshChat().then(() => {
       this.scrollToBottom();
     });
+    void this.refreshSessions();
+    void this.refreshHub();
 
     // Keyboard shortcuts
     this.keyboardHandler = (e: KeyboardEvent) => {
@@ -129,10 +178,14 @@ export class ChatIsland extends LitElement {
     }
   }
 
-  private scrollToBottom() {
+  private scrollToBottom(smooth = false) {
     const thread = this.querySelector(".chat-thread");
     if (thread) {
-      thread.scrollTop = thread.scrollHeight;
+      if (smooth) {
+        thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
+      } else {
+        thread.scrollTop = thread.scrollHeight;
+      }
       this.showNewMessages = false;
     }
   }
@@ -155,6 +208,7 @@ export class ChatIsland extends LitElement {
   }
 
   render(): TemplateResult {
+    const assistantIdentity = resolveInjectedAssistantIdentity();
     const props: ChatProps = {
       sessionKey: this.activeSession.value || "main",
       onSessionKeyChange: (next: string) => {
@@ -190,11 +244,18 @@ export class ChatIsland extends LitElement {
       sidebarContent: this.sidebarContent.value,
       sidebarError: this.sidebarError.value,
       splitRatio: this.splitRatio.value,
-      assistantName: "OpenClaw",
-      assistantAvatar: null,
+      assistantName: assistantIdentity.name,
+      assistantAvatar: assistantIdentity.avatar,
+      userAvatar: null,
       attachments: [...this.chatAttachments.value],
       onAttachmentsChange: (attachments) => {
         $chatAttachments.set(attachments);
+      },
+      hubChannels: this.hubChannels,
+      hubUsers: this.hubUsers,
+      contactsOpen: this.contactsOpen,
+      onToggleContacts: () => {
+        this.contactsOpen = !this.contactsOpen;
       },
       onRefresh: () => void this.refreshChat(),
       onToggleFocusMode: () => {
@@ -272,7 +333,30 @@ export class ChatIsland extends LitElement {
       return;
     }
 
+    const runId = generateUUID();
+    const now = Date.now();
+    $chatRunId.set(runId);
+    $chatStream.set("");
+    $chatStreamStartedAt.set(now);
     $chatSending.set(true);
+
+    // Optimistic user message — appears immediately while the AI responds
+    const attachments = [...this.chatAttachments.value];
+    const contentBlocks: Array<{ type: string; text?: string; source?: unknown }> = [];
+    if (message) {
+      contentBlocks.push({ type: "text", text: message });
+    }
+    for (const att of attachments) {
+      contentBlocks.push({
+        type: "image",
+        source: { type: "base64", media_type: att.mimeType, data: att.dataUrl },
+      });
+    }
+    $chatMessages.set([
+      ...$chatMessages.get(),
+      { role: "user", content: contentBlocks, timestamp: now },
+    ]);
+
     // Optimistic at-bottom during send
     this.isAtBottom = true;
     this.scrollToBottom();
@@ -282,16 +366,22 @@ export class ChatIsland extends LitElement {
       await gateway.call("chat.send", {
         sessionKey,
         message,
-        attachments: [...this.chatAttachments.value],
+        deliver: false,
+        idempotencyKey: runId,
+        attachments,
       });
       // Clear input on successful send — $chatSending will be reset by
-      // the "chat.done" event when the agent finishes its response.
+      // the "chat" event (state: "final") when the agent finishes its response.
       $chatMessage.set("");
       $chatAttachments.set([]);
+      this.scrollToBottom(true);
     } catch (err) {
       // On send failure, reset sending state immediately so the user can
-      // retry. The "chat.done" event won't fire since the RPC failed.
+      // retry. The "chat" final event won't fire since the RPC failed.
       console.error("Failed to send message:", err);
+      $chatRunId.set(null);
+      $chatStream.set(null);
+      $chatStreamStartedAt.set(null);
       $chatSending.set(false);
     }
   }
@@ -305,6 +395,7 @@ export class ChatIsland extends LitElement {
         $chatToolMessages.set([]);
         this.isAtBottom = true;
         this.scrollToBottom();
+        void this.refreshSessions();
       }
     } catch (err) {
       console.error("Failed to create session:", err);
@@ -323,8 +414,32 @@ export class ChatIsland extends LitElement {
       $chatSending.set(false);
       this.isAtBottom = true;
       this.scrollToBottom();
+      void this.refreshSessions();
     } catch (err) {
       console.error("Failed to reset session:", err);
+    }
+  }
+
+  private async refreshSessions() {
+    try {
+      const result = await gateway.call<SessionsListResult>("sessions.list");
+      $sessions.set(result);
+    } catch {
+      // Non-critical — silently ignore
+    }
+  }
+
+  private async refreshHub() {
+    try {
+      const [channelsResult, usersResult] = await Promise.all([
+        gateway.call<{ channels?: HubChannel[] }>("hub.channels.list"),
+        gateway.call<{ users?: HubUser[] }>("hub.users.list"),
+      ]);
+      this.hubChannels = channelsResult.channels ?? [];
+      this.hubUsers = usersResult.users ?? [];
+    } catch (err) {
+      // Non-critical — hub may not be available
+      console.warn("[chat-island] refreshHub failed:", err);
     }
   }
 }

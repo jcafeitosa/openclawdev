@@ -242,7 +242,7 @@ function handleDeleteMetrics(query: Record<string, string | undefined>) {
 // Mounted at /api/models in express-gateway.ts
 // ============================================================================
 
-export function modelsRouter() {
+export function modelsRouter(): Router {
   const router = Router();
 
   router.get("/metrics/summary", (req, res) => {

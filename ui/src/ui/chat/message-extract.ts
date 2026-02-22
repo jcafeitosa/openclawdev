@@ -4,12 +4,25 @@ import { stripThinkingTags } from "../format.ts";
 const textCache = new WeakMap<object, string | null>();
 const thinkingCache = new WeakMap<object, string | null>();
 
+/** Strips "Conversation info (untrusted metadata):\n```json\n{...}\n```\n" blocks from user messages. */
+function stripConversationMetadata(text: string): string {
+  // Remove the metadata block that looks like:
+  // Conversation info (untrusted metadata):\n```json\n{...}\n```\n
+  return text
+    .replace(
+      /Conversation info \(untrusted metadata\):\s*```(?:json)?\s*\{[\s\S]*?\}\s*```\s*/g,
+      "",
+    )
+    .trimStart();
+}
+
 export function extractText(message: unknown): string | null {
   const m = message as Record<string, unknown>;
   const role = typeof m.role === "string" ? m.role : "";
   const content = m.content;
   if (typeof content === "string") {
-    const processed = role === "assistant" ? stripThinkingTags(content) : stripEnvelope(content);
+    const stripped = role === "user" ? stripConversationMetadata(content) : content;
+    const processed = role === "assistant" ? stripThinkingTags(stripped) : stripEnvelope(stripped);
     return processed;
   }
   if (Array.isArray(content)) {
@@ -24,13 +37,20 @@ export function extractText(message: unknown): string | null {
       .filter((v): v is string => typeof v === "string");
     if (parts.length > 0) {
       const joined = parts.join("\n");
-      const processed = role === "assistant" ? stripThinkingTags(joined) : stripEnvelope(joined);
+      const stripped = role === "user" ? stripConversationMetadata(joined) : joined;
+      const processed =
+        role === "assistant" ? stripThinkingTags(stripped) : stripEnvelope(stripped);
       return processed;
     }
   }
   if (typeof m.text === "string") {
-    const processed = role === "assistant" ? stripThinkingTags(m.text) : stripEnvelope(m.text);
+    const stripped = role === "user" ? stripConversationMetadata(m.text) : m.text;
+    const processed = role === "assistant" ? stripThinkingTags(stripped) : stripEnvelope(stripped);
     return processed;
+  }
+  // Fallback: show errorMessage for failed agent runs (content: [])
+  if (typeof m.errorMessage === "string" && m.errorMessage.trim()) {
+    return `⚠️ ${m.errorMessage}`;
   }
   return null;
 }

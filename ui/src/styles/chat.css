@@ -3,3 +3,4 @@
 @import "./chat/grouped.css";
 @import "./chat/tool-cards.css";
 @import "./chat/sidebar.css";
+@import "highlight.js/styles/atom-one-dark.css";

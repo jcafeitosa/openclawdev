@@ -25,6 +25,11 @@
   max-width: min(900px, calc(100% - 60px));
 }
 
+/* User message groups: limit to 70% of available width */
+.chat-group.user .chat-group-messages {
+  max-width: min(70%, calc(100% - 60px));
+}
+
 /* User messages align content right */
 .chat-group.user .chat-group-messages {
   align-items: flex-end;
@@ -296,5 +301,130 @@ img.chat-avatar {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* =============================================
+   WHATSAPP-STYLE TAILS
+   The last bubble before the footer (timestamp row) gets a
+   small triangular "tail" using clip-path on ::after.
+   ============================================= */
+
+/* Last user bubble: sharp bottom-right corner + tail pointing lower-right */
+.chat-group.user .chat-group-messages > .chat-bubble:has(+ .chat-group-footer) {
+  border-bottom-right-radius: 3px;
+}
+
+.chat-group.user .chat-group-messages > .chat-bubble:has(+ .chat-group-footer)::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: -8px;
+  width: 8px;
+  height: 14px;
+  background: var(--accent-subtle);
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+  pointer-events: none;
+}
+
+/* Last AI bubble: sharp bottom-left corner + tail pointing lower-left */
+.chat-group:not(.user) .chat-group-messages > .chat-bubble:has(+ .chat-group-footer) {
+  border-bottom-left-radius: 3px;
+}
+
+.chat-group:not(.user) .chat-group-messages > .chat-bubble:has(+ .chat-group-footer)::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  width: 8px;
+  height: 14px;
+  background: var(--card);
+  clip-path: polygon(100% 0, 0 100%, 100% 100%);
+  pointer-events: none;
+}
+
+/* Light mode: update tail colors to match bubble backgrounds */
+:root[data-theme="light"]
+  .chat-group.user
+  .chat-group-messages
+  > .chat-bubble:has(+ .chat-group-footer)::after {
+  background: rgba(251, 146, 60, 0.12);
+}
+
+/* =============================================
+   DATE SEPARATOR
+   ============================================= */
+
+/* Override the compaction divider style for date separators */
+.chat-divider {
+  position: relative;
+}
+
+.chat-divider[data-ts] {
+  /* date separators inherit the base .chat-divider style */
+}
+
+/* =============================================
+   SKELETON LOADING
+   ============================================= */
+
+.chat-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 8px 4px;
+  animation: fade-in 300ms ease-out;
+}
+
+.chat-skeleton__row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.chat-skeleton__row--user {
+  flex-direction: row-reverse;
+}
+
+.chat-skeleton__avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--secondary);
+  flex-shrink: 0;
+}
+
+.chat-skeleton__bubbles {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  max-width: 70%;
+}
+
+.chat-skeleton__row--ai .chat-skeleton__bubbles {
+  max-width: 80%;
+}
+
+.bubble-skeleton {
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(
+    90deg,
+    var(--secondary) 25%,
+    var(--panel-strong, rgba(255, 255, 255, 0.08)) 50%,
+    var(--secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }

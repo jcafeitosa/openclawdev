@@ -36,7 +36,7 @@ interface ModelQuotaState {
 
 class EnhancedQuotaMonitor {
   private models: Map<string, ModelQuotaState> = new Map();
-  private monitoringInterval: NodeJS.Timer | null = null;
+  private monitoringInterval: ReturnType<typeof setInterval> | null = null;
   private quotaHistory: Map<string, number[]> = new Map(); // Historical tracking
 
   constructor() {

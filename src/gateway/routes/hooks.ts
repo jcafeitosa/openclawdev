@@ -52,7 +52,7 @@ export function hooksRouter(params: {
   getHooksConfig: () => HooksConfigResolved | null;
   logHooks: SubsystemLogger;
   dispatchers: HookDispatchers;
-}) {
+}): Router {
   const { getHooksConfig, logHooks, dispatchers } = params;
   const router = Router();
 

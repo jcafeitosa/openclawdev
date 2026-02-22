@@ -395,7 +395,7 @@ function serveIndexHtml(
 // Plugin
 // ============================================================================
 
-export function controlUiRouter(params: { basePath: string; root?: ControlUiRootState }) {
+export function controlUiRouter(params: { basePath: string; root?: ControlUiRootState }): Router {
   const basePath = normalizeControlUiBasePath(params.basePath);
   const rootState = params.root;
   const router = Router();

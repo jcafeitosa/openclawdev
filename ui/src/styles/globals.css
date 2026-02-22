@@ -19,7 +19,7 @@
   background: #94a3b8;
 }
 
-/* Typography */
+/* Typography - Refined Scale (smaller, more readable) */
 @layer base {
   body {
     background-color: var(--bg);
@@ -28,32 +28,33 @@
     background-size: 24px 24px;
   }
 
+  /* Dashboard headings - smaller scale for data-dense UI */
   h1 {
-    @apply text-5xl font-bold tracking-tight;
+    @apply text-2xl font-bold tracking-tight;
   }
 
   h2 {
-    @apply text-4xl font-bold;
+    @apply text-xl font-bold;
   }
 
   h3 {
-    @apply text-3xl font-bold;
+    @apply text-lg font-bold;
   }
 
   h4 {
-    @apply text-2xl font-semibold;
+    @apply text-base font-semibold;
   }
 
   h5 {
-    @apply text-xl font-semibold;
+    @apply text-sm font-semibold;
   }
 
   h6 {
-    @apply text-lg font-semibold;
+    @apply text-sm font-semibold;
   }
 
   p {
-    @apply text-base leading-relaxed;
+    @apply text-sm leading-relaxed;
   }
 
   a {
@@ -61,11 +62,19 @@
   }
 
   code {
-    @apply bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded font-mono text-sm;
+    font-family: var(--mono);
+    font-feature-settings:
+      "liga" 1,
+      "calt" 1;
+    @apply bg-slate-100 text-slate-900 px-1.5 py-0.5 rounded text-xs;
   }
 
   pre {
-    @apply bg-slate-900 text-slate-100 p-4 rounded-lg overflow-x-auto;
+    font-family: var(--mono);
+    font-feature-settings:
+      "liga" 1,
+      "calt" 1;
+    @apply bg-slate-900 text-slate-100 p-3 rounded-lg overflow-x-auto text-xs leading-relaxed;
   }
 
   pre code {

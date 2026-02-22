@@ -39,6 +39,8 @@ function buildTestCatalog(): ModelCatalogEntry[] {
     makeCatalogEntry("anthropic", "claude-opus-4-6", { input: ["text", "image"] }),
     // Moderate + balanced + coding/reasoning
     makeCatalogEntry("anthropic", "claude-sonnet-4-5", { input: ["text", "image"] }),
+    // Cheap + fast + coding (Anthropic)
+    makeCatalogEntry("anthropic", "claude-haiku-4-5", { input: ["text"] }),
     makeCatalogEntry("openai", "gpt-5-mini", { input: ["text", "image"] }),
     // Cheap + fast
     makeCatalogEntry("openai", "gpt-5-nano", { input: ["text", "image"] }),
@@ -176,16 +178,25 @@ describe("rankModelsForRole", () => {
     }
   });
 
-  it("should sort by cost first, then provider priority, then version", () => {
+  it("should sort by version first, then cost, then provider priority", () => {
     const ranked = rankModelsForRole(catalog, ROLE_REQUIREMENTS.specialist);
     expect(ranked.length).toBeGreaterThanOrEqual(2);
-    // Cost must be non-decreasing across the ranked list
+    // Version must be non-increasing across the ranked list (newest first)
     for (let i = 1; i < ranked.length; i++) {
-      expect(ranked[i].costScore).toBeGreaterThanOrEqual(ranked[i - 1].costScore);
+      expect(ranked[i].versionScore).toBeLessThanOrEqual(ranked[i - 1].versionScore);
     }
-    // Within the same cost tier, provider score must be non-decreasing
+    // Within the same version, cost must be non-decreasing
     for (let i = 1; i < ranked.length; i++) {
-      if (ranked[i].costScore === ranked[i - 1].costScore) {
+      if (ranked[i].versionScore === ranked[i - 1].versionScore) {
+        expect(ranked[i].costScore).toBeGreaterThanOrEqual(ranked[i - 1].costScore);
+      }
+    }
+    // Within the same version+cost, provider score must be non-decreasing
+    for (let i = 1; i < ranked.length; i++) {
+      if (
+        ranked[i].versionScore === ranked[i - 1].versionScore &&
+        ranked[i].costScore === ranked[i - 1].costScore
+      ) {
         expect(ranked[i].providerScore).toBeGreaterThanOrEqual(ranked[i - 1].providerScore);
       }
     }
@@ -235,21 +246,22 @@ describe("selectModelForRole", () => {
   it("should select cheapest coding model for specialist", () => {
     const selected = selectModelForRole(catalog, "specialist");
     expect(selected).not.toBeNull();
-    // Should pick one of the cheap coding models
-    expect(["anthropic", "openai", "google"]).toContain(selected?.provider);
+    // Anthropic is preferred first — should pick claude-haiku-4-5 (cheap + coding).
+    expect(selected?.provider).toBe("anthropic");
   });
 
   it("should select reasoning model for orchestrator", () => {
     const selected = selectModelForRole(catalog, "orchestrator");
     expect(selected).not.toBeNull();
-    // Must be a modern reasoning-capable model (avoid legacy families).
+    // Anthropic preferred — must be a modern reasoning-capable Claude model.
+    // With newest-first sort: claude-opus-4-6 (v=46) wins over claude-sonnet-4-5 (v=45).
+    expect(selected?.provider).toBe("anthropic");
     const key = `${selected?.provider}/${selected?.model}`;
     expect(
       [
-        "openai/gpt-5-mini",
-        "openai/gpt-5.2",
         "anthropic/claude-opus-4-6",
         "anthropic/claude-sonnet-4-5",
+        "anthropic/claude-sonnet-4-6",
       ].includes(key),
     ).toBe(true);
   });
@@ -277,6 +289,98 @@ describe("selectModelForRole", () => {
   it("should return null for empty catalog", () => {
     const selected = selectModelForRole([], "specialist");
     expect(selected).toBeNull();
+  });
+
+  it("should prefer Anthropic over other non-OpenAI providers (static fallback)", () => {
+    // No authStore → static order: Anthropic first, then others, then OpenAI.
+    const mixed = [
+      makeCatalogEntry("openai", "gpt-5-nano", { input: ["text"] }), // cheap + coding
+      makeCatalogEntry("google", "gemini-3-flash", { input: ["text"] }), // cheap + coding
+      makeCatalogEntry("anthropic", "claude-haiku-4-5", { input: ["text"] }), // cheap + coding
+    ];
+    const selected = selectModelForRole(mixed, "specialist");
+    expect(selected?.provider).toBe("anthropic");
+    expect(selected?.model).toBe("claude-haiku-4-5");
+  });
+
+  it("should fall back to non-Anthropic non-OpenAI when no Claude model qualifies (static)", () => {
+    const mixed = [
+      makeCatalogEntry("openai", "gpt-5-nano", { input: ["text"] }), // cheap + coding
+      makeCatalogEntry("google", "gemini-3-flash", { input: ["text"] }), // cheap + coding
+    ];
+    const selected = selectModelForRole(mixed, "specialist");
+    expect(selected?.provider).toBe("google");
+    expect(selected?.model).toBe("gemini-3-flash");
+  });
+
+  it("should fall back to OpenAI when no other provider has a qualifying model", () => {
+    const openaiOnly = [makeCatalogEntry("openai", "gpt-5-nano", { input: ["text"] })];
+    const selected = selectModelForRole(openaiOnly, "specialist");
+    expect(selected?.provider).toBe("openai");
+    expect(selected?.model).toBe("gpt-5-nano");
+  });
+
+  it("should prefer expensive Anthropic model over cheaper OpenAI model", () => {
+    // Even if the Anthropic model requires cost relaxation, it wins over OpenAI.
+    const mixed = [
+      makeCatalogEntry("openai", "gpt-5-nano", { input: ["text"] }), // cheap
+      makeCatalogEntry("anthropic", "claude-opus-4-6", {
+        reasoning: true,
+        input: ["text", "image"],
+      }), // expensive
+    ];
+    const selected = selectModelForRole(mixed, "worker");
+    expect(selected?.provider).toBe("anthropic");
+    expect(selected?.model).toBe("claude-opus-4-6");
+  });
+
+  it("should prefer OAuth-authenticated providers over non-OAuth", () => {
+    const authStore: import("./auth-profiles.js").AuthProfileStore = {
+      order: {},
+      profiles: {
+        "anthropic-oauth": {
+          type: "oauth",
+          provider: "anthropic",
+          access: "tok",
+          refresh: "ref",
+          expires: Date.now() + 3600_000,
+        },
+      },
+      usageStats: {},
+    };
+    const mixed = [
+      makeCatalogEntry("openai", "gpt-5-nano", { input: ["text"] }), // cheap, no oauth
+      makeCatalogEntry("google", "gemini-3-flash", { input: ["text"] }), // cheap, no oauth
+      makeCatalogEntry("anthropic", "claude-haiku-4-5", { input: ["text"] }), // cheap, HAS oauth
+    ];
+    const selected = selectModelForRole(mixed, "specialist", undefined, undefined, authStore);
+    expect(selected?.provider).toBe("anthropic");
+    expect(selected?.model).toBe("claude-haiku-4-5");
+  });
+
+  it("should prefer Google OAuth over non-OAuth Anthropic API key", () => {
+    const authStore: import("./auth-profiles.js").AuthProfileStore = {
+      order: {},
+      profiles: {
+        // Google has OAuth, Anthropic only has API key
+        "google-oauth": {
+          type: "oauth",
+          provider: "google-antigravity",
+          access: "tok",
+          refresh: "ref",
+          expires: Date.now() + 3600_000,
+        },
+        "anthropic-apikey": { type: "api_key", provider: "anthropic" },
+      },
+      usageStats: {},
+    };
+    const mixed = [
+      makeCatalogEntry("anthropic", "claude-haiku-4-5", { input: ["text"] }), // cheap, API key only
+      makeCatalogEntry("google-antigravity", "gemini-3-flash", { input: ["text"] }), // cheap, HAS oauth
+    ];
+    const selected = selectModelForRole(mixed, "specialist", undefined, undefined, authStore);
+    // Google has OAuth → higher priority than Anthropic without OAuth
+    expect(selected?.provider).toBe("google-antigravity");
   });
 
   it("should prefer newer model among same cost tier", () => {
@@ -347,8 +451,10 @@ describe("initAutoModelSelection / getAutoSelectedModel", () => {
     const allowedKeys = new Set(["anthropic/claude-opus-4-6", "openai/gpt-5-nano"]);
     initAutoModelSelection(catalog, allowedKeys);
     const worker = getAutoSelectedModel("worker");
-    // Worker should get gpt-5-nano (cheap + fast) since it's the cheapest allowed
-    expect(worker?.model).toBe("gpt-5-nano");
+    // Worker prefers non-OpenAI: claude-opus-4-6 is selected (via cost relaxation)
+    // even though gpt-5-nano is cheaper — OpenAI is fallback only.
+    expect(worker?.model).toBe("claude-opus-4-6");
+    expect(worker?.provider).toBe("anthropic");
   });
 
   it("should reset properly", () => {

@@ -401,6 +401,21 @@ export function registerModelsCli(program: Command) {
       });
     });
 
+  auth
+    .command("migrate")
+    .description("Migrate auth credentials from JSON files to encrypted PostgreSQL")
+    .option("--dry-run", "Show what would be migrated without making changes", false)
+    .option("--cleanup", "Remove JSON files after successful migration", false)
+    .action(async (opts) => {
+      await runModelsCommand(async () => {
+        const { runAuthMigrate } = await import("../commands/auth-migrate.js");
+        await runAuthMigrate({
+          dryRun: Boolean(opts.dryRun),
+          cleanup: Boolean(opts.cleanup),
+        });
+      });
+    });
+
   const order = auth.command("order").description("Manage per-agent auth profile order overrides");
 
   order

@@ -162,21 +162,25 @@ describe("Model Selection Verification", () => {
     // Initialize auto-selection
     initAutoModelSelection(MOCK_CATALOG, undefined, config);
 
-    // Worker role (cheap/fast) should get gpt-5-nano
-    // Orchestrator role (balanced/expensive) should get claude-sonnet-4-5 (balanced) or gpt-5 (expensive)
-    // rankModelsForRole prefers CHEAPEST that meets requirements.
-    // Orchestrator requires "coding" + "reasoning", min "balanced".
-    // gpt-5-nano: fast (fails balanced?), reasoning=false (fails).
-    // claude-sonnet-4-5: balanced (pass), coding=true, reasoning=true. Cost: moderate.
-    // gpt-5: powerful (pass), coding=true, reasoning=true. Cost: expensive.
-
-    // So Orchestrator should pick Claude Sonnet 4.5 (moderate < expensive).
+    // OpenAI models are fallback only — non-OpenAI providers are preferred.
+    // MOCK_CATALOG has: openai/gpt-5 (expensive), openai/gpt-5-nano (cheap),
+    //   anthropic/claude-sonnet-4-5 (moderate, reasoning+coding).
+    //
+    // Worker role (fast+cheap): strict pass fails for claude-sonnet-4-5 (moderate > cheap).
+    //   Cost relaxation pass: claude-sonnet-4-5 qualifies (balanced >= fast, all requirements met).
+    //   → worker gets claude-sonnet-4-5 (non-OpenAI preferred even with cost relaxation).
+    //
+    // Orchestrator role (balanced + reasoning + coding):
+    //   claude-sonnet-4-5 qualifies directly (moderate, balanced, reasoning+coding).
+    //   → orchestrator gets claude-sonnet-4-5.
 
     const selections = computeAutoSelections(MOCK_CATALOG, undefined, config);
     const worker = selections.get("worker");
     const orchestrator = selections.get("orchestrator");
 
-    expect(worker?.model).toBe("gpt-5-nano");
+    // Non-OpenAI (anthropic) is preferred over cheaper OpenAI models.
+    expect(worker?.provider).toBe("anthropic");
+    expect(worker?.model).toBe("claude-sonnet-4-5");
     // claude-sonnet-4-5 (moderate) is cheaper than gpt-5 (expensive).
     expect(orchestrator?.model).toBe("claude-sonnet-4-5");
   });

@@ -98,7 +98,7 @@ function mergeActionIntoArgsIfSupported(params: {
   return { ...args, action };
 }
 
-export function toolsInvokeRouter(params: { auth: ResolvedGatewayAuth }) {
+export function toolsInvokeRouter(params: { auth: ResolvedGatewayAuth }): Router {
   const { auth } = params;
   const router = Router();
 

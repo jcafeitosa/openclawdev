@@ -15,7 +15,7 @@ type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 export function slackPluginRouter(params: {
   pluginRegistry: PluginRegistry;
   logPlugins: SubsystemLogger;
-}) {
+}): Router {
   const { pluginRegistry, logPlugins } = params;
   const router = Router();
 

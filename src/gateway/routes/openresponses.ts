@@ -300,7 +300,7 @@ async function extractMediaFromInput(
 export function openResponsesRouter(params: {
   auth: ResolvedGatewayAuth;
   config?: GatewayHttpResponsesConfig;
-}) {
+}): Router {
   const { auth, config } = params;
   const router = Router();
 
