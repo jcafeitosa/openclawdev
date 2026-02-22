@@ -6,8 +6,7 @@ import type { CronJob } from "../../cron/types.js";
 import { requestHeartbeatNow } from "../../infra/heartbeat-wake.js";
 import { enqueueSystemEvent } from "../../infra/system-events.js";
 import type { createSubsystemLogger } from "../../logging/subsystem.js";
-import type { HookMessageChannel, HooksConfigResolved } from "../hooks.js";
-import { createHooksRequestHandler } from "../server-http.js";
+import type { HookMessageChannel } from "../hooks.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -121,25 +120,4 @@ export function createHookDispatchers(params: {
   };
 
   return { dispatchWakeHook, dispatchAgentHook };
-}
-
-export function createGatewayHooksRequestHandler(params: {
-  deps: CliDeps;
-  getHooksConfig: () => HooksConfigResolved | null;
-  bindHost: string;
-  port: number;
-  logHooks: SubsystemLogger;
-}) {
-  const { deps, getHooksConfig, bindHost, port, logHooks } = params;
-
-  const { dispatchWakeHook, dispatchAgentHook } = createHookDispatchers({ deps, logHooks });
-
-  return createHooksRequestHandler({
-    getHooksConfig,
-    bindHost,
-    port,
-    logHooks,
-    dispatchAgentHook,
-    dispatchWakeHook,
-  });
 }

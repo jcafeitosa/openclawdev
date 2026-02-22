@@ -1,10 +1,11 @@
 /**
- * Model System HTTP routes — Elysia plugin.
+ * Model System HTTP routes — Express Router.
  *
  * 9 REST endpoints for model catalog management under /api/models.
+ * Mounted at /api/models in express-gateway.ts.
  */
 
-import { Elysia } from "elysia";
+import { Router } from "express";
 import { getProviderMetrics } from "../../agents/provider-metrics.js";
 
 // ============================================================================
@@ -237,72 +238,80 @@ function handleDeleteMetrics(query: Record<string, string | undefined>) {
 }
 
 // ============================================================================
-// Elysia Plugin
+// Express Router
+// Mounted at /api/models in express-gateway.ts
 // ============================================================================
 
-export function modelsRoutes() {
-  return new Elysia({ name: "models-routes", prefix: "/api/models" })
-    .get("/metrics/summary", ({ set }) => {
-      try {
-        return handleGetMetricsSummary();
-      } catch (error) {
-        set.status = 500;
-        return {
-          error: "Failed to fetch metrics summary",
-          message: error instanceof Error ? error.message : String(error),
-        };
+export function modelsRouter() {
+  const router = Router();
+
+  router.get("/metrics/summary", (req, res) => {
+    try {
+      res.json(handleGetMetricsSummary());
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to fetch metrics summary",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  router.get("/metrics", (req, res) => {
+    try {
+      const result = handleGetMetrics(req.query as Record<string, string | undefined>);
+      if (typeof result.body === "string") {
+        const ct = (result as { contentType?: string }).contentType ?? "text/plain; charset=utf-8";
+        res.status(result.status).type(ct).send(result.body);
+      } else {
+        res.status(result.status).json(result.body);
       }
-    })
-    .get("/metrics", ({ query, set }) => {
-      try {
-        const result = handleGetMetrics(query as Record<string, string | undefined>);
-        set.status = result.status;
-        if (typeof result.body === "string") {
-          set.headers["content-type"] =
-            (result as { contentType?: string }).contentType ?? "text/plain; charset=utf-8";
-          return result.body;
-        }
-        return result.body;
-      } catch (error) {
-        set.status = 500;
-        return {
-          error: "Failed to fetch metrics",
-          message: error instanceof Error ? error.message : String(error),
-        };
-      }
-    })
-    .delete("/metrics", ({ query, set }) => {
-      try {
-        return handleDeleteMetrics(query as Record<string, string | undefined>);
-      } catch (error) {
-        set.status = 500;
-        return {
-          error: "Failed to reset metrics",
-          message: error instanceof Error ? error.message : String(error),
-        };
-      }
-    })
-    .get("/health", () => {
-      return { status: "healthy", message: "Model health check pending" };
-    })
-    .post("/test", () => {
-      return { ok: true, message: "Model availability test pending" };
-    })
-    .get("/:id/quarantine", () => {
-      // Not a real endpoint, but matches the pattern
-      return { status: 404, error: "Not found" };
-    })
-    .put("/:id/quarantine", () => {
-      return { ok: true, message: "Model quarantine pending" };
-    })
-    .delete("/:id/quarantine", () => {
-      return { ok: true, message: "Model quarantine removal pending" };
-    })
-    .get("/:id", ({ params }) => {
-      const _modelId = params.id;
-      return { model: null, message: "Model catalog integration pending" };
-    })
-    .get("/", () => {
-      return { models: [], message: "Model catalog integration pending" };
-    });
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to fetch metrics",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  router.delete("/metrics", (req, res) => {
+    try {
+      res.json(handleDeleteMetrics(req.query as Record<string, string | undefined>));
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to reset metrics",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  router.get("/health", (_req, res) => {
+    res.json({ status: "healthy", message: "Model health check pending" });
+  });
+
+  router.post("/test", (_req, res) => {
+    res.json({ ok: true, message: "Model availability test pending" });
+  });
+
+  router.get("/:id/quarantine", (_req, res) => {
+    res.status(404).json({ status: 404, error: "Not found" });
+  });
+
+  router.put("/:id/quarantine", (_req, res) => {
+    res.json({ ok: true, message: "Model quarantine pending" });
+  });
+
+  router.delete("/:id/quarantine", (_req, res) => {
+    res.json({ ok: true, message: "Model quarantine removal pending" });
+  });
+
+  router.get("/:id", (req, res) => {
+    const _modelId = req.params.id;
+    res.json({ model: null, message: "Model catalog integration pending" });
+  });
+
+  router.get("/", (_req, res) => {
+    res.json({ models: [], message: "Model catalog integration pending" });
+  });
+
+  return router;
 }

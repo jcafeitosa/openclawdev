@@ -1,17 +1,15 @@
 /**
- * Control UI SPA + Avatar routes — Elysia plugin.
+ * Control UI SPA + Avatar routes — Express Router middleware.
  *
  * Two concerns:
  *   1. Avatar serving:  GET {basePath}/avatar/{agentId}  (+ ?meta=1 for JSON metadata)
  *   2. SPA serving:     GET {basePath}/*  with static file serving and index.html SPA fallback
- *
- * Translates the raw-Node `handleControlUiHttpRequest` / `handleControlUiAvatarRequest`
- * logic into Web-Standard Response objects returned from Elysia handlers.
  */
 
 import fs from "node:fs";
+import type { IncomingMessage } from "node:http";
 import path from "node:path";
-import { Elysia, type Context } from "elysia";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { resolveAgentAvatar } from "../../agents/identity-avatar.js";
 import { loadConfig } from "../../config/config.js";
 import { resolveControlUiRootSync } from "../../infra/control-ui-assets.js";
@@ -24,33 +22,10 @@ import {
   normalizeControlUiBasePath,
   resolveAssistantAvatarUrl,
 } from "../control-ui-shared.js";
-import { getNodeRequest, getRequestIp } from "../elysia-node-compat.js";
-import { safeParseUrl } from "../net.js";
 
 // ============================================================================
 // Helpers
 // ============================================================================
-
-/** Web-Standard fallback for isLocalDirectRequest when Node req is unavailable. */
-function isLocalWebRequest(request: Request): boolean {
-  const host = request.headers.get("host") ?? "";
-  const hostname = host.split(":")[0] ?? "";
-  const hostIsLocal = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  if (!hostIsLocal) {
-    return false;
-  }
-  const hasForwarded = Boolean(
-    request.headers.get("x-forwarded-for") ||
-    request.headers.get("x-real-ip") ||
-    request.headers.get("x-forwarded-host"),
-  );
-  if (hasForwarded) {
-    return false;
-  }
-  const ip = getRequestIp(request) ?? "";
-  const isLoopback = ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1";
-  return isLoopback || !ip;
-}
 
 function contentTypeForExt(ext: string): string {
   switch (ext) {
@@ -138,136 +113,43 @@ const NO_CACHE = "no-cache";
 const ROOT_PREFIX = "/";
 
 // ============================================================================
-// Plugin
-// ============================================================================
-
-export function controlUiRoutes(params: { basePath: string; root?: ControlUiRootState }) {
-  const basePath = normalizeControlUiBasePath(params.basePath);
-  const rootState = params.root;
-
-  return new Elysia({ name: "control-ui-routes" }).all("/*", async ({ request }: Context) => {
-    const url = safeParseUrl(request.url) ?? new URL("http://localhost");
-    const pathname = url.pathname;
-
-    // Only handle GET / HEAD
-    if (request.method !== "GET" && request.method !== "HEAD") {
-      return new Response("Method Not Allowed", {
-        status: 405,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
-    }
-
-    // ----------------------------------------------------------------
-    // Avatar route: {basePath}/avatar/{agentId}
-    // ----------------------------------------------------------------
-    const avatarHandled = handleAvatarRoute(request, url, pathname, basePath);
-    if (avatarHandled) {
-      return avatarHandled;
-    }
-
-    // ----------------------------------------------------------------
-    // Token redirect for localhost (auto-append ?token= for convenience)
-    // ----------------------------------------------------------------
-    const tokenRedirect = maybeRedirectToTokenizedUi(request, url, pathname, basePath);
-    if (tokenRedirect) {
-      return tokenRedirect;
-    }
-
-    // ----------------------------------------------------------------
-    // Base path guard: if basePath is set, reject paths that don't match
-    // ----------------------------------------------------------------
-    if (!basePath) {
-      // When basePath is empty, reject /ui or /ui/* to avoid ambiguity
-      if (pathname === "/ui" || pathname.startsWith("/ui/")) {
-        return notFoundResponse();
-      }
-    }
-
-    if (basePath) {
-      // Redirect /basePath -> /basePath/
-      if (pathname === basePath) {
-        return new Response(null, {
-          status: 302,
-          headers: { Location: `${basePath}/${url.search}` },
-        });
-      }
-      if (!pathname.startsWith(`${basePath}/`)) {
-        return; // Not our route — pass through to Elysia
-      }
-    }
-
-    // ----------------------------------------------------------------
-    // Root state checks (missing/invalid assets)
-    // ----------------------------------------------------------------
-    if (rootState?.kind === "invalid") {
-      return new Response(
-        `Control UI assets not found at ${rootState.path}. Build them with \`pnpm ui:build\` (auto-installs UI deps), or update gateway.controlUi.root.`,
-        { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } },
-      );
-    }
-    if (rootState?.kind === "missing") {
-      return new Response(
-        "Control UI assets not found. Build them with `pnpm ui:build` (auto-installs UI deps), or run `pnpm ui:dev` during development.",
-        { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } },
-      );
-    }
-
-    // Resolve the asset root directory
-    const root =
-      rootState?.kind === "resolved"
-        ? rootState.path
-        : resolveControlUiRootSync({
-            moduleUrl: import.meta.url,
-            argv1: process.argv[1],
-            cwd: process.cwd(),
-          });
-    if (!root) {
-      return new Response(
-        "Control UI assets not found. Build them with `pnpm ui:build` (auto-installs UI deps), or run `pnpm ui:dev` during development.",
-        { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } },
-      );
-    }
-
-    // ----------------------------------------------------------------
-    // Static file serving + SPA fallback
-    // ----------------------------------------------------------------
-    const res = serveSpaRequest(request, pathname, url, basePath, root);
-    return res;
-  });
-}
-
-// ============================================================================
 // Avatar Handler
 // ============================================================================
 
 function handleAvatarRoute(
-  request: Request,
-  url: URL,
+  req: IncomingMessage,
+  res: Response,
   pathname: string,
   basePath: string,
-): Response | null {
+): boolean {
   const pathWithBase = basePath
     ? `${basePath}${CONTROL_UI_AVATAR_PREFIX}/`
     : `${CONTROL_UI_AVATAR_PREFIX}/`;
 
   if (!pathname.startsWith(pathWithBase)) {
-    return null;
+    return false;
   }
 
   const agentIdParts = pathname.slice(pathWithBase.length).split("/").filter(Boolean);
   const agentId = agentIdParts[0] ?? "";
   if (agentIdParts.length !== 1 || !agentId || !isValidAgentId(agentId)) {
-    return notFoundResponse();
+    res.status(404).type("text/plain").send("Not Found");
+    return true;
   }
 
   let cfg;
   try {
     cfg = loadConfig();
   } catch {
-    return notFoundResponse();
+    res.status(404).type("text/plain").send("Not Found");
+    return true;
   }
 
   const resolved = resolveAgentAvatar(cfg, agentId);
+  const url = new URL(
+    (req as Request).originalUrl ?? req.url ?? "/",
+    `http://${req.headers.host ?? "localhost"}`,
+  );
 
   // ?meta=1 returns JSON metadata about the avatar
   if (url.searchParams.get("meta") === "1") {
@@ -277,31 +159,27 @@ function handleAvatarRoute(
         : resolved.kind === "remote" || resolved.kind === "data"
           ? resolved.url
           : null;
-    return new Response(JSON.stringify({ avatarUrl }), {
-      status: 200,
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": NO_CACHE,
-      },
-    });
+    res.status(200).setHeader("Cache-Control", NO_CACHE).json({ avatarUrl });
+    return true;
   }
 
   // Serve the avatar file directly (local only)
   if (resolved.kind !== "local") {
-    return notFoundResponse();
+    res.status(404).type("text/plain").send("Not Found");
+    return true;
   }
 
-  if (request.method === "HEAD") {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        "content-type": contentTypeForExt(path.extname(resolved.filePath).toLowerCase()),
-        "cache-control": NO_CACHE,
-      },
-    });
+  if (req.method === "HEAD") {
+    res
+      .status(200)
+      .setHeader("Content-Type", contentTypeForExt(path.extname(resolved.filePath).toLowerCase()))
+      .setHeader("Cache-Control", NO_CACHE)
+      .end();
+    return true;
   }
 
-  return serveStaticFile(resolved.filePath);
+  serveStaticFile(res, resolved.filePath);
+  return true;
 }
 
 // ============================================================================
@@ -309,68 +187,65 @@ function handleAvatarRoute(
 // ============================================================================
 
 function maybeRedirectToTokenizedUi(
-  request: Request,
-  url: URL,
+  req: IncomingMessage,
+  res: Response,
   pathname: string,
   basePath: string,
-): Response | null {
+): boolean {
   let cfg;
   try {
     cfg = loadConfig();
   } catch {
-    return null;
+    return false;
   }
 
   const token = cfg.gateway?.auth?.token?.trim();
   if (!token) {
-    return null;
+    return false;
   }
+
+  const url = new URL(
+    (req as Request).originalUrl ?? req.url ?? "/",
+    `http://${req.headers.host ?? "localhost"}`,
+  );
+
   // Already has a token query param
   if (url.searchParams.get("token")?.trim()) {
-    return null;
+    return false;
   }
 
   const trustedProxies = cfg.gateway?.trustedProxies ?? [];
-  const nodeReq = getNodeRequest(request);
-  const isLocal = nodeReq
-    ? isLocalDirectRequest(nodeReq, trustedProxies)
-    : isLocalWebRequest(request);
+  const isLocal = isLocalDirectRequest(req, trustedProxies);
   if (!isLocal) {
-    return null;
+    return false;
   }
 
   // Only rewrite Control UI navigations, not static assets or avatar endpoints
   if (basePath) {
     if (pathname !== basePath && !pathname.startsWith(`${basePath}/`)) {
-      return null;
+      return false;
     }
   }
   if (pathname.includes("/assets/")) {
-    return null;
+    return false;
   }
   if (pathname.startsWith(`${basePath}${CONTROL_UI_AVATAR_PREFIX}/`)) {
-    return null;
+    return false;
   }
   if (!basePath && pathname.startsWith(`${CONTROL_UI_AVATAR_PREFIX}/`)) {
-    return null;
+    return false;
   }
   if (path.extname(pathname)) {
-    return null;
+    return false;
   }
 
-  const redirected = safeParseUrl(url.toString());
-  if (!redirected) {
-    return null;
-  }
-  redirected.searchParams.set("token", token);
-  if (basePath && redirected.pathname === basePath) {
-    redirected.pathname = `${basePath}/`;
+  url.searchParams.set("token", token);
+  if (basePath && url.pathname === basePath) {
+    url.pathname = `${basePath}/`;
   }
 
-  return new Response(null, {
-    status: 302,
-    headers: { Location: `${redirected.pathname}${redirected.search}` },
-  });
+  res.status(302).setHeader("Location", `${url.pathname}${url.search}`).end();
+  return true;
 }
 
 // ============================================================================
@@ -378,12 +253,12 @@ function maybeRedirectToTokenizedUi(
 // ============================================================================
 
 function serveSpaRequest(
-  request: Request,
+  req: IncomingMessage,
+  res: Response,
   pathname: string,
-  url: URL,
   basePath: string,
   root: string,
-): Response {
+): void {
   // Strip basePath prefix from the URL path to get the SPA-relative path
   const uiPath =
     basePath && pathname.startsWith(`${basePath}/`) ? pathname.slice(basePath.length) : pathname;
@@ -405,65 +280,73 @@ function serveSpaRequest(
 
   // Directory traversal guard
   if (!isSafeRelativePath(fileRel)) {
-    return notFoundResponse();
+    res.status(404).type("text/plain").send("Not Found");
+    return;
   }
 
   const filePath = path.join(root, fileRel);
   if (!filePath.startsWith(root)) {
-    return notFoundResponse();
+    res.status(404).type("text/plain").send("Not Found");
+    return;
   }
 
   // Serve exact file if it exists
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     if (path.basename(filePath) === "index.html") {
-      return serveIndexHtml(request, filePath, basePath);
+      serveIndexHtml(req, res, filePath, basePath);
+      return;
     }
-    if (request.method === "HEAD") {
-      return new Response(null, {
-        status: 200,
-        headers: {
-          "content-type": contentTypeForExt(path.extname(filePath).toLowerCase()),
-          "cache-control": NO_CACHE,
-        },
-      });
+    if (req.method === "HEAD") {
+      res
+        .status(200)
+        .setHeader("Content-Type", contentTypeForExt(path.extname(filePath).toLowerCase()))
+        .setHeader("Cache-Control", NO_CACHE)
+        .end();
+      return;
     }
-    return serveStaticFile(filePath);
+    serveStaticFile(res, filePath);
+    return;
   }
 
   // MPA directory route: /chat → /chat/index.html (Astro generates subdirectories)
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
     const dirIndexPath = path.join(filePath, "index.html");
     if (fs.existsSync(dirIndexPath) && fs.statSync(dirIndexPath).isFile()) {
-      return serveIndexHtml(request, dirIndexPath, basePath);
+      serveIndexHtml(req, res, dirIndexPath, basePath);
+      return;
     }
   }
 
   // SPA fallback: serve index.html for unknown paths (client-side router)
   const indexPath = path.join(root, "index.html");
   if (fs.existsSync(indexPath)) {
-    return serveIndexHtml(request, indexPath, basePath);
+    serveIndexHtml(req, res, indexPath, basePath);
+    return;
   }
 
-  return notFoundResponse();
+  res.status(404).type("text/plain").send("Not Found");
 }
 
 // ============================================================================
 // File Serving Helpers
 // ============================================================================
 
-function serveStaticFile(filePath: string): Response {
+function serveStaticFile(res: Response, filePath: string): void {
   const ext = path.extname(filePath).toLowerCase();
   const buffer = fs.readFileSync(filePath);
-  return new Response(buffer, {
-    status: 200,
-    headers: {
-      "content-type": contentTypeForExt(ext),
-      "cache-control": NO_CACHE,
-    },
-  });
+  res
+    .status(200)
+    .setHeader("Content-Type", contentTypeForExt(ext))
+    .setHeader("Cache-Control", NO_CACHE)
+    .send(buffer);
 }
 
-function serveIndexHtml(request: Request, indexPath: string, basePath: string): Response {
+function serveIndexHtml(
+  req: IncomingMessage,
+  res: Response,
+  indexPath: string,
+  basePath: string,
+): void {
   let cfg;
   try {
     cfg = loadConfig();
@@ -492,28 +375,124 @@ function serveIndexHtml(request: Request, indexPath: string, basePath: string): 
     assistantAvatar: avatarValue,
   });
 
-  if (request.method === "HEAD") {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        "content-type": "text/html; charset=utf-8",
-        "cache-control": NO_CACHE,
-      },
-    });
+  if (req.method === "HEAD") {
+    res
+      .status(200)
+      .setHeader("Content-Type", "text/html; charset=utf-8")
+      .setHeader("Cache-Control", NO_CACHE)
+      .end();
+    return;
   }
 
-  return new Response(html, {
-    status: 200,
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": NO_CACHE,
-    },
-  });
+  res
+    .status(200)
+    .setHeader("Content-Type", "text/html; charset=utf-8")
+    .setHeader("Cache-Control", NO_CACHE)
+    .send(html);
 }
 
-function notFoundResponse(): Response {
-  return new Response("Not Found", {
-    status: 404,
-    headers: { "content-type": "text/plain; charset=utf-8" },
+// ============================================================================
+// Plugin
+// ============================================================================
+
+export function controlUiRouter(params: { basePath: string; root?: ControlUiRootState }) {
+  const basePath = normalizeControlUiBasePath(params.basePath);
+  const rootState = params.root;
+  const router = Router();
+
+  router.use(async (req: Request, res: Response, next: NextFunction) => {
+    const pathname = req.path;
+
+    // Only handle GET / HEAD
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return next();
+    }
+
+    // ----------------------------------------------------------------
+    // Avatar route: {basePath}/avatar/{agentId}
+    // ----------------------------------------------------------------
+    if (handleAvatarRoute(req, res, pathname, basePath)) {
+      return;
+    }
+
+    // ----------------------------------------------------------------
+    // Token redirect for localhost (auto-append ?token= for convenience)
+    // ----------------------------------------------------------------
+    if (maybeRedirectToTokenizedUi(req, res, pathname, basePath)) {
+      return;
+    }
+
+    // ----------------------------------------------------------------
+    // Base path guard: if basePath is set, reject paths that don't match
+    // ----------------------------------------------------------------
+    if (!basePath) {
+      // When basePath is empty, reject /ui or /ui/* to avoid ambiguity
+      if (pathname === "/ui" || pathname.startsWith("/ui/")) {
+        return next();
+      }
+    }
+
+    if (basePath) {
+      // Redirect /basePath -> /basePath/
+      if (pathname === basePath) {
+        const url = new URL(
+          req.originalUrl ?? req.url ?? "/",
+          `http://${req.headers.host ?? "localhost"}`,
+        );
+        res.status(302).setHeader("Location", `${basePath}/${url.search}`).end();
+        return;
+      }
+      if (!pathname.startsWith(`${basePath}/`)) {
+        return next(); // Not our route — pass through
+      }
+    }
+
+    // ----------------------------------------------------------------
+    // Root state checks (missing/invalid assets)
+    // ----------------------------------------------------------------
+    if (rootState?.kind === "invalid") {
+      res
+        .status(503)
+        .type("text/plain")
+        .send(
+          `Control UI assets not found at ${rootState.path}. Build them with \`pnpm ui:build\` (auto-installs UI deps), or update gateway.controlUi.root.`,
+        );
+      return;
+    }
+    if (rootState?.kind === "missing") {
+      res
+        .status(503)
+        .type("text/plain")
+        .send(
+          "Control UI assets not found. Build them with `pnpm ui:build` (auto-installs UI deps), or run `pnpm ui:dev` during development.",
+        );
+      return;
+    }
+
+    // Resolve the asset root directory
+    const root =
+      rootState?.kind === "resolved"
+        ? rootState.path
+        : resolveControlUiRootSync({
+            moduleUrl: import.meta.url,
+            argv1: process.argv[1],
+            cwd: process.cwd(),
+          });
+    if (!root) {
+      res
+        .status(503)
+        .type("text/plain")
+        .send(
+          "Control UI assets not found. Build them with `pnpm ui:build` (auto-installs UI deps), or run `pnpm ui:dev` during development.",
+        );
+      return;
+    }
+
+    // ----------------------------------------------------------------
+    // Static file serving + SPA fallback
+    // ----------------------------------------------------------------
+    serveSpaRequest(req, res, pathname, basePath, root);
   });
+
+  return router;
 }

@@ -1,14 +1,14 @@
 /**
- * OpenResponses `/v1/responses` route — Elysia plugin.
+ * OpenResponses `/v1/responses` route — Express Router.
  *
  * Implements the OpenResponses API endpoint for OpenClaw Gateway.
- * Supports both streaming (SSE via ReadableStream) and non-streaming modes.
+ * Supports both streaming (SSE written directly to response) and non-streaming modes.
  *
  * @see https://www.open-responses.com/
  */
 
 import { randomUUID } from "node:crypto";
-import { Elysia } from "elysia";
+import { Router } from "express";
 import type { ClientToolDefinition } from "../../agents/pi-embedded-runner/run/params.js";
 import { createDefaultDeps } from "../../cli/deps.js";
 import { agentCommand } from "../../commands/agent.js";
@@ -35,7 +35,7 @@ import {
 } from "../../media/input-files.js";
 import { defaultRuntime } from "../../runtime.js";
 import { authorizeGatewayConnect, type ResolvedGatewayAuth } from "../auth.js";
-import { getNodeRequest, getWebBearerToken } from "../elysia-node-compat.js";
+import { getBearerToken } from "../http-utils.js";
 import { resolveAgentIdForRequest, resolveSessionKey } from "../http-utils.js";
 import {
   CreateResponseBodySchema,
@@ -61,7 +61,7 @@ type ResolvedResponsesLimits = {
 const DEFAULT_BODY_BYTES = 20 * 1024 * 1024;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helper functions (small utilities inlined from openresponses-http.ts)
+// Helper functions
 // ─────────────────────────────────────────────────────────────────────────────
 
 function resolveResponsesLimits(
@@ -294,161 +294,156 @@ async function extractMediaFromInput(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Elysia plugin
+// Express Router
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function openResponsesRoutes(params: {
+export function openResponsesRouter(params: {
   auth: ResolvedGatewayAuth;
   config?: GatewayHttpResponsesConfig;
 }) {
   const { auth, config } = params;
+  const router = Router();
 
-  return new Elysia({ name: "openresponses-routes" }).post(
-    "/v1/responses",
-    async ({ body: rawBody, request, set }) => {
-      // ── Auth ──────────────────────────────────────────────────────────────
-      const token = getWebBearerToken(request);
-      const nodeReq = getNodeRequest(request);
+  router.post("/v1/responses", async (req, res) => {
+    // ── Auth ──────────────────────────────────────────────────────────────
+    const token = getBearerToken(req);
 
-      const authResult = await authorizeGatewayConnect({
-        auth,
-        connectAuth: { token, password: token },
-        req: nodeReq,
-        trustedProxies: undefined,
+    const authResult = await authorizeGatewayConnect({
+      auth,
+      connectAuth: { token, password: token },
+      req,
+      trustedProxies: undefined,
+    });
+    if (!authResult.ok) {
+      res.status(401).json({ error: { message: "Unauthorized", type: "unauthorized" } });
+      return;
+    }
+
+    // ── Body parsing + validation ─────────────────────────────────────────
+    const parseResult = CreateResponseBodySchema.safeParse(req.body);
+    if (!parseResult.success) {
+      const issue = parseResult.error.issues[0];
+      const message = issue ? `${issue.path.join(".")}: ${issue.message}` : "Invalid request body";
+      res.status(400).json({ error: { message, type: "invalid_request_error" } });
+      return;
+    }
+
+    const payload: CreateResponseBody = parseResult.data;
+    const stream = Boolean(payload.stream);
+    const model = payload.model;
+    const user = payload.user;
+
+    // ── Media extraction (images + files) ─────────────────────────────────
+    const limits = resolveResponsesLimits(config);
+    let images: ImageContent[] = [];
+    let fileContexts: string[] = [];
+
+    try {
+      if (Array.isArray(payload.input)) {
+        const media = await extractMediaFromInput(payload.input, limits);
+        images = media.images;
+        fileContexts = media.fileContexts;
+      }
+    } catch (err) {
+      res.status(400).json({ error: { message: String(err), type: "invalid_request_error" } });
+      return;
+    }
+
+    // ── Tool choice resolution ────────────────────────────────────────────
+    const clientTools = extractClientTools(payload);
+    let resolvedClientTools = clientTools;
+    let toolChoicePrompt: string | undefined;
+
+    try {
+      const toolChoiceResult = applyToolChoice({
+        tools: clientTools,
+        toolChoice: payload.tool_choice,
       });
-      if (!authResult.ok) {
-        set.status = 401;
-        return { error: { message: "Unauthorized", type: "unauthorized" } };
-      }
+      resolvedClientTools = toolChoiceResult.tools;
+      toolChoicePrompt = toolChoiceResult.extraSystemPrompt;
+    } catch (err) {
+      res.status(400).json({ error: { message: String(err), type: "invalid_request_error" } });
+      return;
+    }
 
-      // ── Body parsing + validation ─────────────────────────────────────────
-      const parseResult = CreateResponseBodySchema.safeParse(rawBody);
-      if (!parseResult.success) {
-        const issue = parseResult.error.issues[0];
-        const message = issue
-          ? `${issue.path.join(".")}: ${issue.message}`
-          : "Invalid request body";
-        set.status = 400;
-        return { error: { message, type: "invalid_request_error" } };
-      }
+    // ── Agent + session resolution ────────────────────────────────────────
+    const agentId = resolveAgentIdForRequest({ req, model });
+    const sessionKeyValue = resolveSessionKey({ req, agentId, user, prefix: "openresponses" });
 
-      const payload: CreateResponseBody = parseResult.data;
-      const stream = Boolean(payload.stream);
-      const model = payload.model;
-      const user = payload.user;
+    // ── Prompt building ───────────────────────────────────────────────────
+    const prompt = buildAgentPrompt(payload.input);
+    const fileContext = fileContexts.length > 0 ? fileContexts.join("\n\n") : undefined;
+    const toolChoiceContext = toolChoicePrompt?.trim();
 
-      // ── Media extraction (images + files) ─────────────────────────────────
-      const limits = resolveResponsesLimits(config);
-      let images: ImageContent[] = [];
-      let fileContexts: string[] = [];
+    const extraSystemPrompt = [
+      payload.instructions,
+      prompt.extraSystemPrompt,
+      toolChoiceContext,
+      fileContext,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
+    if (!prompt.message) {
+      res.status(400).json({
+        error: {
+          message: "Missing user message in `input`.",
+          type: "invalid_request_error",
+        },
+      });
+      return;
+    }
+
+    const responseId = `resp_${randomUUID()}`;
+    const outputItemId = `msg_${randomUUID()}`;
+    const deps = createDefaultDeps();
+    const streamParams =
+      typeof payload.max_output_tokens === "number"
+        ? { maxTokens: payload.max_output_tokens }
+        : undefined;
+
+    // ── Non-streaming mode ────────────────────────────────────────────────
+    if (!stream) {
       try {
-        if (Array.isArray(payload.input)) {
-          const media = await extractMediaFromInput(payload.input, limits);
-          images = media.images;
-          fileContexts = media.fileContexts;
-        }
-      } catch (err) {
-        set.status = 400;
-        return { error: { message: String(err), type: "invalid_request_error" } };
-      }
-
-      // ── Tool choice resolution ────────────────────────────────────────────
-      const clientTools = extractClientTools(payload);
-      let resolvedClientTools = clientTools;
-      let toolChoicePrompt: string | undefined;
-
-      try {
-        const toolChoiceResult = applyToolChoice({
-          tools: clientTools,
-          toolChoice: payload.tool_choice,
-        });
-        resolvedClientTools = toolChoiceResult.tools;
-        toolChoicePrompt = toolChoiceResult.extraSystemPrompt;
-      } catch (err) {
-        set.status = 400;
-        return { error: { message: String(err), type: "invalid_request_error" } };
-      }
-
-      // ── Agent + session resolution ────────────────────────────────────────
-      const agentId = nodeReq ? resolveAgentIdForRequest({ req: nodeReq, model }) : "main";
-      const sessionKey = nodeReq
-        ? resolveSessionKey({ req: nodeReq, agentId, user, prefix: "openresponses" })
-        : `openresponses:${randomUUID()}`;
-
-      // ── Prompt building ───────────────────────────────────────────────────
-      const prompt = buildAgentPrompt(payload.input);
-      const fileContext = fileContexts.length > 0 ? fileContexts.join("\n\n") : undefined;
-      const toolChoiceContext = toolChoicePrompt?.trim();
-
-      const extraSystemPrompt = [
-        payload.instructions,
-        prompt.extraSystemPrompt,
-        toolChoiceContext,
-        fileContext,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-
-      if (!prompt.message) {
-        set.status = 400;
-        return {
-          error: {
-            message: "Missing user message in `input`.",
-            type: "invalid_request_error",
+        const result = await agentCommand(
+          {
+            message: prompt.message,
+            images: images.length > 0 ? images : undefined,
+            clientTools: resolvedClientTools.length > 0 ? resolvedClientTools : undefined,
+            extraSystemPrompt: extraSystemPrompt || undefined,
+            streamParams: streamParams ?? undefined,
+            sessionKey: sessionKeyValue,
+            runId: responseId,
+            deliver: false,
+            messageChannel: "webchat",
+            bestEffortDeliver: false,
           },
-        };
-      }
+          defaultRuntime,
+          deps,
+        );
 
-      const responseId = `resp_${randomUUID()}`;
-      const outputItemId = `msg_${randomUUID()}`;
-      const deps = createDefaultDeps();
-      const streamParams =
-        typeof payload.max_output_tokens === "number"
-          ? { maxTokens: payload.max_output_tokens }
-          : undefined;
+        const payloads = (result as { payloads?: Array<{ text?: string }> } | null)?.payloads;
+        const usage = extractUsageFromResult(result);
+        const meta = (result as { meta?: unknown } | null)?.meta;
+        const stopReason =
+          meta && typeof meta === "object"
+            ? (meta as { stopReason?: string }).stopReason
+            : undefined;
+        const pendingToolCalls =
+          meta && typeof meta === "object"
+            ? (
+                meta as {
+                  pendingToolCalls?: Array<{ id: string; name: string; arguments: string }>;
+                }
+              ).pendingToolCalls
+            : undefined;
 
-      // ── Non-streaming mode ────────────────────────────────────────────────
-      if (!stream) {
-        try {
-          const result = await agentCommand(
-            {
-              message: prompt.message,
-              images: images.length > 0 ? images : undefined,
-              clientTools: resolvedClientTools.length > 0 ? resolvedClientTools : undefined,
-              extraSystemPrompt: extraSystemPrompt || undefined,
-              streamParams: streamParams ?? undefined,
-              sessionKey,
-              runId: responseId,
-              deliver: false,
-              messageChannel: "webchat",
-              bestEffortDeliver: false,
-            },
-            defaultRuntime,
-            deps,
-          );
-
-          const payloads = (result as { payloads?: Array<{ text?: string }> } | null)?.payloads;
-          const usage = extractUsageFromResult(result);
-          const meta = (result as { meta?: unknown } | null)?.meta;
-          const stopReason =
-            meta && typeof meta === "object"
-              ? (meta as { stopReason?: string }).stopReason
-              : undefined;
-          const pendingToolCalls =
-            meta && typeof meta === "object"
-              ? (
-                  meta as {
-                    pendingToolCalls?: Array<{ id: string; name: string; arguments: string }>;
-                  }
-                ).pendingToolCalls
-              : undefined;
-
-          // If agent called a client tool, return function_call instead of text
-          if (stopReason === "tool_calls" && pendingToolCalls && pendingToolCalls.length > 0) {
-            const functionCall = pendingToolCalls[0];
-            const functionCallItemId = `call_${randomUUID()}`;
-            return createResponseResource({
+        // If agent called a client tool, return function_call instead of text
+        if (stopReason === "tool_calls" && pendingToolCalls && pendingToolCalls.length > 0) {
+          const functionCall = pendingToolCalls[0];
+          const functionCallItemId = `call_${randomUUID()}`;
+          res.json(
+            createResponseResource({
               id: responseId,
               model,
               status: "incomplete",
@@ -462,7 +457,319 @@ export function openResponsesRoutes(params: {
                 },
               ],
               usage,
+            }),
+          );
+          return;
+        }
+
+        const content =
+          Array.isArray(payloads) && payloads.length > 0
+            ? payloads
+                .map((p) => (typeof p.text === "string" ? p.text : ""))
+                .filter(Boolean)
+                .join("\n\n")
+            : "No response from OpenClaw.";
+
+        res.json(
+          createResponseResource({
+            id: responseId,
+            model,
+            status: "completed",
+            output: [
+              createAssistantOutputItem({ id: outputItemId, text: content, status: "completed" }),
+            ],
+            usage,
+          }),
+        );
+      } catch (err) {
+        res.status(500).json(
+          createResponseResource({
+            id: responseId,
+            model,
+            status: "failed",
+            output: [],
+            error: { code: "api_error", message: String(err) },
+          }),
+        );
+      }
+      return;
+    }
+
+    // ── Streaming mode ────────────────────────────────────────────────────
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    let accumulatedText = "";
+    let sawAssistantDelta = false;
+    let closed = false;
+    let finalUsage: Usage | undefined;
+    let finalizeRequested: { status: ResponseResource["status"]; text: string } | null = null;
+
+    req.on("close", () => {
+      closed = true;
+    });
+
+    const writeSseEvent = (event: StreamingEvent) => {
+      if (closed || res.destroyed) {
+        return;
+      }
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    };
+
+    const writeDone = () => {
+      if (closed || res.destroyed) {
+        return;
+      }
+      res.write("data: [DONE]\n\n");
+    };
+
+    const maybeFinalize = () => {
+      if (closed || !finalizeRequested || !finalUsage) {
+        return;
+      }
+      const usage = finalUsage;
+
+      closed = true;
+      unsubscribe();
+
+      writeSseEvent({
+        type: "response.output_text.done",
+        item_id: outputItemId,
+        output_index: 0,
+        content_index: 0,
+        text: finalizeRequested.text,
+      });
+
+      writeSseEvent({
+        type: "response.content_part.done",
+        item_id: outputItemId,
+        output_index: 0,
+        content_index: 0,
+        part: { type: "output_text", text: finalizeRequested.text },
+      });
+
+      const completedItem = createAssistantOutputItem({
+        id: outputItemId,
+        text: finalizeRequested.text,
+        status: "completed",
+      });
+
+      writeSseEvent({
+        type: "response.output_item.done",
+        output_index: 0,
+        item: completedItem,
+      });
+
+      const finalResponse = createResponseResource({
+        id: responseId,
+        model,
+        status: finalizeRequested.status,
+        output: [completedItem],
+        usage,
+      });
+
+      writeSseEvent({ type: "response.completed", response: finalResponse });
+      writeDone();
+      res.end();
+    };
+
+    const requestFinalize = (status: ResponseResource["status"], text: string) => {
+      if (finalizeRequested) {
+        return;
+      }
+      finalizeRequested = { status, text };
+      maybeFinalize();
+    };
+
+    // ── Send initial SSE events ─────────────────────────────────────────
+    const initialResponse = createResponseResource({
+      id: responseId,
+      model,
+      status: "in_progress",
+      output: [],
+    });
+
+    writeSseEvent({ type: "response.created", response: initialResponse });
+    writeSseEvent({ type: "response.in_progress", response: initialResponse });
+
+    const outputItem = createAssistantOutputItem({
+      id: outputItemId,
+      text: "",
+      status: "in_progress",
+    });
+
+    writeSseEvent({
+      type: "response.output_item.added",
+      output_index: 0,
+      item: outputItem,
+    });
+
+    writeSseEvent({
+      type: "response.content_part.added",
+      item_id: outputItemId,
+      output_index: 0,
+      content_index: 0,
+      part: { type: "output_text", text: "" },
+    });
+
+    // ── Subscribe to agent streaming events ─────────────────────────────
+    const unsubscribe = onAgentEvent((evt) => {
+      if (evt.runId !== responseId) {
+        return;
+      }
+      if (closed) {
+        return;
+      }
+
+      if (evt.stream === "assistant") {
+        const delta = evt.data?.delta;
+        const text = evt.data?.text;
+        const content = typeof delta === "string" ? delta : typeof text === "string" ? text : "";
+        if (!content) {
+          return;
+        }
+
+        sawAssistantDelta = true;
+        accumulatedText += content;
+
+        writeSseEvent({
+          type: "response.output_text.delta",
+          item_id: outputItemId,
+          output_index: 0,
+          content_index: 0,
+          delta: content,
+        });
+        return;
+      }
+
+      if (evt.stream === "lifecycle") {
+        const phase = evt.data?.phase;
+        if (phase === "end" || phase === "error") {
+          const finalText = accumulatedText || "No response from OpenClaw.";
+          const finalStatus = phase === "error" ? "failed" : "completed";
+          requestFinalize(finalStatus, finalText);
+        }
+      }
+    });
+
+    // ── Run agent command asynchronously ────────────────────────────────
+    void (async () => {
+      try {
+        const result = await agentCommand(
+          {
+            message: prompt.message,
+            images: images.length > 0 ? images : undefined,
+            clientTools: resolvedClientTools.length > 0 ? resolvedClientTools : undefined,
+            extraSystemPrompt: extraSystemPrompt || undefined,
+            streamParams: streamParams ?? undefined,
+            sessionKey: sessionKeyValue,
+            runId: responseId,
+            deliver: false,
+            messageChannel: "webchat",
+            bestEffortDeliver: false,
+          },
+          defaultRuntime,
+          deps,
+        );
+
+        finalUsage = extractUsageFromResult(result);
+        maybeFinalize();
+
+        if (closed) {
+          return;
+        }
+
+        // Fallback: if no streaming deltas were received, send the full response
+        if (!sawAssistantDelta) {
+          const resultObj = result as {
+            payloads?: Array<{ text?: string }>;
+            meta?: unknown;
+          };
+          const payloads = resultObj.payloads;
+          const meta = resultObj.meta;
+          const stopReason =
+            meta && typeof meta === "object"
+              ? (meta as { stopReason?: string }).stopReason
+              : undefined;
+          const pendingToolCalls =
+            meta && typeof meta === "object"
+              ? (
+                  meta as {
+                    pendingToolCalls?: Array<{
+                      id: string;
+                      name: string;
+                      arguments: string;
+                    }>;
+                  }
+                ).pendingToolCalls
+              : undefined;
+
+          // If agent called a client tool, emit function_call instead of text
+          if (stopReason === "tool_calls" && pendingToolCalls && pendingToolCalls.length > 0) {
+            const functionCall = pendingToolCalls[0];
+            const usage = finalUsage ?? createEmptyUsage();
+
+            writeSseEvent({
+              type: "response.output_text.done",
+              item_id: outputItemId,
+              output_index: 0,
+              content_index: 0,
+              text: "",
             });
+            writeSseEvent({
+              type: "response.content_part.done",
+              item_id: outputItemId,
+              output_index: 0,
+              content_index: 0,
+              part: { type: "output_text", text: "" },
+            });
+
+            const completedItem = createAssistantOutputItem({
+              id: outputItemId,
+              text: "",
+              status: "completed",
+            });
+            writeSseEvent({
+              type: "response.output_item.done",
+              output_index: 0,
+              item: completedItem,
+            });
+
+            const functionCallItemId = `call_${randomUUID()}`;
+            const functionCallItem = {
+              type: "function_call" as const,
+              id: functionCallItemId,
+              call_id: functionCall.id,
+              name: functionCall.name,
+              arguments: functionCall.arguments,
+            };
+            writeSseEvent({
+              type: "response.output_item.added",
+              output_index: 1,
+              item: functionCallItem,
+            });
+            writeSseEvent({
+              type: "response.output_item.done",
+              output_index: 1,
+              item: { ...functionCallItem, status: "completed" as const },
+            });
+
+            const incompleteResponse = createResponseResource({
+              id: responseId,
+              model,
+              status: "incomplete",
+              output: [completedItem, functionCallItem],
+              usage,
+            });
+            closed = true;
+            unsubscribe();
+            writeSseEvent({ type: "response.completed", response: incompleteResponse });
+            writeDone();
+            res.end();
+            return;
           }
 
           const content =
@@ -473,384 +780,49 @@ export function openResponsesRoutes(params: {
                   .join("\n\n")
               : "No response from OpenClaw.";
 
-          return createResponseResource({
-            id: responseId,
-            model,
-            status: "completed",
-            output: [
-              createAssistantOutputItem({ id: outputItemId, text: content, status: "completed" }),
-            ],
-            usage,
-          });
-        } catch (err) {
-          set.status = 500;
-          return createResponseResource({
-            id: responseId,
-            model,
-            status: "failed",
-            output: [],
-            error: { code: "api_error", message: String(err) },
-          });
-        }
-      }
-
-      // ── Streaming mode ────────────────────────────────────────────────────
-      set.headers["content-type"] = "text/event-stream; charset=utf-8";
-      set.headers["cache-control"] = "no-cache";
-      set.headers["connection"] = "keep-alive";
-
-      const encoder = new TextEncoder();
-
-      return new ReadableStream({
-        start(controller) {
-          let accumulatedText = "";
-          let sawAssistantDelta = false;
-          let closed = false;
-          let finalUsage: Usage | undefined;
-          let finalizeRequested: { status: ResponseResource["status"]; text: string } | null = null;
-
-          // Write a named SSE event (OpenResponses format uses `event:` + `data:`)
-          const writeSseEvent = (event: StreamingEvent) => {
-            if (closed) {
-              return;
-            }
-            try {
-              controller.enqueue(
-                encoder.encode(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`),
-              );
-            } catch {
-              closed = true;
-            }
-          };
-
-          const writeDone = () => {
-            if (closed) {
-              return;
-            }
-            try {
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            } catch {
-              // stream already closed
-            }
-          };
-
-          const maybeFinalize = () => {
-            if (closed || !finalizeRequested || !finalUsage) {
-              return;
-            }
-            const usage = finalUsage;
-
-            closed = true;
-            unsubscribe();
-
-            writeSseEvent({
-              type: "response.output_text.done",
-              item_id: outputItemId,
-              output_index: 0,
-              content_index: 0,
-              text: finalizeRequested.text,
-            });
-
-            writeSseEvent({
-              type: "response.content_part.done",
-              item_id: outputItemId,
-              output_index: 0,
-              content_index: 0,
-              part: { type: "output_text", text: finalizeRequested.text },
-            });
-
-            const completedItem = createAssistantOutputItem({
-              id: outputItemId,
-              text: finalizeRequested.text,
-              status: "completed",
-            });
-
-            writeSseEvent({
-              type: "response.output_item.done",
-              output_index: 0,
-              item: completedItem,
-            });
-
-            const finalResponse = createResponseResource({
-              id: responseId,
-              model,
-              status: finalizeRequested.status,
-              output: [completedItem],
-              usage,
-            });
-
-            writeSseEvent({ type: "response.completed", response: finalResponse });
-            writeDone();
-            try {
-              controller.close();
-            } catch {
-              // already closed
-            }
-          };
-
-          const requestFinalize = (status: ResponseResource["status"], text: string) => {
-            if (finalizeRequested) {
-              return;
-            }
-            finalizeRequested = { status, text };
-            maybeFinalize();
-          };
-
-          // ── Send initial SSE events ─────────────────────────────────────────
-          const initialResponse = createResponseResource({
-            id: responseId,
-            model,
-            status: "in_progress",
-            output: [],
-          });
-
-          writeSseEvent({ type: "response.created", response: initialResponse });
-          writeSseEvent({ type: "response.in_progress", response: initialResponse });
-
-          // Add output item
-          const outputItem = createAssistantOutputItem({
-            id: outputItemId,
-            text: "",
-            status: "in_progress",
-          });
+          accumulatedText = content;
+          sawAssistantDelta = true;
 
           writeSseEvent({
-            type: "response.output_item.added",
-            output_index: 0,
-            item: outputItem,
-          });
-
-          // Add content part
-          writeSseEvent({
-            type: "response.content_part.added",
+            type: "response.output_text.delta",
             item_id: outputItemId,
             output_index: 0,
             content_index: 0,
-            part: { type: "output_text", text: "" },
+            delta: content,
           });
+        }
+      } catch (err) {
+        if (closed) {
+          return;
+        }
 
-          // ── Subscribe to agent streaming events ─────────────────────────────
-          const unsubscribe = onAgentEvent((evt) => {
-            if (evt.runId !== responseId) {
-              return;
-            }
-            if (closed) {
-              return;
-            }
+        finalUsage = finalUsage ?? createEmptyUsage();
+        const errorResponse = createResponseResource({
+          id: responseId,
+          model,
+          status: "failed",
+          output: [],
+          error: { code: "api_error", message: String(err) },
+          usage: finalUsage,
+        });
 
-            if (evt.stream === "assistant") {
-              const delta = evt.data?.delta;
-              const text = evt.data?.text;
-              const content =
-                typeof delta === "string" ? delta : typeof text === "string" ? text : "";
-              if (!content) {
-                return;
-              }
-
-              sawAssistantDelta = true;
-              accumulatedText += content;
-
-              writeSseEvent({
-                type: "response.output_text.delta",
-                item_id: outputItemId,
-                output_index: 0,
-                content_index: 0,
-                delta: content,
-              });
-              return;
-            }
-
-            if (evt.stream === "lifecycle") {
-              const phase = evt.data?.phase;
-              if (phase === "end" || phase === "error") {
-                const finalText = accumulatedText || "No response from OpenClaw.";
-                const finalStatus = phase === "error" ? "failed" : "completed";
-                requestFinalize(finalStatus, finalText);
-              }
-            }
+        writeSseEvent({ type: "response.failed", response: errorResponse });
+        emitAgentEvent({
+          runId: responseId,
+          stream: "lifecycle",
+          data: { phase: "error" },
+        });
+      } finally {
+        if (!closed) {
+          emitAgentEvent({
+            runId: responseId,
+            stream: "lifecycle",
+            data: { phase: "end" },
           });
+        }
+      }
+    })();
+  });
 
-          // ── Run agent command asynchronously ────────────────────────────────
-          void (async () => {
-            try {
-              const result = await agentCommand(
-                {
-                  message: prompt.message,
-                  images: images.length > 0 ? images : undefined,
-                  clientTools: resolvedClientTools.length > 0 ? resolvedClientTools : undefined,
-                  extraSystemPrompt: extraSystemPrompt || undefined,
-                  streamParams: streamParams ?? undefined,
-                  sessionKey,
-                  runId: responseId,
-                  deliver: false,
-                  messageChannel: "webchat",
-                  bestEffortDeliver: false,
-                },
-                defaultRuntime,
-                deps,
-              );
-
-              finalUsage = extractUsageFromResult(result);
-              maybeFinalize();
-
-              if (closed) {
-                return;
-              }
-
-              // Fallback: if no streaming deltas were received, send the full response
-              if (!sawAssistantDelta) {
-                const resultObj = result as {
-                  payloads?: Array<{ text?: string }>;
-                  meta?: unknown;
-                };
-                const payloads = resultObj.payloads;
-                const meta = resultObj.meta;
-                const stopReason =
-                  meta && typeof meta === "object"
-                    ? (meta as { stopReason?: string }).stopReason
-                    : undefined;
-                const pendingToolCalls =
-                  meta && typeof meta === "object"
-                    ? (
-                        meta as {
-                          pendingToolCalls?: Array<{
-                            id: string;
-                            name: string;
-                            arguments: string;
-                          }>;
-                        }
-                      ).pendingToolCalls
-                    : undefined;
-
-                // If agent called a client tool, emit function_call instead of text
-                if (
-                  stopReason === "tool_calls" &&
-                  pendingToolCalls &&
-                  pendingToolCalls.length > 0
-                ) {
-                  const functionCall = pendingToolCalls[0];
-                  const usage = finalUsage ?? createEmptyUsage();
-
-                  writeSseEvent({
-                    type: "response.output_text.done",
-                    item_id: outputItemId,
-                    output_index: 0,
-                    content_index: 0,
-                    text: "",
-                  });
-                  writeSseEvent({
-                    type: "response.content_part.done",
-                    item_id: outputItemId,
-                    output_index: 0,
-                    content_index: 0,
-                    part: { type: "output_text", text: "" },
-                  });
-
-                  const completedItem = createAssistantOutputItem({
-                    id: outputItemId,
-                    text: "",
-                    status: "completed",
-                  });
-                  writeSseEvent({
-                    type: "response.output_item.done",
-                    output_index: 0,
-                    item: completedItem,
-                  });
-
-                  const functionCallItemId = `call_${randomUUID()}`;
-                  const functionCallItem = {
-                    type: "function_call" as const,
-                    id: functionCallItemId,
-                    call_id: functionCall.id,
-                    name: functionCall.name,
-                    arguments: functionCall.arguments,
-                  };
-                  writeSseEvent({
-                    type: "response.output_item.added",
-                    output_index: 1,
-                    item: functionCallItem,
-                  });
-                  writeSseEvent({
-                    type: "response.output_item.done",
-                    output_index: 1,
-                    item: { ...functionCallItem, status: "completed" as const },
-                  });
-
-                  const incompleteResponse = createResponseResource({
-                    id: responseId,
-                    model,
-                    status: "incomplete",
-                    output: [completedItem, functionCallItem],
-                    usage,
-                  });
-                  closed = true;
-                  unsubscribe();
-                  writeSseEvent({ type: "response.completed", response: incompleteResponse });
-                  writeDone();
-                  try {
-                    controller.close();
-                  } catch {
-                    // already closed
-                  }
-                  return;
-                }
-
-                const content =
-                  Array.isArray(payloads) && payloads.length > 0
-                    ? payloads
-                        .map((p) => (typeof p.text === "string" ? p.text : ""))
-                        .filter(Boolean)
-                        .join("\n\n")
-                    : "No response from OpenClaw.";
-
-                accumulatedText = content;
-                sawAssistantDelta = true;
-
-                writeSseEvent({
-                  type: "response.output_text.delta",
-                  item_id: outputItemId,
-                  output_index: 0,
-                  content_index: 0,
-                  delta: content,
-                });
-              }
-            } catch (err) {
-              if (closed) {
-                return;
-              }
-
-              finalUsage = finalUsage ?? createEmptyUsage();
-              const errorResponse = createResponseResource({
-                id: responseId,
-                model,
-                status: "failed",
-                output: [],
-                error: { code: "api_error", message: String(err) },
-                usage: finalUsage,
-              });
-
-              writeSseEvent({ type: "response.failed", response: errorResponse });
-              emitAgentEvent({
-                runId: responseId,
-                stream: "lifecycle",
-                data: { phase: "error" },
-              });
-            } finally {
-              if (!closed) {
-                // Emit lifecycle end to trigger completion via the event listener
-                emitAgentEvent({
-                  runId: responseId,
-                  stream: "lifecycle",
-                  data: { phase: "end" },
-                });
-              }
-            }
-          })();
-        },
-        cancel() {
-          // Client disconnected — cleanup handled by the unsubscribe in start()
-        },
-      });
-    },
-  );
+  return router;
 }

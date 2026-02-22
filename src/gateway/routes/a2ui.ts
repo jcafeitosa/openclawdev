@@ -1,5 +1,5 @@
 /**
- * A2UI static serving route — Elysia plugin.
+ * A2UI static serving route — Express Router.
  *
  * GET /__openclaw__/a2ui/* — Serves the A2UI (canvas host UI) static assets.
  */
@@ -7,10 +7,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Elysia, type Context } from "elysia";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import { CANVAS_WS_PATH } from "../../canvas-host/a2ui.js";
 import { detectMime } from "../../media/mime.js";
-import { safeParseUrl } from "../net.js";
 
 const A2UI_PATH = "/__openclaw__/a2ui";
 
@@ -153,47 +152,45 @@ function injectCanvasLiveReload(html: string): string {
   return `${html}\n${snippet}\n`;
 }
 
-export function a2uiRoutes() {
-  return new Elysia({ name: "a2ui-routes" }).all(
-    `${A2UI_PATH}/*`,
-    async ({ request, set }: Context) => {
-      if (request.method !== "GET" && request.method !== "HEAD") {
-        set.status = 405;
-        set.headers["content-type"] = "text/plain; charset=utf-8";
-        return "Method Not Allowed";
-      }
+async function handleA2uiRequest(req: Request, res: Response, _next: NextFunction): Promise<void> {
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.status(405).type("text/plain").send("Method Not Allowed");
+    return;
+  }
 
-      const a2uiRootReal = await resolveA2uiRootReal();
-      if (!a2uiRootReal) {
-        set.status = 503;
-        set.headers["content-type"] = "text/plain; charset=utf-8";
-        return "A2UI assets not found";
-      }
+  const a2uiRootReal = await resolveA2uiRootReal();
+  if (!a2uiRootReal) {
+    res.status(503).type("text/plain").send("A2UI assets not found");
+    return;
+  }
 
-      const url = safeParseUrl(request.url) ?? new URL("http://localhost");
-      const rel = url.pathname.slice(A2UI_PATH.length);
-      const filePath = await resolveA2uiFilePath(a2uiRootReal, rel || "/");
-      if (!filePath) {
-        set.status = 404;
-        set.headers["content-type"] = "text/plain; charset=utf-8";
-        return "not found";
-      }
+  // Extract the sub-path after A2UI_PATH prefix
+  const urlPath = req.path.slice(A2UI_PATH.length) || "/";
+  const filePath = await resolveA2uiFilePath(a2uiRootReal, urlPath);
+  if (!filePath) {
+    res.status(404).type("text/plain").send("not found");
+    return;
+  }
 
-      const lower = filePath.toLowerCase();
-      const mime =
-        lower.endsWith(".html") || lower.endsWith(".htm")
-          ? "text/html"
-          : ((await detectMime({ filePath })) ?? "application/octet-stream");
-      set.headers["cache-control"] = "no-store";
+  const lower = filePath.toLowerCase();
+  const mime =
+    lower.endsWith(".html") || lower.endsWith(".htm")
+      ? "text/html"
+      : ((await detectMime({ filePath })) ?? "application/octet-stream");
 
-      if (mime === "text/html") {
-        const html = await fs.readFile(filePath, "utf8");
-        set.headers["content-type"] = "text/html; charset=utf-8";
-        return injectCanvasLiveReload(html);
-      }
+  res.setHeader("Cache-Control", "no-store");
 
-      set.headers["content-type"] = mime;
-      return await fs.readFile(filePath);
-    },
-  );
+  if (mime === "text/html") {
+    const html = await fs.readFile(filePath, "utf8");
+    res.type("text/html").send(injectCanvasLiveReload(html));
+    return;
+  }
+
+  res.type(mime).send(await fs.readFile(filePath));
+}
+
+export function a2uiRouter() {
+  const router = Router();
+  router.all(`${A2UI_PATH}/*`, handleA2uiRequest);
+  return router;
 }

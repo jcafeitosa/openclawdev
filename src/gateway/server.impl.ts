@@ -247,6 +247,14 @@ export async function startGatewayServer(
   initSubagentRegistry();
   await initDelegationRegistry();
   await initCollaborationRegistry();
+
+  // Initialize encrypted auth store backend (PostgreSQL) if configured
+  const { initAuthStoreBackend } = await import("../agents/auth-profiles/backend-init.js");
+  const authStoreBackend = await initAuthStoreBackend();
+  if (authStoreBackend === "db") {
+    log.info("auth store: using encrypted PostgreSQL backend");
+  }
+
   initCapabilitiesRegistry(cfgAtStart);
   const defaultAgentId = resolveDefaultAgentId(cfgAtStart);
   const defaultWorkspaceDir = resolveAgentWorkspaceDir(cfgAtStart, defaultAgentId);

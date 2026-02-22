@@ -1,5 +1,6 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import express from "express";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const TEST_GATEWAY_TOKEN = "test-gateway-token-1234567890";
@@ -61,41 +62,38 @@ vi.mock("../agents/openclaw-tools.js", () => {
   const tools = [
     {
       name: "session_status",
-      parameters: { type: "object", properties: {} },
-      execute: async () => ({ ok: true }),
+      schema: {},
+      execute: async () => ({ status: "ok" }),
     },
     {
       name: "agents_list",
-      parameters: { type: "object", properties: { action: { type: "string" } } },
-      execute: async () => ({ ok: true, result: [] }),
+      schema: {},
+      execute: async () => ({ agents: [] }),
     },
     {
       name: "sessions_spawn",
-      parameters: { type: "object", properties: {} },
-      execute: async () => ({ ok: true }),
+      schema: {},
+      execute: async () => ({ sessionKey: "test" }),
     },
     {
       name: "sessions_send",
-      parameters: { type: "object", properties: {} },
+      schema: {},
       execute: async () => ({ ok: true }),
     },
     {
       name: "gateway",
-      parameters: { type: "object", properties: {} },
-      execute: async () => {
-        throw toolInputError("invalid args");
+      schema: {},
+      execute: async (_toolCallId: string, args: unknown) => {
+        const a = args as { action?: string };
+        if (!a?.action) {
+          throw toolInputError("action is required");
+        }
+        return { ok: true };
       },
     },
     {
       name: "tools_invoke_test",
-      parameters: {
-        type: "object",
-        properties: {
-          mode: { type: "string" },
-        },
-        required: ["mode"],
-        additionalProperties: false,
-      },
+      schema: {},
       execute: async (_toolCallId: string, args: unknown) => {
         const mode = (args as { mode?: unknown })?.mode;
         if (mode === "input") {
@@ -114,34 +112,20 @@ vi.mock("../agents/openclaw-tools.js", () => {
   };
 });
 
-const { handleToolsInvokeHttpRequest } = await import("./tools-invoke-http.js");
-
-let pluginHttpHandlers: Array<(req: IncomingMessage, res: ServerResponse) => Promise<boolean>> = [];
+import { toolsInvokeRouter } from "./routes/tools-invoke.js";
 
 let sharedPort = 0;
 let sharedServer: ReturnType<typeof createServer> | undefined;
 
 beforeAll(async () => {
-  sharedServer = createServer((req, res) => {
-    void (async () => {
-      const handled = await handleToolsInvokeHttpRequest(req, res, {
-        auth: { mode: "token", token: TEST_GATEWAY_TOKEN, allowTailscale: false },
-      });
-      if (handled) {
-        return;
-      }
-      for (const handler of pluginHttpHandlers) {
-        if (await handler(req, res)) {
-          return;
-        }
-      }
-      res.statusCode = 404;
-      res.end("not found");
-    })().catch((err) => {
-      res.statusCode = 500;
-      res.end(String(err));
-    });
-  });
+  const app = express();
+  app.use(express.json({ limit: "50mb" }));
+  app.use(
+    toolsInvokeRouter({
+      auth: { mode: "token", token: TEST_GATEWAY_TOKEN, allowTailscale: false },
+    }),
+  );
+  sharedServer = createServer(app);
 
   await new Promise<void>((resolve, reject) => {
     sharedServer?.once("error", reject);
@@ -165,7 +149,6 @@ afterAll(async () => {
 beforeEach(() => {
   delete process.env.OPENCLAW_GATEWAY_TOKEN;
   delete process.env.OPENCLAW_GATEWAY_PASSWORD;
-  pluginHttpHandlers = [];
   cfg = {};
 });
 
@@ -278,26 +261,6 @@ describe("POST /tools/invoke", () => {
     expect(resImplicit.status).toBe(200);
     const implicitBody = await resImplicit.json();
     expect(implicitBody.ok).toBe(true);
-  });
-
-  it("routes tools invoke before plugin HTTP handlers", async () => {
-    const pluginHandler = vi.fn(async (_req: IncomingMessage, res: ServerResponse) => {
-      res.statusCode = 418;
-      res.end("plugin");
-      return true;
-    });
-    allowAgentsListForMain();
-    pluginHttpHandlers = [async (req, res) => pluginHandler(req, res)];
-
-    const token = resolveGatewayToken();
-    const res = await invokeAgentsList({
-      port: sharedPort,
-      headers: { authorization: `Bearer ${token}` },
-      sessionKey: "main",
-    });
-
-    expect(res.status).toBe(200);
-    expect(pluginHandler).not.toHaveBeenCalled();
   });
 
   it("returns 404 when denylisted or blocked by tools.profile", async () => {

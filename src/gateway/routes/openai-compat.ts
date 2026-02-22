@@ -1,11 +1,11 @@
 /**
- * OpenAI-compatible chat completions route — Elysia plugin.
+ * OpenAI-compatible chat completions route — Express Router.
  *
  * POST /v1/chat/completions — OpenAI chat completions API with streaming support.
- * Uses ReadableStream for SSE streaming.
+ * Streaming uses SSE written directly to the Express response.
  */
 
-import { Elysia } from "elysia";
+import { Router } from "express";
 import {
   buildHistoryContextFromEntries,
   type HistoryEntry,
@@ -15,7 +15,7 @@ import { agentCommand } from "../../commands/agent.js";
 import { emitAgentEvent, onAgentEvent } from "../../infra/agent-events.js";
 import { defaultRuntime } from "../../runtime.js";
 import { authorizeGatewayConnect, type ResolvedGatewayAuth } from "../auth.js";
-import { getNodeRequest, getWebBearerToken } from "../elysia-node-compat.js";
+import { getBearerToken } from "../http-utils.js";
 import { resolveAgentIdForRequest, resolveSessionKey } from "../http-utils.js";
 
 type OpenAiChatMessage = {
@@ -152,66 +152,212 @@ function coerceRequest(val: unknown): OpenAiChatCompletionRequest {
   return val as OpenAiChatCompletionRequest;
 }
 
-export function openAiRoutes(params: { auth: ResolvedGatewayAuth }) {
+export function openAiRouter(params: { auth: ResolvedGatewayAuth }) {
   const { auth } = params;
+  const router = Router();
 
-  return new Elysia({ name: "openai-compat-routes" }).post(
-    "/v1/chat/completions",
-    async ({ body: rawBody, request, set }) => {
-      const token = getWebBearerToken(request);
-      const nodeReq = getNodeRequest(request);
+  router.post("/v1/chat/completions", async (req, res) => {
+    const token = getBearerToken(req);
 
-      const authResult = await authorizeGatewayConnect({
-        auth,
-        connectAuth: { token, password: token },
-        req: nodeReq,
-        trustedProxies: undefined,
+    const authResult = await authorizeGatewayConnect({
+      auth,
+      connectAuth: { token, password: token },
+      req,
+      trustedProxies: undefined,
+    });
+    if (!authResult.ok) {
+      res.status(401).json({ error: { message: "Unauthorized", type: "unauthorized" } });
+      return;
+    }
+
+    const payload = coerceRequest(req.body);
+    const stream = Boolean(payload.stream);
+    const model = typeof payload.model === "string" ? payload.model : "openclaw";
+    const user = typeof payload.user === "string" ? payload.user : undefined;
+
+    const agentId = resolveAgentIdForRequest({ req, model });
+    const sessionKey = resolveSessionKey({ req, agentId, user, prefix: "openai" });
+
+    const prompt = buildAgentPrompt(payload.messages);
+    if (!prompt.message) {
+      res.status(400).json({
+        error: {
+          message: "Missing user message in `messages`.",
+          type: "invalid_request_error",
+        },
       });
-      if (!authResult.ok) {
-        set.status = 401;
-        return { error: { message: "Unauthorized", type: "unauthorized" } };
-      }
+      return;
+    }
 
-      const payload = coerceRequest(rawBody);
-      const stream = Boolean(payload.stream);
-      const model = typeof payload.model === "string" ? payload.model : "openclaw";
-      const user = typeof payload.user === "string" ? payload.user : undefined;
+    const runId = `chatcmpl_${crypto.randomUUID()}`;
+    const deps = createDefaultDeps();
 
-      const agentId = nodeReq ? resolveAgentIdForRequest({ req: nodeReq, model }) : "main";
-      const sessionKey = nodeReq
-        ? resolveSessionKey({ req: nodeReq, agentId, user, prefix: "openai" })
-        : `openai:${crypto.randomUUID()}`;
-
-      const prompt = buildAgentPrompt(payload.messages);
-      if (!prompt.message) {
-        set.status = 400;
-        return {
-          error: {
-            message: "Missing user message in `messages`.",
-            type: "invalid_request_error",
+    // Non-streaming mode
+    if (!stream) {
+      try {
+        const result = await agentCommand(
+          {
+            message: prompt.message,
+            extraSystemPrompt: prompt.extraSystemPrompt,
+            sessionKey,
+            runId,
+            deliver: false,
+            messageChannel: "webchat",
+            bestEffortDeliver: false,
           },
-        };
+          defaultRuntime,
+          deps,
+        );
+
+        const payloads = (result as { payloads?: Array<{ text?: string }> } | null)?.payloads;
+        const content =
+          Array.isArray(payloads) && payloads.length > 0
+            ? payloads
+                .map((p) => (typeof p.text === "string" ? p.text : ""))
+                .filter(Boolean)
+                .join("\n\n")
+            : "No response from OpenClaw.";
+
+        res.json({
+          id: runId,
+          object: "chat.completion",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content },
+              finish_reason: "stop",
+            },
+          ],
+          usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        });
+      } catch (err) {
+        res.status(500).json({
+          error: { message: String(err), type: "api_error" },
+        });
+      }
+      return;
+    }
+
+    // Streaming mode — write SSE directly to response
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    let wroteRole = false;
+    let sawAssistantDelta = false;
+    let closed = false;
+
+    req.on("close", () => {
+      closed = true;
+    });
+
+    const writeSse = (data: unknown) => {
+      if (closed || res.destroyed) {
+        return;
+      }
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    const writeDone = () => {
+      if (closed || res.destroyed) {
+        return;
+      }
+      res.write("data: [DONE]\n\n");
+    };
+
+    const finish = () => {
+      if (closed) {
+        return;
+      }
+      closed = true;
+      unsubscribe();
+      writeDone();
+      res.end();
+    };
+
+    const unsubscribe = onAgentEvent((evt) => {
+      if (evt.runId !== runId) {
+        return;
+      }
+      if (closed) {
+        return;
       }
 
-      const runId = `chatcmpl_${crypto.randomUUID()}`;
-      const deps = createDefaultDeps();
+      if (evt.stream === "assistant") {
+        const delta = evt.data?.delta;
+        const text = evt.data?.text;
+        const content = typeof delta === "string" ? delta : typeof text === "string" ? text : "";
+        if (!content) {
+          return;
+        }
 
-      // Non-streaming mode
-      if (!stream) {
-        try {
-          const result = await agentCommand(
-            {
-              message: prompt.message,
-              extraSystemPrompt: prompt.extraSystemPrompt,
-              sessionKey,
-              runId,
-              deliver: false,
-              messageChannel: "webchat",
-              bestEffortDeliver: false,
-            },
-            defaultRuntime,
-            deps,
-          );
+        if (!wroteRole) {
+          wroteRole = true;
+          writeSse({
+            id: runId,
+            object: "chat.completion.chunk",
+            created: Math.floor(Date.now() / 1000),
+            model,
+            choices: [{ index: 0, delta: { role: "assistant" } }],
+          });
+        }
+
+        sawAssistantDelta = true;
+        writeSse({
+          id: runId,
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [{ index: 0, delta: { content }, finish_reason: null }],
+        });
+        return;
+      }
+
+      if (evt.stream === "lifecycle") {
+        const phase = evt.data?.phase;
+        if (phase === "end" || phase === "error") {
+          finish();
+        }
+      }
+    });
+
+    // Run agent command asynchronously
+    void (async () => {
+      try {
+        const result = await agentCommand(
+          {
+            message: prompt.message,
+            extraSystemPrompt: prompt.extraSystemPrompt,
+            sessionKey,
+            runId,
+            deliver: false,
+            messageChannel: "webchat",
+            bestEffortDeliver: false,
+          },
+          defaultRuntime,
+          deps,
+        );
+
+        if (closed) {
+          return;
+        }
+
+        // Fallback: if no streaming deltas were received, send full response
+        if (!sawAssistantDelta) {
+          if (!wroteRole) {
+            wroteRole = true;
+            writeSse({
+              id: runId,
+              object: "chat.completion.chunk",
+              created: Math.floor(Date.now() / 1000),
+              model,
+              choices: [{ index: 0, delta: { role: "assistant" } }],
+            });
+          }
 
           const payloads = (result as { payloads?: Array<{ text?: string }> } | null)?.payloads;
           const content =
@@ -222,208 +368,42 @@ export function openAiRoutes(params: { auth: ResolvedGatewayAuth }) {
                   .join("\n\n")
               : "No response from OpenClaw.";
 
-          return {
+          sawAssistantDelta = true;
+          writeSse({
             id: runId,
-            object: "chat.completion",
+            object: "chat.completion.chunk",
             created: Math.floor(Date.now() / 1000),
             model,
-            choices: [
-              {
-                index: 0,
-                message: { role: "assistant", content },
-                finish_reason: "stop",
-              },
-            ],
-            usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
-          };
-        } catch (err) {
-          set.status = 500;
-          return {
-            error: { message: String(err), type: "api_error" },
-          };
-        }
-      }
-
-      // Streaming mode — return a ReadableStream of SSE events
-      set.headers["content-type"] = "text/event-stream; charset=utf-8";
-      set.headers["cache-control"] = "no-cache";
-      set.headers["connection"] = "keep-alive";
-
-      const encoder = new TextEncoder();
-
-      return new ReadableStream({
-        start(controller) {
-          let wroteRole = false;
-          let sawAssistantDelta = false;
-          let closed = false;
-
-          const writeSse = (data: unknown) => {
-            if (closed) {
-              return;
-            }
-            try {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-            } catch {
-              closed = true;
-            }
-          };
-
-          const writeDone = () => {
-            if (closed) {
-              return;
-            }
-            try {
-              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-            } catch {
-              // ignore
-            }
-          };
-
-          const finish = () => {
-            if (closed) {
-              return;
-            }
-            closed = true;
-            unsubscribe();
-            writeDone();
-            try {
-              controller.close();
-            } catch {
-              // already closed
-            }
-          };
-
-          const unsubscribe = onAgentEvent((evt) => {
-            if (evt.runId !== runId) {
-              return;
-            }
-            if (closed) {
-              return;
-            }
-
-            if (evt.stream === "assistant") {
-              const delta = evt.data?.delta;
-              const text = evt.data?.text;
-              const content =
-                typeof delta === "string" ? delta : typeof text === "string" ? text : "";
-              if (!content) {
-                return;
-              }
-
-              if (!wroteRole) {
-                wroteRole = true;
-                writeSse({
-                  id: runId,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [{ index: 0, delta: { role: "assistant" } }],
-                });
-              }
-
-              sawAssistantDelta = true;
-              writeSse({
-                id: runId,
-                object: "chat.completion.chunk",
-                created: Math.floor(Date.now() / 1000),
-                model,
-                choices: [{ index: 0, delta: { content }, finish_reason: null }],
-              });
-              return;
-            }
-
-            if (evt.stream === "lifecycle") {
-              const phase = evt.data?.phase;
-              if (phase === "end" || phase === "error") {
-                finish();
-              }
-            }
+            choices: [{ index: 0, delta: { content }, finish_reason: null }],
           });
+        }
+      } catch (err) {
+        if (closed) {
+          return;
+        }
+        writeSse({
+          id: runId,
+          object: "chat.completion.chunk",
+          created: Math.floor(Date.now() / 1000),
+          model,
+          choices: [
+            {
+              index: 0,
+              delta: { content: `Error: ${String(err)}` },
+              finish_reason: "stop",
+            },
+          ],
+        });
+        emitAgentEvent({
+          runId,
+          stream: "lifecycle",
+          data: { phase: "error" },
+        });
+      } finally {
+        finish();
+      }
+    })();
+  });
 
-          // Run agent command asynchronously
-          void (async () => {
-            try {
-              const result = await agentCommand(
-                {
-                  message: prompt.message,
-                  extraSystemPrompt: prompt.extraSystemPrompt,
-                  sessionKey,
-                  runId,
-                  deliver: false,
-                  messageChannel: "webchat",
-                  bestEffortDeliver: false,
-                },
-                defaultRuntime,
-                deps,
-              );
-
-              if (closed) {
-                return;
-              }
-
-              // Fallback: if no streaming deltas were received, send full response
-              if (!sawAssistantDelta) {
-                if (!wroteRole) {
-                  wroteRole = true;
-                  writeSse({
-                    id: runId,
-                    object: "chat.completion.chunk",
-                    created: Math.floor(Date.now() / 1000),
-                    model,
-                    choices: [{ index: 0, delta: { role: "assistant" } }],
-                  });
-                }
-
-                const payloads = (result as { payloads?: Array<{ text?: string }> } | null)
-                  ?.payloads;
-                const content =
-                  Array.isArray(payloads) && payloads.length > 0
-                    ? payloads
-                        .map((p) => (typeof p.text === "string" ? p.text : ""))
-                        .filter(Boolean)
-                        .join("\n\n")
-                    : "No response from OpenClaw.";
-
-                sawAssistantDelta = true;
-                writeSse({
-                  id: runId,
-                  object: "chat.completion.chunk",
-                  created: Math.floor(Date.now() / 1000),
-                  model,
-                  choices: [{ index: 0, delta: { content }, finish_reason: null }],
-                });
-              }
-            } catch (err) {
-              if (closed) {
-                return;
-              }
-              writeSse({
-                id: runId,
-                object: "chat.completion.chunk",
-                created: Math.floor(Date.now() / 1000),
-                model,
-                choices: [
-                  {
-                    index: 0,
-                    delta: { content: `Error: ${String(err)}` },
-                    finish_reason: "stop",
-                  },
-                ],
-              });
-              emitAgentEvent({
-                runId,
-                stream: "lifecycle",
-                data: { phase: "error" },
-              });
-            } finally {
-              finish();
-            }
-          })();
-        },
-        cancel() {
-          // Client disconnected — cleanup handled by the unsubscribe in start()
-        },
-      });
-    },
-  );
+  return router;
 }

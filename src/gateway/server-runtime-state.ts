@@ -11,10 +11,10 @@ import type { ResolvedGatewayAuth } from "./auth.js";
 import type { ChatAbortControllerEntry } from "./chat-abort.js";
 import type { ControlUiRootState } from "./control-ui.js";
 import {
-  createGatewayElysiaApp,
-  listenGatewayElysia,
+  createGatewayExpressApp,
+  listenGatewayExpress,
   type HookDispatchers,
-} from "./elysia-gateway.js";
+} from "./express-gateway.js";
 import type { HooksConfigResolved } from "./hooks.js";
 import { resolveGatewayListenHosts, formatUrlHost } from "./net.js";
 import {
@@ -108,7 +108,7 @@ export async function createGatewayRuntimeState(params: {
   const clients = new Set<GatewayWsClient>();
   const { broadcast, broadcastToConnIds } = createGatewayBroadcaster({ clients });
 
-  const elysiaApp = createGatewayElysiaApp({
+  const expressApp = createGatewayExpressApp({
     port: params.port,
     canvasHost,
     controlUiEnabled: params.controlUiEnabled,
@@ -131,7 +131,7 @@ export async function createGatewayRuntimeState(params: {
   const httpBindHosts: string[] = [];
   for (const host of bindHosts) {
     try {
-      const httpServer = await listenGatewayElysia(elysiaApp, {
+      const httpServer = await listenGatewayExpress(expressApp, {
         port: params.port,
         hostname: host,
         tlsOptions: params.gatewayTls?.enabled ? params.gatewayTls.tlsOptions : undefined,
