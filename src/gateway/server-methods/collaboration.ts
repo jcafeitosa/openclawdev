@@ -497,6 +497,13 @@ export function getAllCollaborativeSessions(): CollaborativeSession[] {
 }
 
 /**
+ * Return all polls (for hierarchy visualization — vote edges)
+ */
+export function getAllPolls(): PollRecord[] {
+  return [...polls.values()];
+}
+
+/**
  * Get all messages in a decision thread (for an agent to read)
  */
 export function getDecisionThread(params: { sessionKey: string; decisionId: string }): Array<{

@@ -148,6 +148,7 @@ const EDGE_STYLES: Record<string, { color: string; type: string; width: number }
   agreement: { color: "rgba(34, 197, 94, 0.5)", type: "dashed", width: 1.5 },
   decision: { color: "rgba(245, 158, 11, 0.5)", type: "dashed", width: 1.5 },
   clarification: { color: "rgba(59, 130, 246, 0.4)", type: "dashed", width: 1 },
+  vote: { color: "rgba(20, 184, 166, 0.5)", type: "dashed", width: 1.5 },
 };
 
 const DEFAULT_EDGE_STYLE = { color: "rgba(161, 161, 170, 0.3)", type: "solid", width: 1 };
@@ -799,6 +800,10 @@ function renderGraphLegend() {
         <div style=${groupStyle}>
           <span style="display:inline-block;width:20px;height:0;border-top:1px dashed ${EDGE_STYLES.clarification.color};"></span>
           <span>clarification</span>
+        </div>
+        <div style=${groupStyle}>
+          <span style="display:inline-block;width:20px;height:0;border-top:1.5px dashed ${EDGE_STYLES.vote.color};"></span>
+          <span>vote</span>
         </div>
         <div style=${groupStyle}>
           <span style="display:inline-block;width:20px;height:0;border-top:1.5px solid rgba(161,161,170,0.5);"></span>

@@ -19,7 +19,7 @@ import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { onAgentEvent } from "../infra/agent-events.js";
 import { getChildLogger } from "../logging.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
-import { getAllCollaborativeSessions } from "./server-methods/collaboration.js";
+import { getAllCollaborativeSessions, getAllPolls } from "./server-methods/collaboration.js";
 
 export type HierarchyEventType =
   | "spawn"
@@ -82,7 +82,8 @@ export type CollaborationEdge = {
     | "delegation"
     | "request"
     | "approval"
-    | "rejection";
+    | "rejection"
+    | "vote";
   topic?: string;
 };
 
@@ -97,6 +98,8 @@ type HierarchyBroadcast = (
   payload: unknown,
   opts?: { dropIfSlow?: boolean },
 ) => void;
+
+const log = getChildLogger({ module: "hierarchy" });
 
 let hierarchyBroadcast: HierarchyBroadcast | null = null;
 let listenerStop: (() => void) | null = null;
@@ -312,6 +315,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
 
     // Ignore stale/invalid run records that reference unknown agent ids.
     if (rawAgentId && !agentId) {
+      log.debug(`Skipping run ${run.childSessionKey}: agentId '${rawAgentId}' not found in config`);
       continue;
     }
 
@@ -479,7 +483,13 @@ function buildHierarchySnapshot(): HierarchySnapshot {
         }
       }
       const members = session.members
-        .map((member) => resolveKnownAgentId(cfg, member))
+        .map((member) => {
+          const resolved = resolveKnownAgentId(cfg, member);
+          if (!resolved) {
+            log.debug(`Collab member '${member}' not in config, excluded from edges`);
+          }
+          return resolved;
+        })
         .filter((member): member is string => Boolean(member));
 
       // Build proposal edges from decisions: proposer → proposer (they debated)
@@ -544,9 +554,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
   } catch (err) {
     // Collaboration data is optional — log for observability but don't break hierarchy
-    getChildLogger({ module: "hierarchy" }).warn(
-      `Failed to build collaboration edges: ${String(err)}`,
-    );
+    log.warn(`Failed to build collaboration edges: ${String(err)}`);
   }
 
   // Extract delegation edges from active delegations and build the active-agents set
@@ -593,6 +601,12 @@ function buildHierarchySnapshot(): HierarchySnapshot {
       const source = resolveKnownAgentId(cfg, deleg.fromAgentId);
       const target = resolveKnownAgentId(cfg, deleg.toAgentId);
 
+      if (!source) {
+        log.debug(`Delegation edge dropped: fromAgentId '${deleg.fromAgentId}' not in config`);
+      }
+      if (!target) {
+        log.debug(`Delegation edge dropped: toAgentId '${deleg.toAgentId}' not in config`);
+      }
       if (source && target) {
         collaborationEdges.push({
           source,
@@ -617,9 +631,57 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
   } catch (err) {
     // Delegation data is optional — log for observability
-    getChildLogger({ module: "hierarchy" }).warn(
-      `Failed to build delegation edges: ${String(err)}`,
-    );
+    log.warn(`Failed to build delegation edges: ${String(err)}`);
+  }
+
+  // Extract vote edges from polls (createPoll / collab.poll.vote activity)
+  try {
+    const allPolls = getAllPolls();
+    for (const poll of allPolls) {
+      // TTL: skip polls completed/expired more than 2 minutes ago
+      const anchor = poll.timeoutAt ?? poll.createdAt;
+      const isExpiredOrDone = poll.completed || (poll.timeoutAt && snapshotNow > poll.timeoutAt);
+      if (isExpiredOrDone) {
+        if (snapshotNow - anchor > COMPLETED_TTL_MS) {
+          continue;
+        }
+      }
+
+      const initiator = resolveKnownAgentId(cfg, poll.initiatorId);
+      if (!initiator) {
+        continue;
+      }
+
+      // initiator → each voter (poll was sent to them)
+      for (const voter of poll.voters) {
+        const resolvedVoter = resolveKnownAgentId(cfg, voter);
+        if (!resolvedVoter || resolvedVoter === initiator) {
+          continue;
+        }
+        collaborationEdges.push({
+          source: initiator,
+          target: resolvedVoter,
+          type: "vote",
+          topic: poll.question.slice(0, 80),
+        });
+      }
+
+      // voter → initiator for each vote already cast
+      for (const [voterId, choice] of Object.entries(poll.votes)) {
+        const resolvedVoter = resolveKnownAgentId(cfg, voterId);
+        if (!resolvedVoter || resolvedVoter === initiator) {
+          continue;
+        }
+        collaborationEdges.push({
+          source: resolvedVoter,
+          target: initiator,
+          type: "vote",
+          topic: `${poll.question.slice(0, 60)}: ${choice}`,
+        });
+      }
+    }
+  } catch (err) {
+    log.warn(`Failed to build poll vote edges: ${String(err)}`);
   }
 
   // Ensure agents referenced in collaboration/delegation edges have nodes.
@@ -788,6 +850,17 @@ function buildHierarchySnapshot(): HierarchySnapshot {
     }
   }
 
+  // Filter collaboration edges: remove any where a participant was TTL-filtered out.
+  // Derived nodes (added for edge participants) may have been removed by the TTL filter
+  // after collaborationEdges was built, leaving orphaned edges the frontend would discard.
+  const survivingAgentIds = new Set<string>();
+  for (const root of finalRoots) {
+    collectAgentIds(root, survivingAgentIds);
+  }
+  const filteredCollaborationEdges = collaborationEdges.filter(
+    (e) => survivingAgentIds.has(e.source) && survivingAgentIds.has(e.target),
+  );
+
   // Stable ordering: keep roots and children predictable for UI diffing.
   const sortNodes = (nodes: HierarchyNode[], visited?: Set<string>) => {
     const seen = visited ?? new Set<string>();
@@ -813,7 +886,7 @@ function buildHierarchySnapshot(): HierarchySnapshot {
 
   return {
     roots: finalRoots,
-    collaborationEdges,
+    collaborationEdges: filteredCollaborationEdges,
     updatedAt: Date.now(),
   };
 }

@@ -626,7 +626,8 @@ export type CollaborationEdge = {
     | "delegation"
     | "request"
     | "approval"
-    | "rejection";
+    | "rejection"
+    | "vote";
   topic?: string;
 };
 
