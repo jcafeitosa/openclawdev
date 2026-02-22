@@ -16,13 +16,31 @@ function stripConversationMetadata(text: string): string {
     .trimStart();
 }
 
+/**
+ * Strips inline directive tags that should not be shown to the user in the chat UI.
+ * These are messaging directives (reply_to_current, reply_to:..., audio_as_voice)
+ * that are normally stripped by the backend streaming layer, but may persist in
+ * stored session history.
+ */
+const DIRECTIVE_TAG_RE =
+  /\[\[\s*(?:reply_to_current|reply_to\s*:\s*[^\]\n]+|audio_as_voice)\s*\]\]/gi;
+function stripDirectiveTags(text: string): string {
+  return text
+    .replace(DIRECTIVE_TAG_RE, "")
+    .replace(/[ \t]+/g, " ")
+    .trim();
+}
+
 export function extractText(message: unknown): string | null {
   const m = message as Record<string, unknown>;
   const role = typeof m.role === "string" ? m.role : "";
   const content = m.content;
   if (typeof content === "string") {
     const stripped = role === "user" ? stripConversationMetadata(content) : content;
-    const processed = role === "assistant" ? stripThinkingTags(stripped) : stripEnvelope(stripped);
+    const processed =
+      role === "assistant"
+        ? stripDirectiveTags(stripThinkingTags(stripped))
+        : stripEnvelope(stripped);
     return processed;
   }
   if (Array.isArray(content)) {
@@ -39,13 +57,18 @@ export function extractText(message: unknown): string | null {
       const joined = parts.join("\n");
       const stripped = role === "user" ? stripConversationMetadata(joined) : joined;
       const processed =
-        role === "assistant" ? stripThinkingTags(stripped) : stripEnvelope(stripped);
+        role === "assistant"
+          ? stripDirectiveTags(stripThinkingTags(stripped))
+          : stripEnvelope(stripped);
       return processed;
     }
   }
   if (typeof m.text === "string") {
     const stripped = role === "user" ? stripConversationMetadata(m.text) : m.text;
-    const processed = role === "assistant" ? stripThinkingTags(stripped) : stripEnvelope(stripped);
+    const processed =
+      role === "assistant"
+        ? stripDirectiveTags(stripThinkingTags(stripped))
+        : stripEnvelope(stripped);
     return processed;
   }
   // Fallback: show errorMessage for failed agent runs (content: [])

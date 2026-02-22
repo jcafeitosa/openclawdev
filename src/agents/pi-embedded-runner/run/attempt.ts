@@ -328,9 +328,15 @@ export async function runEmbeddedAttempt(
     const tools = sanitizeToolsForGoogle({
       tools: toolsRaw,
       provider: params.provider,
+      modelApi: params.model?.api,
       modelId: params.modelId,
     });
-    logToolSchemasForGoogle({ tools, provider: params.provider, modelId: params.modelId });
+    logToolSchemasForGoogle({
+      tools,
+      provider: params.provider,
+      modelApi: params.model?.api,
+      modelId: params.modelId,
+    });
 
     const machineName = await getMachineDisplayName();
     const runtimeChannel = normalizeMessageChannel(params.messageChannel ?? params.messageProvider);

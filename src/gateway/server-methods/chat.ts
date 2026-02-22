@@ -958,6 +958,10 @@ export const chatHandlers: GatewayRequestHandlers = {
           disableBlockStreaming: true,
           onAgentRunStart: (runId) => {
             agentRunStarted = true;
+            // Map the agent's internal runId to the client's idempotencyKey so
+            // chat events (delta/final) carry the correct clientRunId — without
+            // this, the UI receives a mismatched runId and ignores streaming deltas.
+            context.addChatRun(runId, { sessionKey, clientRunId });
             const connId = typeof client?.connId === "string" ? client.connId : undefined;
             const wantsToolEvents = hasGatewayClientCap(
               client?.connect?.caps,
