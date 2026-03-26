@@ -364,3 +364,59 @@ export function cleanSchemaForGemini(schema: unknown): unknown {
   const defs = extendSchemaDefs(undefined, schema as Record<string, unknown>);
   return cleanSchemaForGeminiWithDefs(schema, defs, undefined);
 }
+
+/**
+ * Lightweight schema sanitizer for google-antigravity Claude models.
+ *
+ * Google's API gateway validates tool schemas before forwarding to Claude.
+ * The gateway rejects the `const` keyword, but Claude needs most other JSON
+ * Schema draft 2020-12 keywords that `cleanSchemaForGemini` would strip.
+ *
+ * This function ONLY replaces `const: X` → `enum: [X]`, preserving everything
+ * else intact for Claude compatibility.
+ */
+export function replaceConstWithEnum(schema: unknown): unknown {
+  if (!schema || typeof schema !== "object") {
+    return schema;
+  }
+  if (Array.isArray(schema)) {
+    return schema.map(replaceConstWithEnum);
+  }
+
+  const obj = schema as Record<string, unknown>;
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === "const") {
+      result.enum = [value];
+      continue;
+    }
+
+    if (
+      key === "properties" &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      result[key] = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>).map(([k, v]) => [
+          k,
+          replaceConstWithEnum(v),
+        ]),
+      );
+    } else if (key === "items") {
+      result[key] = replaceConstWithEnum(value);
+    } else if (
+      (key === "anyOf" || key === "oneOf" || key === "allOf") &&
+      Array.isArray(value)
+    ) {
+      result[key] = value.map(replaceConstWithEnum);
+    } else if (value && typeof value === "object" && !Array.isArray(value)) {
+      result[key] = replaceConstWithEnum(value);
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}

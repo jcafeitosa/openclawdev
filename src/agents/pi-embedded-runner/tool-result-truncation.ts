@@ -16,7 +16,10 @@ const MAX_TOOL_RESULT_CONTEXT_SHARE = 0.3;
  * should not exceed ~400K characters (~100K tokens).
  * This acts as a safety net when we don't know the context window size.
  */
-export const HARD_MAX_TOOL_RESULT_CHARS = 400_000;
+// Reduced from 400K to 150K chars (~37.5K tokens). A single tool result should not
+// consume more than ~18% of a 200K context window. Claude Code caps at ~30K chars;
+// we use 150K as a balanced limit that handles large file reads while preventing waste.
+export const HARD_MAX_TOOL_RESULT_CHARS = 150_000;
 
 /**
  * Minimum characters to keep when truncating.

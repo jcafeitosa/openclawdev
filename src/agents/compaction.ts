@@ -6,7 +6,9 @@ import { getChildLogger } from "../logging.js";
 import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { repairToolUseResultPairing, stripToolResultDetails } from "./session-transcript-repair.js";
 
-export const BASE_CHUNK_RATIO = 0.4;
+// Reduced from 0.4 to 0.3 — more aggressive compaction keeps 30% per chunk instead of 40%.
+// Saves ~25% tokens per compaction cycle. Aligned with Claude Code's aggressive strategy.
+export const BASE_CHUNK_RATIO = 0.3;
 export const MIN_CHUNK_RATIO = 0.15;
 export const SAFETY_MARGIN = 1.2; // 20% buffer for estimateTokens() inaccuracy
 const DEFAULT_SUMMARY_FALLBACK = "No prior history.";

@@ -18,8 +18,10 @@ import { invalidateModelCatalogCache } from "../../agents/model-catalog.js";
 import { normalizeProviderId } from "../../agents/model-selection.js";
 import { isRemoteEnvironment } from "../../commands/oauth-env.js";
 import { createVpsAwareOAuthHandlers } from "../../commands/oauth-flow.js";
+import { detectProvider } from "../../commands/providers/index.js";
 import { getProviderById, PROVIDER_REGISTRY } from "../../commands/providers/registry.js";
-import { loadConfig } from "../../config/config.js";
+import { loadConfig, writeConfigFile } from "../../config/config.js";
+import type { AgentModelEntryConfig } from "../../config/types.agent-defaults.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { resolvePluginProviders } from "../../plugins/providers.js";
 import type { ProviderAuthResult } from "../../plugins/types.js";
@@ -723,13 +725,111 @@ export const authHandlers: GatewayRequestHandlers = {
     }
 
     try {
-      const removed = removeAuthProfilesForProvider({ provider });
+      let removed = removeAuthProfilesForProvider({ provider });
+
+      // Also remove config-based credentials and purge provider models from allowlist/fallbacks
+      let removedFromConfig = false;
+      try {
+        const cfg = loadConfig();
+        const normalizedId = normalizeProviderId(provider);
+        let nextCfg = cfg;
+        let configChanged = false;
+
+        // Remove API key from models.providers config (e.g. models.json providers.<id>.apiKey)
+        const providerEntry = cfg?.models?.providers?.[normalizedId];
+        if (providerEntry?.apiKey) {
+          nextCfg = {
+            ...nextCfg,
+            models: {
+              ...nextCfg.models,
+              providers: {
+                ...nextCfg.models?.providers,
+                [normalizedId]: { ...providerEntry, apiKey: undefined },
+              },
+            },
+          };
+          configChanged = true;
+          removedFromConfig = true;
+          removed += 1;
+        }
+
+        // Remove provider's models from agents.defaults.models allowlist
+        const allowlist = cfg?.agents?.defaults?.models as Record<string, unknown> | undefined;
+        if (allowlist && typeof allowlist === "object") {
+          const prefix = `${normalizedId}/`;
+          const filteredAllowlist = Object.fromEntries(
+            Object.entries(allowlist).filter(([k]) => !k.startsWith(prefix)),
+          ) as Record<string, AgentModelEntryConfig>;
+          if (Object.keys(filteredAllowlist).length !== Object.keys(allowlist).length) {
+            nextCfg = {
+              ...nextCfg,
+              agents: {
+                ...nextCfg.agents,
+                defaults: {
+                  ...(nextCfg.agents as { defaults?: Record<string, unknown> } | undefined)?.defaults,
+                  models: filteredAllowlist,
+                },
+              },
+            };
+            configChanged = true;
+          }
+        }
+
+        // Remove provider's models from agents.defaults.model fallbacks
+        const modelCfg = cfg?.agents?.defaults?.model;
+        if (modelCfg && typeof modelCfg === "object" && !Array.isArray(modelCfg)) {
+          const mc = modelCfg as { primary?: string; fallbacks?: string[] };
+          const prefix = `${normalizedId}/`;
+          const filteredFallbacks = (mc.fallbacks ?? []).filter((f) => !f.startsWith(prefix));
+          const primaryIsRemoved = mc.primary?.startsWith(prefix) ?? false;
+          if (filteredFallbacks.length !== (mc.fallbacks?.length ?? 0) || primaryIsRemoved) {
+            nextCfg = {
+              ...nextCfg,
+              agents: {
+                ...nextCfg.agents,
+                defaults: {
+                  ...(nextCfg.agents as { defaults?: Record<string, unknown> } | undefined)?.defaults,
+                  model: {
+                    ...mc,
+                    primary: primaryIsRemoved ? (filteredFallbacks[0] ?? null) : mc.primary,
+                    fallbacks: primaryIsRemoved ? filteredFallbacks.slice(1) : filteredFallbacks,
+                  },
+                },
+              },
+            };
+            configChanged = true;
+          }
+        }
+
+        if (configChanged) {
+          await writeConfigFile(nextCfg);
+        }
+      } catch {
+        // Non-fatal: config removal is best-effort
+      }
+
       if (removed === 0) {
-        respond(
-          false,
-          undefined,
-          errorShape(ErrorCodes.INVALID_REQUEST, `no credentials found for provider: ${provider}`),
-        );
+        // Check if credential comes from an environment variable — cannot be removed via the store
+        const detection = detectProvider(provider);
+        if (detection.detected && detection.authSource === "env") {
+          const providerDef = getProviderById(provider);
+          const envVars = providerDef?.envVars ?? [];
+          const envVarList = envVars.length > 0 ? envVars.join(", ") : "the related environment variable";
+          respond(
+            false,
+            undefined,
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `Credentials for ${provider} come from an environment variable (${envVarList}) and cannot be removed here. Unset the environment variable to disable this provider.`,
+            ),
+          );
+        } else {
+          respond(
+            false,
+            undefined,
+            errorShape(ErrorCodes.INVALID_REQUEST, `no credentials found for provider: ${provider}`),
+          );
+        }
         return;
       }
 
@@ -743,7 +843,44 @@ export const authHandlers: GatewayRequestHandlers = {
         // Non-fatal
       }
 
-      respond(true, { ok: true, removed });
+      // Dynamically recalculate primary/fallbacks based on remaining available models
+      try {
+        const { loadModelCatalog } = await import("../../agents/model-catalog.js");
+        const { rankModelsForRole, ROLE_REQUIREMENTS } = await import("../../agents/model-auto-select.js");
+        const { modelKey } = await import("../../agents/model-selection.js");
+        const { ensureAuthProfileStore: freshAuthStore } = await import("../../agents/auth-profiles/store.js");
+
+        const freshCfg = loadConfig();
+        const freshAllowlist = freshCfg?.agents?.defaults?.models as Record<string, unknown> | undefined;
+
+        if (freshAllowlist && Object.keys(freshAllowlist).length > 0) {
+          const allowedKeys = new Set(Object.keys(freshAllowlist));
+          const catalog = await loadModelCatalog({ config: freshCfg, useCache: false });
+          const authStore = freshAuthStore();
+          const ranked = rankModelsForRole(catalog, ROLE_REQUIREMENTS.orchestrator, allowedKeys, freshCfg, authStore);
+
+          if (ranked.length > 0) {
+            const newPrimary = modelKey(ranked[0].entry.provider, ranked[0].entry.id);
+            const newFallbacks = ranked.slice(1).map((r) => modelKey(r.entry.provider, r.entry.id));
+
+            const nextCfg = {
+              ...freshCfg,
+              agents: {
+                ...freshCfg.agents,
+                defaults: {
+                  ...(freshCfg.agents as { defaults?: Record<string, unknown> } | undefined)?.defaults,
+                  model: { primary: newPrimary, fallbacks: newFallbacks },
+                },
+              },
+            };
+            await writeConfigFile(nextCfg);
+          }
+        }
+      } catch {
+        // Non-fatal: dynamic reranking is best-effort
+      }
+
+      respond(true, { ok: true, removed, removedFromConfig });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, String(err)));
     }

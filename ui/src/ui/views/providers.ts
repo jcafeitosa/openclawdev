@@ -545,26 +545,38 @@ function renderConfigureSection(
       `);
     }
 
-    if (entry.detected) {
-      const isRemoving = props.removingProvider === entry.id;
-      buttons.push(html`
-        <button
-          class="btn btn-sm"
-          style="color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent);"
-          ?disabled=${isRemoving}
-          @click=${(e: Event) => {
-            e.stopPropagation();
-            if (confirm(`Remove credentials for ${entry.name}?`)) {
-              props.onRemoveCredential(entry.id);
-            }
-          }}
-        >
-          ${isRemoving ? "Removing..." : "Remove"}
-        </button>
-      `);
-    }
-
     const hints: unknown[] = [];
+
+    if (entry.detected) {
+      if (entry.authSource === "env") {
+        // Credential comes from an environment variable — cannot be removed via the UI
+        const envVarNames = entry.envVars && entry.envVars.length > 0
+          ? entry.envVars.join(" / ")
+          : "env var";
+        hints.push(html`
+          <div class="muted" style="font-size: 12px;">
+            Set via env: <code style="font-size: 11px">${envVarNames}</code> — unset to remove.
+          </div>
+        `);
+      } else {
+        const isRemoving = props.removingProvider === entry.id;
+        buttons.push(html`
+          <button
+            class="btn btn-sm"
+            style="color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent);"
+            ?disabled=${isRemoving}
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              if (confirm(`Remove credentials for ${entry.name}?`)) {
+                props.onRemoveCredential(entry.id);
+              }
+            }}
+          >
+            ${isRemoving ? "Removing..." : "Remove"}
+          </button>
+        `);
+      }
+    }
 
     if (hasOAuth && !entry.oauthAvailable) {
       hints.push(html`
@@ -1592,13 +1604,21 @@ function renderFreeModelsSection(props: ProvidersProps) {
     props.entries.filter((e) => e.detected).map((e) => e.id.toLowerCase()),
   );
 
-  // Group free models by provider
+  // Group free models by provider — only include detected (configured) providers
   const byProvider = new Map<string, FreeModelEntry[]>();
   for (const m of props.freeModels) {
     const provider = m.provider.toLowerCase();
+    if (!detectedProviderIds.has(provider)) {
+      continue;
+    }
     const list = byProvider.get(provider) ?? [];
     list.push(m);
     byProvider.set(provider, list);
+  }
+
+  // If no detected providers have free models, hide the section
+  if (byProvider.size === 0) {
+    return nothing;
   }
 
   // Sort: configured providers first, then alphabetically
@@ -1612,11 +1632,8 @@ function renderFreeModelsSection(props: ProvidersProps) {
   });
 
   const summary = props.freeModelsSummary;
-  const configuredCount = providers
-    .filter(([p]) => detectedProviderIds.has(p))
-    .reduce((sum, [, m]) => sum + m.length, 0);
-  const unconfiguredCount = props.freeModels.length - configuredCount;
-  const discoveredCount = props.freeModels.filter((m) => m.discoveredFree).length;
+  const totalFiltered = [...byProvider.values()].reduce((sum, m) => sum + m.length, 0);
+  const discoveredCount = [...byProvider.values()].flat().filter((m) => m.discoveredFree).length;
 
   return html`
     <section class="card" style="margin-bottom: 18px;">
@@ -1629,7 +1646,7 @@ function renderFreeModelsSection(props: ProvidersProps) {
             Free Models
           </div>
           <div class="card-sub">
-            ${props.freeModels.length} free model${props.freeModels.length !== 1 ? "s" : ""} across ${byProvider.size} provider${byProvider.size !== 1 ? "s" : ""}
+            ${totalFiltered} free model${totalFiltered !== 1 ? "s" : ""} across ${byProvider.size} provider${byProvider.size !== 1 ? "s" : ""}
             ${
               summary
                 ? html` &mdash;
@@ -1638,23 +1655,11 @@ function renderFreeModelsSection(props: ProvidersProps) {
                       ? html`, <span style="color: var(--danger);">${summary.failedCount} failed</span>`
                       : nothing
                   }${
-                    summary.noCredentialsCount > 0
-                      ? html`, <span class="muted">${summary.noCredentialsCount} no creds</span>`
-                      : nothing
-                  }${
                     (summary.discoveredFreeCount ?? 0) > 0
                       ? html`, <span style="color: #a855f7;">${summary.discoveredFreeCount} discovered</span>`
                       : nothing
                   }`
-                : configuredCount > 0 && unconfiguredCount > 0
-                  ? html` &mdash; <span style="color: var(--ok);">${configuredCount} ready</span>, <span class="muted">${unconfiguredCount} need credentials</span>`
-                  : configuredCount > 0
-                    ? html`
-                        &mdash; <span style="color: var(--ok)">all ready to use</span>
-                      `
-                    : html`
-                        &mdash; <span class="muted">configure credentials to use</span>
-                      `
+                : html` &mdash; <span style="color: var(--ok)">all ready to use</span>`
             }
           </div>
         </div>

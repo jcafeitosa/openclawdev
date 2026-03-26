@@ -24,12 +24,23 @@ if [[ ! -d "$A2UI_RENDERER_DIR" || ! -d "$A2UI_APP_DIR" ]]; then
   exit 1
 fi
 
+LOCK_FILE=""
+if [[ -f "$ROOT_DIR/pnpm-lock.yaml" ]]; then
+  LOCK_FILE="$ROOT_DIR/pnpm-lock.yaml"
+elif [[ -f "$ROOT_DIR/bun.lock" ]]; then
+  LOCK_FILE="$ROOT_DIR/bun.lock"
+elif [[ -f "$ROOT_DIR/bun.lockb" ]]; then
+  LOCK_FILE="$ROOT_DIR/bun.lockb"
+fi
+
 INPUT_PATHS=(
   "$ROOT_DIR/package.json"
-  "$ROOT_DIR/pnpm-lock.yaml"
   "$A2UI_RENDERER_DIR"
   "$A2UI_APP_DIR"
 )
+if [[ -n "$LOCK_FILE" ]]; then
+  INPUT_PATHS=("$ROOT_DIR/package.json" "$LOCK_FILE" "$A2UI_RENDERER_DIR" "$A2UI_APP_DIR")
+fi
 
 compute_hash() {
   ROOT_DIR="$ROOT_DIR" node --input-type=module - "${INPUT_PATHS[@]}" <<'NODE'

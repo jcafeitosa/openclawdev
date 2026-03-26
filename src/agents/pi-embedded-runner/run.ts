@@ -18,6 +18,7 @@ import {
 } from "../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../defaults.js";
 import { FailoverError, resolveFailoverStatus } from "../failover-error.js";
+import { setModelCooldown } from "../model-fallback.js";
 import {
   ensureAuthProfileStore,
   getApiKeyForModel,
@@ -797,14 +798,28 @@ export async function runEmbeddedPiAgent(
               };
             }
             const promptFailoverReason = classifyFailoverReason(errorText);
-            if (promptFailoverReason && promptFailoverReason !== "timeout" && lastProfileId) {
-              await markAuthProfileFailure({
-                store: authStore,
-                profileId: lastProfileId,
-                reason: promptFailoverReason,
-                cfg: params.config,
-                agentDir: params.agentDir,
-              });
+            if (promptFailoverReason && promptFailoverReason !== "timeout") {
+              if (
+                (promptFailoverReason === "auth" || promptFailoverReason === "billing") &&
+                lastProfileId
+              ) {
+                // Credential/billing issue → provider-level cooldown
+                await markAuthProfileFailure({
+                  store: authStore,
+                  profileId: lastProfileId,
+                  reason: promptFailoverReason,
+                  cfg: params.config,
+                  agentDir: params.agentDir,
+                });
+              } else {
+                // rate_limit, format, unknown → model-level cooldown only
+                setModelCooldown({
+                  provider,
+                  model: modelId,
+                  durationMs: 60_000,
+                  reason: promptFailoverReason,
+                });
+              }
             }
             if (
               isFailoverErrorMessage(errorText) &&
@@ -888,13 +903,24 @@ export async function runEmbeddedPiAgent(
                 timedOut || assistantFailoverReason === "timeout"
                   ? "timeout"
                   : (assistantFailoverReason ?? "unknown");
-              await markAuthProfileFailure({
-                store: authStore,
-                profileId: lastProfileId,
-                reason,
-                cfg: params.config,
-                agentDir: params.agentDir,
-              });
+              if (reason === "auth" || reason === "billing") {
+                // Credential/billing issue → provider-level cooldown
+                await markAuthProfileFailure({
+                  store: authStore,
+                  profileId: lastProfileId,
+                  reason,
+                  cfg: params.config,
+                  agentDir: params.agentDir,
+                });
+              } else {
+                // rate_limit, timeout, format, unknown → model-level cooldown only
+                setModelCooldown({
+                  provider,
+                  model: modelId,
+                  durationMs: 60_000,
+                  reason,
+                });
+              }
               if (timedOut && !isProbeSession) {
                 log.warn(
                   `Profile ${lastProfileId} timed out (possible rate limit). Trying next account...`,

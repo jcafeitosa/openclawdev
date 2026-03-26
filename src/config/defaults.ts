@@ -382,7 +382,9 @@ export function applyContextPruningDefaults(cfg: OpenClawConfig): OpenClawConfig
     mutated = true;
   }
 
-  if (authMode === "api_key") {
+  // Enable Anthropic prompt caching for ALL auth modes (was: api_key only).
+  // cacheRetention saves 30-50% on repeated system prompts and tool definitions.
+  {
     const nextModels = defaults.models ? { ...defaults.models } : {};
     let modelsMutated = false;
 

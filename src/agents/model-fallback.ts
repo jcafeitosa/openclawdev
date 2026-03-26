@@ -523,6 +523,19 @@ export async function runWithModelFallback<T>(params: {
         lastProbeAttempt.set(probeThrottleKey, now);
       }
     }
+    // Skip models that are individually in cooldown (e.g., rate-limited)
+    if (isModelCoolingDown({ provider: candidate.provider, model: candidate.model })) {
+      logVerbose(
+        `[fallback] skipping model in cooldown: ${candidate.provider}/${candidate.model}`,
+      );
+      attempts.push({
+        provider: candidate.provider,
+        model: candidate.model,
+        error: `Model ${candidate.provider}/${candidate.model} is in cooldown`,
+        reason: "rate_limit",
+      });
+      continue;
+    }
     try {
       logVerbose(
         `[fallback] attempting model: ${candidate.provider}/${candidate.model} (attempt ${i + 1}/${allCandidates.length})`,

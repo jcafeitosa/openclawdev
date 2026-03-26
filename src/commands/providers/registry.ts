@@ -106,7 +106,7 @@ export const PROVIDER_REGISTRY: ProviderDefinition[] = [
     name: "GitHub Copilot",
     envVars: ["COPILOT_GITHUB_TOKEN"],
     altEnvVars: ["GH_TOKEN", "GITHUB_TOKEN"],
-    authModes: ["token"],
+    authModes: ["token", "oauth"],
   },
   {
     id: "ollama",
