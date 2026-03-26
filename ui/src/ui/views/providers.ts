@@ -550,9 +550,8 @@ function renderConfigureSection(
     if (entry.detected) {
       if (entry.authSource === "env") {
         // Credential comes from an environment variable — cannot be removed via the UI
-        const envVarNames = entry.envVars && entry.envVars.length > 0
-          ? entry.envVars.join(" / ")
-          : "env var";
+        const envVarNames =
+          entry.envVars && entry.envVars.length > 0 ? entry.envVars.join(" / ") : "env var";
         hints.push(html`
           <div class="muted" style="font-size: 12px;">
             Set via env: <code style="font-size: 11px">${envVarNames}</code> — unset to remove.

@@ -766,7 +766,8 @@ export const authHandlers: GatewayRequestHandlers = {
               agents: {
                 ...nextCfg.agents,
                 defaults: {
-                  ...(nextCfg.agents as { defaults?: Record<string, unknown> } | undefined)?.defaults,
+                  ...(nextCfg.agents as { defaults?: Record<string, unknown> } | undefined)
+                    ?.defaults,
                   models: filteredAllowlist,
                 },
               },
@@ -788,7 +789,8 @@ export const authHandlers: GatewayRequestHandlers = {
               agents: {
                 ...nextCfg.agents,
                 defaults: {
-                  ...(nextCfg.agents as { defaults?: Record<string, unknown> } | undefined)?.defaults,
+                  ...(nextCfg.agents as { defaults?: Record<string, unknown> } | undefined)
+                    ?.defaults,
                   model: {
                     ...mc,
                     primary: primaryIsRemoved ? (filteredFallbacks[0] ?? null) : mc.primary,
@@ -814,7 +816,8 @@ export const authHandlers: GatewayRequestHandlers = {
         if (detection.detected && detection.authSource === "env") {
           const providerDef = getProviderById(provider);
           const envVars = providerDef?.envVars ?? [];
-          const envVarList = envVars.length > 0 ? envVars.join(", ") : "the related environment variable";
+          const envVarList =
+            envVars.length > 0 ? envVars.join(", ") : "the related environment variable";
           respond(
             false,
             undefined,
@@ -827,7 +830,10 @@ export const authHandlers: GatewayRequestHandlers = {
           respond(
             false,
             undefined,
-            errorShape(ErrorCodes.INVALID_REQUEST, `no credentials found for provider: ${provider}`),
+            errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `no credentials found for provider: ${provider}`,
+            ),
           );
         }
         return;
@@ -846,18 +852,28 @@ export const authHandlers: GatewayRequestHandlers = {
       // Dynamically recalculate primary/fallbacks based on remaining available models
       try {
         const { loadModelCatalog } = await import("../../agents/model-catalog.js");
-        const { rankModelsForRole, ROLE_REQUIREMENTS } = await import("../../agents/model-auto-select.js");
+        const { rankModelsForRole, ROLE_REQUIREMENTS } =
+          await import("../../agents/model-auto-select.js");
         const { modelKey } = await import("../../agents/model-selection.js");
-        const { ensureAuthProfileStore: freshAuthStore } = await import("../../agents/auth-profiles/store.js");
+        const { ensureAuthProfileStore: freshAuthStore } =
+          await import("../../agents/auth-profiles/store.js");
 
         const freshCfg = loadConfig();
-        const freshAllowlist = freshCfg?.agents?.defaults?.models as Record<string, unknown> | undefined;
+        const freshAllowlist = freshCfg?.agents?.defaults?.models as
+          | Record<string, unknown>
+          | undefined;
 
         if (freshAllowlist && Object.keys(freshAllowlist).length > 0) {
           const allowedKeys = new Set(Object.keys(freshAllowlist));
           const catalog = await loadModelCatalog({ config: freshCfg, useCache: false });
           const authStore = freshAuthStore();
-          const ranked = rankModelsForRole(catalog, ROLE_REQUIREMENTS.orchestrator, allowedKeys, freshCfg, authStore);
+          const ranked = rankModelsForRole(
+            catalog,
+            ROLE_REQUIREMENTS.orchestrator,
+            allowedKeys,
+            freshCfg,
+            authStore,
+          );
 
           if (ranked.length > 0) {
             const newPrimary = modelKey(ranked[0].entry.provider, ranked[0].entry.id);
@@ -868,7 +884,8 @@ export const authHandlers: GatewayRequestHandlers = {
               agents: {
                 ...freshCfg.agents,
                 defaults: {
-                  ...(freshCfg.agents as { defaults?: Record<string, unknown> } | undefined)?.defaults,
+                  ...(freshCfg.agents as { defaults?: Record<string, unknown> } | undefined)
+                    ?.defaults,
                   model: { primary: newPrimary, fallbacks: newFallbacks },
                 },
               },

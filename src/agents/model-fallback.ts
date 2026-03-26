@@ -525,9 +525,7 @@ export async function runWithModelFallback<T>(params: {
     }
     // Skip models that are individually in cooldown (e.g., rate-limited)
     if (isModelCoolingDown({ provider: candidate.provider, model: candidate.model })) {
-      logVerbose(
-        `[fallback] skipping model in cooldown: ${candidate.provider}/${candidate.model}`,
-      );
+      logVerbose(`[fallback] skipping model in cooldown: ${candidate.provider}/${candidate.model}`);
       attempts.push({
         provider: candidate.provider,
         model: candidate.model,

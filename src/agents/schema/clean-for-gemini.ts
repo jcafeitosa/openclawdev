@@ -392,12 +392,7 @@ export function replaceConstWithEnum(schema: unknown): unknown {
       continue;
     }
 
-    if (
-      key === "properties" &&
-      value &&
-      typeof value === "object" &&
-      !Array.isArray(value)
-    ) {
+    if (key === "properties" && value && typeof value === "object" && !Array.isArray(value)) {
       result[key] = Object.fromEntries(
         Object.entries(value as Record<string, unknown>).map(([k, v]) => [
           k,
@@ -406,10 +401,7 @@ export function replaceConstWithEnum(schema: unknown): unknown {
       );
     } else if (key === "items") {
       result[key] = replaceConstWithEnum(value);
-    } else if (
-      (key === "anyOf" || key === "oneOf" || key === "allOf") &&
-      Array.isArray(value)
-    ) {
+    } else if ((key === "anyOf" || key === "oneOf" || key === "allOf") && Array.isArray(value)) {
       result[key] = value.map(replaceConstWithEnum);
     } else if (value && typeof value === "object" && !Array.isArray(value)) {
       result[key] = replaceConstWithEnum(value);
